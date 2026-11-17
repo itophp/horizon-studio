@@ -603,8 +603,8 @@ export const notificationsTest = (value: unknown) =>
 
 // --------------------------------------------------------------------- mcp
 
-export const mcpManagementCreate = (value: unknown) =>
-  invoke<MCPTokenCreated>("mcp.token.create", body(value));
+export const mcpManagementCreate = (value: unknown, signal?: AbortSignal) =>
+  invoke<MCPTokenCreated>("mcp.token.create", body(value), undefined, signal);
 
 export const mcpManagementRevoke = (id: number, value: unknown) =>
   invoke<{ id: number }>("mcp.token.revoke", { id, ...body(value) });

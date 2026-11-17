@@ -155,9 +155,7 @@ test("organization, department, role and account changes persist through real AP
     ).toBeVisible();
 
     // Departments now live in the second tab of Organization management.
-    await page
-      .getByRole("button", { name: "Departments", exact: true })
-      .click();
+    await page.getByRole("tab", { name: "Departments", exact: true }).click();
     await expect(
       page.getByRole("heading", {
         name: "Organization management",
@@ -183,7 +181,7 @@ test("organization, department, role and account changes persist through real AP
 
     // Role maintenance now lives in the third tab of Permission management.
     await page.getByRole("link", { name: "Permissions", exact: true }).click();
-    await page.getByRole("button", { name: "Roles", exact: true }).click();
+    await page.getByRole("tab", { name: "Roles", exact: true }).click();
     await page
       .getByRole("button", { name: "Create role", exact: true })
       .click();

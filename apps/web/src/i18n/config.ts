@@ -1,3 +1,5 @@
+import enStudio from "./locales/en/studio.json";
+import zhStudio from "./locales/zh-CN/studio.json";
 import enShowcase from "./locales/en/showcase.json";
 import zhShowcase from "./locales/zh-CN/showcase.json";
 import enRuntime from "./locales/en/runtime.json";
@@ -60,6 +62,7 @@ const coreResources = {
     assistant: enAssistant,
     knowledge: enKnowledge,
     orchestration: enOrchestration,
+    studio: enStudio,
     common: enCommon,
     entity: enEntity,
     navigation: enNavigation,
@@ -79,6 +82,7 @@ const coreResources = {
     assistant: zhAssistant,
     knowledge: zhKnowledge,
     orchestration: zhOrchestration,
+    studio: zhStudio,
     common: zhCommon,
     entity: zhEntity,
     navigation: zhNavigation,

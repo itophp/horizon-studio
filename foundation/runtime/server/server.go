@@ -37,6 +37,7 @@ func Run(ctx context.Context, c config.Config) error {
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
 	iam := identity.New(identityPool, c.SecureCookies)
+	iam.CookieSuffix = c.SessionCookieSuffix
 	core := governance.New(identityPool, iam, c.Governance)
 	iam.Policies = core
 	plugins := app.BuiltinPlugins(projects.New(core.Pool))

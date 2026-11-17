@@ -4,23 +4,32 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 )
 
 type serviceState struct {
-	Service string `json:"service"`
-	Status  string `json:"status"`
-	PID     int    `json:"pid,omitempty"`
-	Log     string `json:"log"`
+	Service   string `json:"service"`
+	Status    string `json:"status"`
+	PID       int    `json:"pid,omitempty"`
+	Log       string `json:"log"`
+	StartedAt string `json:"startedAt,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+	Origin    string `json:"origin,omitempty"`
 }
 
 type processIdentity struct {
-	PID   int    `json:"pid"`
-	Stamp string `json:"stamp"`
+	PID       int    `json:"pid"`
+	Stamp     string `json:"stamp"`
+	StartedAt string `json:"startedAt,omitempty"`
+	Exited    bool   `json:"-"`
+	Origin    string `json:"origin,omitempty"`
 }
 
 func selectServices(args []string) ([]string, error) {
@@ -106,7 +115,10 @@ func services(action string, args []string) error {
 			state.Status = "unknown"
 			problems = append(problems, fmt.Errorf("%s: %w", name, err))
 		case p.PID != 0:
-			state.Status, state.PID = "running", p.PID
+			state.Status, state.PID, state.StartedAt = "running", p.PID, p.StartedAt
+			state.Origin = listeningServiceOrigin(p.Origin)
+		case p.Exited:
+			state.Reason, state.StartedAt = "process_exited", p.StartedAt
 		}
 		states = append(states, state)
 	}
@@ -136,7 +148,8 @@ func repositoryRoot() (string, error) {
 
 func readProcess(dir, name string) (processIdentity, error) {
 	var p processIdentity
-	raw, err := os.ReadFile(filepath.Join(dir, name+".json"))
+	path := filepath.Join(dir, name+".json")
+	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return p, nil
 	}
@@ -147,14 +160,80 @@ func readProcess(dir, name string) (processIdentity, error) {
 		return processIdentity{}, err
 	}
 	stamp, err := processStamp(p.PID)
-	if stamp == "" || stamp != p.Stamp {
+	if err != nil {
 		return processIdentity{}, err
 	}
-	return p, err
+	if p.StartedAt == "" && p.PID > 1 && p.Stamp != "" {
+		// Older state files were written once, immediately after starting the process.
+		if info, err := os.Stat(path); err == nil {
+			p.StartedAt = info.ModTime().UTC().Format(time.RFC3339Nano)
+		}
+	}
+	if stamp == "" || stamp != p.Stamp {
+		return processIdentity{StartedAt: p.StartedAt, Exited: p.PID > 1 && p.Stamp != ""}, nil
+	}
+	return p, nil
+}
+
+// Capture the effective launch environment before it can change independently
+// of the managed process.
+func serviceOrigin(name string, cmd *exec.Cmd) string {
+	key, address := "API_ADDR", "127.0.0.1:8080"
+	if name == "frontend" {
+		key, address = "WEB_PORT", "5173"
+	}
+	for _, assignment := range cmd.Environ() {
+		if k, value, ok := strings.Cut(assignment, "="); ok && k == key && value != "" {
+			address = value
+		}
+	}
+	if name == "frontend" {
+		address = net.JoinHostPort("127.0.0.1", address)
+	}
+	return localServiceOrigin(address)
+}
+
+func localServiceOrigin(address string) string {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return ""
+	}
+	value, err := strconv.Atoi(port)
+	if err != nil || value < 1 || value > 65535 {
+		return ""
+	}
+	ip := net.ParseIP(host)
+	switch {
+	case ip == nil:
+		return ""
+	case ip.IsUnspecified() && ip.To4() != nil:
+		host = "127.0.0.1"
+	case ip.IsUnspecified():
+		host = "::1"
+	case !ip.IsLoopback():
+		return ""
+	}
+	return "http://" + net.JoinHostPort(host, port)
+}
+
+func listeningServiceOrigin(origin string) string {
+	address, ok := strings.CutPrefix(origin, "http://")
+	if !ok || localServiceOrigin(address) != origin {
+		return ""
+	}
+	connection, err := net.DialTimeout("tcp", address, 150*time.Millisecond)
+	if err != nil {
+		return ""
+	}
+	_ = connection.Close()
+	return origin
 }
 
 func startService(dir, name string, cmd *exec.Cmd) error {
-	var p processIdentity
+	p := processIdentity{Origin: serviceOrigin(name, cmd)}
+	if listeningServiceOrigin(p.Origin) != "" {
+		return fmt.Errorf("the development address %s is already in use", p.Origin)
+	}
 	logPath := filepath.Join(dir, name+".log")
 	log, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
@@ -172,6 +251,7 @@ func startService(dir, name string, cmd *exec.Cmd) error {
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
 	p.PID = cmd.Process.Pid
+	p.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	statePath := filepath.Join(dir, name+".json")
 	p.Stamp, err = processStamp(p.PID)
 	if err != nil || p.Stamp == "" {

@@ -74,3 +74,20 @@ func TestSecureDeploymentRequiresPublicHTTPSOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSessionCookieSuffixUsesLocalBackendPort(t *testing.T) {
+	t.Setenv("COOKIE_SECURE", "false")
+	for _, port := range []string{"8080", "8081"} {
+		t.Setenv("API_ADDR", "127.0.0.1:"+port)
+		c, err := Load()
+		if err != nil || c.SessionCookieSuffix != "_"+port {
+			t.Fatalf("local port %s resolved suffix %q: %v", port, c.SessionCookieSuffix, err)
+		}
+	}
+	t.Setenv("COOKIE_SECURE", "true")
+	t.Setenv("PUBLIC_APP_URL", "https://studio.test")
+	c, err := Load()
+	if err != nil || c.SessionCookieSuffix != "" {
+		t.Fatalf("HTTPS deployment resolved suffix %q: %v", c.SessionCookieSuffix, err)
+	}
+}

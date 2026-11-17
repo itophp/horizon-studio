@@ -1,3 +1,4 @@
+import { studioProjectsPath } from "@/features/studio/routes";
 import { useApplicationCatalog } from "@/features/application-runtime/catalog";
 import { WorkspaceHost } from "@/features/application-runtime/workspace";
 import { canShowMenu } from "@/app/plugins/registry";
@@ -47,6 +48,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { Toaster } from "@/components/ui/sonner";
 import { buttonVariants } from "@/components/ui/button";
 import { changeLanguage } from "@/i18n";
 import { useTheme } from "@/app/providers/theme";
@@ -66,6 +68,7 @@ export function AuthBoundary() {
   return (
     <AuthProvider>
       <Outlet />
+      <Toaster />
     </AuthProvider>
   );
 }
@@ -88,7 +91,7 @@ export function RequireSession() {
     );
   // The floating helper and the AI workbench drive the same backend agent, so
   // the helper stays out of the way while the workbench itself is open.
-  const onAgentPage = /^\/ai(\/|$)/.test(location.pathname);
+  const onAgentPage = /^\/(ai|studio)(\/|$)/.test(location.pathname);
   return (
     <RuntimeProvider>
       <WebMcpProvider
@@ -151,15 +154,20 @@ export function AdminLayout() {
           const page = (application.protocol?.pages ?? application.pages).find(
             (page: { id: string; route: string }) => page.id === nav.pageId,
           );
+          // Studio's published page ID stays stable for existing installations.
+          // Its native management screen lives in the admin console.
+          const isStudioProjects =
+            application.id === "studio" && page?.id === "studio.projects";
           return page && !page.route.includes(":")
             ? [
                 {
-                  to: page.route,
-                  label:
-                    application.messages?.find(
-                      (message) => message.key === nav.labelKey,
-                    )?.[i18n.language.startsWith("zh") ? "zhCN" : "en"] ??
-                    t(nav.labelKey),
+                  to: isStudioProjects ? studioProjectsPath : page.route,
+                  label: isStudioProjects
+                    ? t("studio:projectManagement")
+                    : (application.messages?.find(
+                        (message) => message.key === nav.labelKey,
+                      )?.[i18n.language.startsWith("zh") ? "zhCN" : "en"] ??
+                      t(nav.labelKey)),
                   icon: runtimeIcons[nav.icon ?? "boxes"] ?? Boxes,
                   permissions:
                     application.permission === "authenticated"
@@ -320,7 +328,7 @@ export function AdminLayout() {
                 key={link.to}
                 to={link.to}
                 onClick={() => recordNavigation(link.to)}
-                end
+                end={link.to !== studioProjectsPath}
                 className={({ isActive }) => (isActive ? "active" : "")}
               >
                 <link.icon size={17} />

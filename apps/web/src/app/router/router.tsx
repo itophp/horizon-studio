@@ -29,6 +29,7 @@ import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Loading } from "@/features/administration/shared";
 import { Shell } from "../layouts/shell";
+import { studioProjectsPath } from "@/features/studio/routes";
 import { Overview } from "@/features/example/overview";
 // The graph canvas pulls in React Flow and dagre, so the orchestration page is
 // split out instead of inflating the first screen bundle.
@@ -40,6 +41,16 @@ const CapabilityPlansPage = lazy(() =>
 const OrchestrationPage = lazy(() =>
   import("@/features/orchestration/page").then((module) => ({
     default: module.OrchestrationPage,
+  })),
+);
+const StudioPage = lazy(() =>
+  import("@/features/studio/page").then((module) => ({
+    default: module.StudioPage,
+  })),
+);
+const StudioProjectManagementPage = lazy(() =>
+  import("@/features/studio/project-management").then((module) => ({
+    default: module.StudioProjectManagementPage,
   })),
 );
 function Architecture() {
@@ -78,10 +89,26 @@ export const router = createBrowserRouter([
         element: <RequireSession />,
         children: [
           {
+            path: "/studio",
+            element: (
+              <Suspense fallback={<Loading />}>
+                <StudioPage />
+              </Suspense>
+            ),
+          },
+          {
             element: <AdminLayout />,
             children: [
               { path: "/", element: <DefaultWorkspace /> },
               { path: "/applications", element: <InstallationsPage /> },
+              {
+                path: `${studioProjectsPath}/:projectId?`,
+                element: (
+                  <Suspense fallback={<Loading />}>
+                    <StudioProjectManagementPage />
+                  </Suspense>
+                ),
+              },
               {
                 path: "/applications/design",
                 element: <ApplicationDesignPage />,

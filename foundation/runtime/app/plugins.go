@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"horizon/applications/projects"
+	"horizon/applications/studio"
 	"horizon/foundation/kernel/plugin"
 	"horizon/foundation/system/identity"
 )
@@ -12,7 +13,7 @@ func BuiltinPlugins(projectsModule *projects.Module) *plugin.Manager {
 	if projectsModule == nil {
 		projectsModule = projects.New(nil)
 	}
-	manager := plugin.New(projects.Plugin{Module: projectsModule})
+	manager := plugin.New(projects.Plugin{Module: projectsModule}, studio.Plugin{Module: studio.New(projectsModule.Pool)})
 	if err := manager.Register(context.Background()); err != nil {
 		panic(err)
 	}

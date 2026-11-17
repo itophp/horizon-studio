@@ -51,6 +51,30 @@ describe("TreeTable", () => {
     previous: "Previous",
     next: "Next",
   };
+  it("selects a row and can hide pagination", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(
+      <TreeTable
+        rows={rows}
+        columns={[{ id: "name", header: "Name", cell: (r) => <>{r.name}</> }]}
+        collapsedKeys={new Set()}
+        onToggle={() => {}}
+        labels={labels}
+        selectedKey="1"
+        onSelect={onSelect}
+        showPagination={false}
+      />,
+    );
+    expect(screen.queryByLabelText("Previous")).not.toBeInTheDocument();
+    expect(screen.getByText("Root").closest("tr")).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    await user.click(screen.getByText("Child"));
+    expect(onSelect).toHaveBeenCalledWith("1-1");
+  });
+
   it("renders tree rows with depth and toggle state", async () => {
     const user = userEvent.setup();
     const onToggle = vi.fn();

@@ -14,6 +14,7 @@ import (
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -264,4 +265,48 @@ func checkSucceeded(t *testing.T, w *httptest.ResponseRecorder) {
 	if envelope.Status != "succeeded" {
 		t.Fatalf("capability status=%s code=%s body=%s", envelope.Status, envelope.ErrorCode, w.Body.String())
 	}
+}
+
+func TestLocalSessionCookieIsolation(t *testing.T) {
+	legacy, pool, _ := iamFixture(t)
+	studioIdentity := identity.New(pool, false)
+	studioIdentity.CookieSuffix = "_8081"
+	studioCore := governance.New(pool, studioIdentity, governance.Options{
+		StorageRoot:     t.TempDir(),
+		PublicWorkspace: "tenant-a",
+	})
+	studio := transport.HandlerWithCore(app.System{}, studioCore, studioIdentity)
+
+	first := loginIAM(t, legacy, "root-admin")
+	second := loginIAM(t, studio, "root-admin")
+	if first.cookie.Name != identity.CookieName || second.cookie.Name != "baseline_session_8081" {
+		t.Fatal("the two applications did not issue separate session cookies")
+	}
+	legacyURL := &url.URL{Scheme: "http", Host: "127.0.0.1:5173", Path: "/"}
+	studioURL := &url.URL{Scheme: "http", Host: "127.0.0.1:5174", Path: "/"}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jar.SetCookies(studioURL, []*http.Cookie{second.cookie})
+	jar.SetCookies(legacyURL, []*http.Cookie{first.cookie})
+	request := func(handler http.Handler, base *url.URL, method, path, csrf string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, base.ResolveReference(&url.URL{Path: path}).String(), nil)
+		r.Header.Set("Origin", base.Scheme+"://"+base.Host)
+		r.Header.Set("X-CSRF-Token", csrf)
+		for _, cookie := range jar.Cookies(base) {
+			r.AddCookie(cookie)
+		}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		return w
+	}
+	checkStatus(t, request(legacy, legacyURL, "GET", "/api/auth/me", ""), 200)
+	checkStatus(t, request(studio, studioURL, "GET", "/api/auth/me", ""), 200)
+	checkStatus(t, request(studio, studioURL, "POST", "/api/auth/logout", first.csrf), 403)
+	logout := request(studio, studioURL, "POST", "/api/auth/logout", second.csrf)
+	checkStatus(t, logout, 200)
+	jar.SetCookies(studioURL, logout.Result().Cookies())
+	checkStatus(t, request(studio, studioURL, "GET", "/api/auth/me", ""), 401)
+	checkStatus(t, request(legacy, legacyURL, "GET", "/api/auth/me", ""), 200)
 }

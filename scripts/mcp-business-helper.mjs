@@ -34,7 +34,7 @@ export function serviceURL(raw) {
     throw new Error("invalid_service_url");
   return url.href;
 }
-export async function diagnose(url, token, expected) {
+export async function diagnose(url, token, expected, requiredTool) {
   if (!/^bmcp_[a-f0-9]{64}$/.test(token)) throw new Error("invalid_token");
   const client = new Client({
     name: "baseline-business-diagnostic",
@@ -51,6 +51,8 @@ export async function diagnose(url, token, expected) {
       { timeout: 10000 },
     );
     const list = await client.listTools({}, { timeout: 10000 });
+    if (requiredTool && !list.tools.some((tool) => tool.name === requiredTool))
+      throw new Error("required_tool_unavailable");
     const result = await client.callTool(
       { name: "mcp_context_get", arguments: {} },
       undefined,

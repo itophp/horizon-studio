@@ -1,0 +1,25 @@
+# Web profile patch: DSH is HorizonStudio's agent capability, so this surface is
+# reduced to the conversation. HorizonStudio owns navigation, tasks, panes and
+# branding. Studio CSS hides the native sidebar, which still hosts DSH settings.
+- id: ui-brand-official
+  disabled: true
+- insert:
+    - id: horizon-studio-brand
+      name: '@horizonstudio/studio-brand'
+    - id: horizon-studio-agent-bridge
+      name: '@horizonstudio/studio-agent-bridge'
+    - id: horizon-studio-mcp
+      name: '@horizonstudio/studio-host/mcp'
+- id: preset-standard
+  disabled: true
+- id: preset-minimal
+  disabled: true
+- id: preset-ptc
+  disabled: true
+- id: preset-cordis
+  disabled: true
+- id: ui-agent-preset
+  disabled: true
+- id: agent-preset-registry
+  config:
+    default: horizon-development

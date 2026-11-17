@@ -5,6 +5,7 @@ import (
 	"horizon/applications/drive"
 	"horizon/applications/example"
 	"horizon/applications/projects"
+	"horizon/applications/studio"
 	"horizon/foundation/ai/harness"
 	"horizon/foundation/ai/knowledge"
 	"horizon/foundation/integrations/mcp"
@@ -123,6 +124,9 @@ func (m CapabilityModules) Entries() []registry.Entry {
 		case "projects":
 			entries[i].Definition.Installation = "com.horizon.projects"
 			entries[i].Definition.Application = "projects"
+		case "studio":
+			entries[i].Definition.Installation = "com.horizon.studio"
+			entries[i].Definition.Application = studio.ApplicationID
 		}
 	}
 	m.Runtime.Entities = EntitiesWithPlugins(m.Plugins)

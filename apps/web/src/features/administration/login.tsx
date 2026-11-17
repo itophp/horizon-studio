@@ -1,5 +1,11 @@
 import { useBranding, PublishedLogo } from "@/features/governance/branding";
 import { useState } from "react";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  getIdentityMeQueryKey,
+  type identityMeResponse,
+} from "@/api/generated/baseline";
 import { Navigate, useNavigate, useLocation } from "react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,6 +25,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  isStudioPairingAvailable,
+  pairStudioMcpAfterLogin,
+} from "@/features/studio/studio-mcp-pairing";
 import { useTheme } from "@/app/providers/theme";
 import { changeLanguage } from "@/i18n";
 import { useAuth } from "./auth";
@@ -31,6 +41,7 @@ export function LoginPage() {
   const { t, i18n } = useTranslation();
   const brand = useBranding();
   const auth = useAuth();
+  const client = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
   const state: unknown = location.state;
@@ -47,6 +58,7 @@ export function LoginPage() {
       : "/";
   const { theme, toggle } = useTheme();
   const [visible, setVisible] = useState(false);
+  const canPairStudio = isStudioPairingAvailable();
   const [help, setHelp] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const form = useForm({
@@ -188,7 +200,42 @@ export function LoginPage() {
               onSubmit={form.handleSubmit(async (values) => {
                 setError(null);
                 try {
-                  await auth.signIn(values);
+                  const profile = await auth.signIn(values);
+                  if (
+                    canPairStudio &&
+                    profile.permissions.includes("studio:read")
+                  ) {
+                    const pairingToast = toast.loading(
+                      t("studio:pairMcpPending"),
+                    );
+                    const isCurrentSession = () => {
+                      const current = client.getQueryData<identityMeResponse>(
+                        getIdentityMeQueryKey(),
+                      );
+                      return (
+                        current?.status === 200 &&
+                        current.data.csrfToken === profile.csrfToken &&
+                        current.data.tenantId === profile.tenantId &&
+                        current.data.account.id === profile.account.id &&
+                        current.data.activeDepartmentId ===
+                          profile.activeDepartmentId
+                      );
+                    };
+                    void pairStudioMcpAfterLogin(
+                      profile,
+                      values.password,
+                      isCurrentSession,
+                    ).then(
+                      () =>
+                        toast.success(t("studio:pairMcpSaved"), {
+                          id: pairingToast,
+                        }),
+                      () =>
+                        toast.error(t("studio:pairMcpAfterLoginFailed"), {
+                          id: pairingToast,
+                        }),
+                    );
+                  }
                   navigate(destination, { replace: true });
                 } catch (cause) {
                   setError(cause);

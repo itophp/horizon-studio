@@ -149,6 +149,12 @@ export const webMcpRoutes = [
     connected: true,
   },
   { path: "/webmcp", module: "development", permission: "", connected: true },
+  {
+    path: "/studio-projects/:projectId?",
+    module: "studio",
+    permission: "studio:read",
+    connected: false,
+  },
   { path: "/login", module: "public", permission: "", connected: false },
   { path: "/foundation", module: "example", permission: "", connected: false },
   {

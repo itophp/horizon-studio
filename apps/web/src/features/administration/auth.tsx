@@ -20,7 +20,7 @@ interface AuthValue {
   profile: SessionProfile | undefined;
   loading: boolean;
   error: unknown;
-  signIn: (data: LoginRequestBody) => Promise<void>;
+  signIn: (data: LoginRequestBody) => Promise<SessionProfile>;
   signOut: () => Promise<void>;
   switchDepartment: (departmentId: number) => Promise<void>;
   refresh: () => Promise<void>;
@@ -96,6 +96,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       status: 200,
       headers: response.headers,
     });
+    return response.data.profile;
   };
   const signOut = async () => {
     window.dispatchEvent(new Event("baseline:webmcp-revoke"));

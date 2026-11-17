@@ -44,6 +44,7 @@ import {
   type AdminColumn,
 } from "@/features/administration/shared";
 import { useSession } from "@/features/administration/auth";
+import { AdminPageTabs } from "@/features/administration/page-tabs";
 import { useConfiguration } from "@/features/governance/runtime";
 import { PermissionMatrix } from "@/features/administration/permission-matrix";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -2279,30 +2280,25 @@ export function PageTabsComponent({
       return <MasterDetailPanelComponent {...renderer} />;
     return <TablePanelComponent {...renderer} />;
   }
+  if (!active) return null;
   return (
-    <>
-      {allowed.length > 1 && (
-        <div className="admin-page-tabs">
-          {allowed.map((panel) => (
-            <button
-              key={panel.id}
-              className={active?.id === panel.id ? "active" : ""}
-              onClick={() =>
-                setParams((old) => {
-                  const next = new URLSearchParams(old);
-                  next.set(param, panel.id);
-                  return next;
-                })
-              }
-            >
-              <Icon name={panel.icon} size={15} />
-              {t(panel.labelKey)}
-            </button>
-          ))}
-        </div>
-      )}
-      {active && renderPanel(active)}
-    </>
+    <AdminPageTabs
+      tabs={allowed.map((panel) => ({
+        id: panel.id,
+        label: t(panel.labelKey),
+        icon: <Icon name={panel.icon} size={15} />,
+      }))}
+      value={active.id}
+      onValueChange={(value) =>
+        setParams((old) => {
+          const next = new URLSearchParams(old);
+          next.set(param, value);
+          return next;
+        })
+      }
+    >
+      {renderPanel(active)}
+    </AdminPageTabs>
   );
 }
 

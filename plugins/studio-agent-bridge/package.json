@@ -1,0 +1,9 @@
+{
+  "name": "@horizonstudio/studio-agent-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./host.mjs",
+  "exports": { ".": "./host.mjs", "./client": "./lib/client.js", "./package.json": "./package.json" },
+  "dsh": { "client": { "platform": "web", "inject": [] } }
+}

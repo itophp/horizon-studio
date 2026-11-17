@@ -61,8 +61,48 @@ function webmcpConnection(): Plugin {
     },
   };
 }
+function studioAgentConnection(): Plugin {
+  return {
+    name: "studio-agent-connection",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use("/__studio/agent", async (req, res) => {
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        if (
+          req.method !== "GET" ||
+          !loopbackHosts.includes(hostname(req.headers.host)) ||
+          req.headers["sec-fetch-site"] !== "same-origin"
+        )
+          return res.writeHead(403).end();
+        try {
+          const url = (
+            await readFile(
+              resolve(repositoryRoot, ".local/web-url.txt"),
+              "utf8",
+            )
+          ).trim();
+          if (
+            !/^http:\/\/127\.0\.0\.1:3095\/\?token=[A-Za-z0-9_-]+$/.test(url)
+          ) {
+            return res.writeHead(404).end();
+          }
+          res.end(JSON.stringify({ url }));
+        } catch {
+          res.writeHead(404).end();
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), webmcpConnection()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    webmcpConnection(),
+    studioAgentConnection(),
+  ],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   server: {
     port: 5173,

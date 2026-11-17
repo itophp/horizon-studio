@@ -1,0 +1,192 @@
+.studio-workspace {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  background: var(--background);
+}
+
+.studio-toolbar,
+.studio-columns,
+.studio-nav {
+  background: var(--app-elevated);
+}
+
+.studio-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  letter-spacing: -0.01em;
+}
+
+.studio-wordmark {
+  position: relative;
+  width: 8.25rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.studio-wordmark img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 9rem;
+  max-width: none;
+  transform: translate(-50%, -50%);
+}
+
+.studio-wordmark-contrast {
+  display: none;
+}
+
+.dark .studio-wordmark-contrast {
+  display: block;
+  clip-path: inset(0 0 0 27%);
+  filter: brightness(0) invert(1);
+}
+
+.studio-columns {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "nav" "tasks" "session" "details";
+}
+
+.studio-nav {
+  display: flex;
+  grid-area: nav;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+}
+
+.studio-nav-settings {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+}
+
+.studio-tasks {
+  grid-area: tasks;
+  background: var(--app-sidebar);
+}
+
+.studio-conversation,
+.studio-record {
+  grid-area: session;
+  background: var(--app-panel);
+}
+
+.studio-details {
+  grid-area: details;
+  background: var(--app-sidebar);
+}
+
+@media (min-width: 48rem) {
+  .studio-columns {
+    grid-template-columns: 3rem minmax(12.5rem, 16rem) minmax(0, 1fr);
+    grid-template-areas: "nav tasks session" "nav tasks details";
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .studio-nav {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  .studio-nav-settings {
+    margin-inline-start: 0;
+    margin-block-start: auto;
+  }
+
+  .studio-tasks {
+    border-start-start-radius: var(--radius);
+  }
+}
+
+@media (min-width: 48rem) and (min-height: 34rem) {
+  .studio-workspace {
+    height: 100dvh;
+  }
+
+  .studio-task-scroll {
+    max-height: none;
+  }
+
+  .studio-conversation .studio-conversation-body {
+    min-height: 0;
+  }
+
+  .studio-details {
+    max-height: 40dvh;
+    overflow: auto;
+  }
+}
+
+@media (min-width: 75rem) {
+  .studio-columns[data-inspector="open"] {
+    grid-template-columns: 3rem minmax(12.5rem, 16rem) minmax(0, 1fr) minmax(
+        18rem,
+        22rem
+      );
+    grid-template-areas: "nav tasks session details";
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .studio-details {
+    max-height: none;
+  }
+}
+
+.studio-complete {
+  grid-area: session;
+  min-height: 0;
+  background: var(--app-panel);
+}
+
+@media (min-width: 48rem) {
+  .studio-columns:has(.studio-complete) {
+    grid-template-columns: 3rem minmax(0, 1fr);
+    grid-template-areas: "nav session";
+    grid-template-rows: minmax(0, 1fr);
+  }
+}
+
+.studio-project-resources > .studio-tasks,
+.studio-project-resources > .studio-record {
+  grid-area: auto;
+}
+
+.studio-project-resources > .studio-tasks {
+  border-radius: 0;
+}
+
+/* Compact tree table inside the requirement list column. */
+.requirement-tree .admin-table-scroll table {
+  font-size: 12px;
+  table-layout: fixed;
+}
+.requirement-tree .admin-table-scroll th {
+  height: 30px;
+  padding: 0 6px;
+  font-size: 10px;
+}
+.requirement-tree .admin-table-scroll td {
+  height: 34px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.requirement-tree .admin-table-scroll th:first-child,
+.requirement-tree .admin-table-scroll td:first-child {
+  padding-left: 4px;
+}
+.requirement-tree .admin-table-scroll th:last-child,
+.requirement-tree .admin-table-scroll td:last-child {
+  width: 64px;
+}

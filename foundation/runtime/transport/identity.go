@@ -102,7 +102,7 @@ func mountIdentity(mux goahttp.Muxer, service *identity.Service, onError func(co
 			}
 			return r, true
 		}
-		cookie, err := r.Cookie(identity.CookieName)
+		cookie, err := r.Cookie(service.BrowserSessionCookieName())
 		if err != nil {
 			deny(w, 401, "unauthenticated")
 			return r, false

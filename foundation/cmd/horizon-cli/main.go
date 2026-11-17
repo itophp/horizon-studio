@@ -11,6 +11,7 @@ import (
 const usage = `horizon-cli
   capability|workflow|graph|application|page [--full] [--json]
   catalog [--full] [--json]
+  plugin [schema id@version] [--json]
   search <query> [--json]
   capability schema [name[@version]]
   workflow schema [name[@version]]
@@ -42,6 +43,8 @@ func run(args []string) error {
 	switch args[0] {
 	case "_supervise":
 		return supervise(args[1:])
+	case "plugin":
+		return inspectPlugins(args[1:])
 	case "env":
 		return environmentCommand(args[1:])
 	case "start", "stop", "restart", "status":

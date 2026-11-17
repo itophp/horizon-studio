@@ -1,4 +1,9 @@
-import { useState, type MouseEvent, type ReactNode } from "react";
+import {
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -122,6 +127,9 @@ export function TreeTable<T>({
   labels,
   pageSize = 8,
   empty,
+  selectedKey,
+  onSelect,
+  showPagination = true,
 }: {
   rows: TreeTableRow<T>[];
   columns: TreeTableColumn<T>[];
@@ -137,11 +145,16 @@ export function TreeTable<T>({
   };
   pageSize?: number;
   empty?: ReactNode;
+  selectedKey?: string;
+  onSelect?: (key: string) => void;
+  showPagination?: boolean;
 }) {
   const [page, setPage] = useState(1);
   const pages = Math.max(1, Math.ceil(rows.length / pageSize));
   const current = Math.min(page, pages);
-  const visible = rows.slice((current - 1) * pageSize, current * pageSize);
+  const visible = showPagination
+    ? rows.slice((current - 1) * pageSize, current * pageSize)
+    : rows;
   return (
     <>
       <div className="admin-table-scroll">
@@ -158,8 +171,27 @@ export function TreeTable<T>({
           <TableBody>
             {visible.map((row) => {
               const collapsed = collapsedKeys.has(row.key);
+              const selected = row.key === selectedKey;
+              const interactive = onSelect !== undefined;
               return (
-                <TableRow key={row.key}>
+                <TableRow
+                  key={row.key}
+                  data-selected={selected ? "" : undefined}
+                  aria-current={selected ? "true" : undefined}
+                  tabIndex={interactive ? 0 : undefined}
+                  className={interactive ? "cursor-pointer" : undefined}
+                  onClick={interactive ? () => onSelect(row.key) : undefined}
+                  onKeyDown={
+                    interactive
+                      ? (event: KeyboardEvent<HTMLTableRowElement>) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            onSelect(row.key);
+                          }
+                        }
+                      : undefined
+                  }
+                >
                   {columns.map((column, index) => (
                     <TableCell key={column.id} className={column.className}>
                       {index === 0 ? (
@@ -173,7 +205,11 @@ export function TreeTable<T>({
                               aria-label={
                                 collapsed ? labels.expand : labels.collapse
                               }
-                              onClick={() => onToggle(row.key)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onToggle(row.key);
+                              }}
+                              onKeyDown={(event) => event.stopPropagation()}
                             >
                               {collapsed ? (
                                 <ChevronRight size={13} />
@@ -198,36 +234,38 @@ export function TreeTable<T>({
         </Table>
         {rows.length === 0 && (empty ?? null)}
       </div>
-      <div className="table-pagination">
-        <span>
-          {labels.range(
-            rows.length ? (current - 1) * pageSize + 1 : 0,
-            Math.min(current * pageSize, rows.length),
-            rows.length,
-          )}
-        </span>
-        <div>
-          <span>{labels.page(current, pages)}</span>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            disabled={current === 1}
-            aria-label={labels.previous}
-            onClick={() => setPage(current - 1)}
-          >
-            <ChevronLeft size={14} />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            disabled={current === pages}
-            aria-label={labels.next}
-            onClick={() => setPage(current + 1)}
-          >
-            <ChevronRight size={14} />
-          </Button>
+      {showPagination && (
+        <div className="table-pagination">
+          <span>
+            {labels.range(
+              rows.length ? (current - 1) * pageSize + 1 : 0,
+              Math.min(current * pageSize, rows.length),
+              rows.length,
+            )}
+          </span>
+          <div>
+            <span>{labels.page(current, pages)}</span>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              disabled={current === 1}
+              aria-label={labels.previous}
+              onClick={() => setPage(current - 1)}
+            >
+              <ChevronLeft size={14} />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              disabled={current === pages}
+              aria-label={labels.next}
+              onClick={() => setPage(current + 1)}
+            >
+              <ChevronRight size={14} />
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

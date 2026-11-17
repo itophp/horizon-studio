@@ -15,6 +15,7 @@ import (
 type Config struct {
 	Address, DatabaseURL string
 	SecureCookies        bool
+	SessionCookieSuffix  string
 	Governance           governance.Options
 }
 
@@ -30,13 +31,22 @@ func Load() (Config, error) {
 		}
 		c.SecureCookies = parsed
 	}
-	host, _, err := net.SplitHostPort(c.Address)
+	host, port, err := net.SplitHostPort(c.Address)
 	if err != nil {
 		return c, err
 	}
 	ip := net.ParseIP(host)
 	if (ip == nil || !ip.IsLoopback()) && !c.SecureCookies {
 		return c, errors.New("non-loopback deployments require COOKIE_SECURE=true and HTTPS")
+	}
+	if !c.SecureCookies {
+		value, err := strconv.ParseUint(port, 10, 16)
+		if err != nil {
+			return c, errors.New("loopback API_ADDR requires a numeric port")
+		}
+		// Browsers share cookies across ports on the same host. Use the trusted
+		// development backend port to separate independent local installations.
+		c.SessionCookieSuffix = "_" + strconv.FormatUint(value, 10)
 	}
 
 	c.Governance.StorageRoot = os.Getenv("FILE_STORAGE_ROOT")

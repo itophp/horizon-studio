@@ -1027,6 +1027,82 @@ type RuntimeRunDependency struct {
 	PluginID string
 }
 
+type StudioItem struct {
+	ID            int64
+	TenantID      string
+	ProjectID     int64
+	RequirementID pgtype.Int8
+	Kind          string
+	Title         string
+	Stage         string
+	Reference     string
+	ReferenceKind string
+	Checks        string
+	Evidence      []byte
+	CreatedBy     int64
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	CatalogTarget string
+	SubjectItemID pgtype.Int8
+	DshSessionID  pgtype.Text
+	Pinned        bool
+	Archived      bool
+}
+
+type StudioProject struct {
+	ID               int64
+	TenantID         string
+	Root             string
+	ApiOrigin        string
+	WebOrigin        string
+	CreatedBy        int64
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	Name             string
+	AiAnalysis       string
+	AiAnalyzedAt     pgtype.Timestamptz
+	DevelopmentBrief string
+}
+
+type StudioRequirement struct {
+	ID          int64
+	TenantID    string
+	ProjectID   int64
+	Title       string
+	Description string
+	Source      string
+	Archived    bool
+	CreatedBy   int64
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	ParentID    pgtype.Int8
+}
+
+type StudioRequirementFile struct {
+	ID            int64
+	TenantID      string
+	RequirementID int64
+	FileID        int64
+	CreatedBy     int64
+	CreatedAt     pgtype.Timestamptz
+}
+
+type StudioRun struct {
+	ID           int64
+	TenantID     string
+	ProjectID    int64
+	Mode         string
+	Capability   string
+	Version      string
+	RequestKey   string
+	Status       string
+	InvocationID string
+	ApprovalID   int64
+	RunID        int64
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type TechnicalDemoRecord struct {
 	ID             int64
 	TenantID       string

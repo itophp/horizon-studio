@@ -116,7 +116,7 @@
     "dependencyVersions": [],
     "pluginId": "builtin:system-settings",
     "version": "1.0.1",
-    "digest": "456972b5a51733402cb28396927a8eec9cfceb27c75c6c8dce2e5951577d7a0c",
+    "digest": "cec0642312b29fbdbc9195a19661cf60335ff86cf256b1d736ce7d1e3f96adea",
     "applications": [
       "system-settings"
     ],
@@ -159,6 +159,16 @@
     "digest": "8c826fb84e1ac54edb1f24a7f2fd6483e33402d3582ffffdc518891568e4da1e",
     "applications": [
       "projects"
+    ],
+    "dependencies": []
+  },
+  {
+    "dependencyVersions": [],
+    "pluginId": "com.horizon.studio",
+    "version": "1.0.0",
+    "digest": "3c1d9da792e89ac7f96b0cdeb4929b344a630a0dbe4b5a09e06600520515c520",
+    "applications": [
+      "studio"
     ],
     "dependencies": []
   }

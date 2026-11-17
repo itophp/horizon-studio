@@ -21,7 +21,7 @@ AI 工作台 SSE 与 JSON 任务入口共用 `assistant:use`、可信 Principal 
 
 ## 当前实现与未启用能力
 
-正式后台已实现数据库账号、Argon2id 密码、默认 8 小时 HttpOnly/SameSite=Lax 会话、令牌摘要、同源 Origin + CSRF、登录限流、停用及密码重置撤销。COOKIE_SECURE=false 仅用于数字 loopback 开发；其他监听要求开启 Secure 并通过 HTTPS 访问。初始密码由操作者显式提供，初始化不能覆盖已有工作区。完整边界与合并规则见 [身份决策](decisions/002-identity-access.md)。
+正式后台已实现数据库账号、Argon2id 密码、默认 8 小时 HttpOnly/SameSite=Lax 会话、令牌摘要、同源 Origin + CSRF、登录限流、停用及密码重置撤销。COOKIE_SECURE=false 仅用于数字 loopback 开发；其他监听要求开启 Secure 并通过 HTTPS 访问。本机 HTTP 开发会话 Cookie 名包含受信任的 API 监听端口，避免同一主机的多个独立实例覆盖登录状态。升级后的本机实例需重新登录一次。初始密码由操作者显式提供，初始化不能覆盖已有工作区。完整边界与合并规则见 [身份决策](decisions/002-identity-access.md)。
 
 正式 IAM 每个请求读取活跃账号、公司、企业、部门、角色与覆盖策略，没有授权决策缓存。角色权限合并，账号 allow 替换同操作继承范围，deny 拒绝。支持 ALL/ORGANIZATION/DEPARTMENT/DEPARTMENT_TREE/OWN/CUSTOM，SQL 保留 tenant 条件；结构更改校验公司关系、树环和引用。权限管理需额外 access:manage；它是整个工作区的授权管理能力。
 
@@ -58,6 +58,8 @@ SMTP 主机由部署白名单约束、证书验证不关闭，测试发送仅本
 通知中心遵循 [ADR 008](decisions/008-notification-center.md)：独立正式 notifications:send、服务端组织展开/全部范围校验/账号去重/幂等。正文为不可信 Markdown，禁止原始 HTML/MDX、危险 URL 和任意外部图片。通知附件需要账号/有效归属/通知文件绑定 SQL 校验；收件人例外入口不放宽通用 files:read。附件由发送者拥有，不允许绑定其他人的文件；绑定后禁止删除。同步权限 Skill 与负向回归。
 
 ## 云盘空间（开发中）
+
+Studio 需求附件复用共享文件服务：上传/下载沿用 `files:create`/`files:read` 的既有体积、扩展名、真实内容与数据范围校验；绑定/解绑要求 `studio:write` 且调用者是需求所属项目 owner，绑定只接受调用者本人上传、用途为 attachment 的文件，解绑只删除绑定而不删除文件。需求附件列表要求 `studio:read` 且按项目 owner 过滤。会话上下文只向已授权的 Studio 调用者投影附件元数据；Agent 读取附件正文走 `file.content.read`（需要 `files:read`），并受远程 MCP 结果大小限制，过大的附件明确失败而不是截断。
 
 空间基础能力使用 `drive:use` 和 `drive:create`；旧权限不自动授予新权限。个人空间按可信租户和账号隔离，共享空间按可信账号或当前部门的成员授权过滤。云盘写能力只接受人类页面来源，工具标签不是授权边界。云盘对象使用 `cloud_drive` 用途并排除在通用文件读取、列表和删除查询之外；云盘下载必须验证空间授权且使用非持久化结果。上传分块及存储键不能进入调用审计。云盘一期尚未交付，完整目标和待验收条件见 [云盘 PRD](cloud-drive-prd.md)。
 

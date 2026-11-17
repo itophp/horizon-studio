@@ -1,236 +1,65 @@
-<p align="center">
-  <img src="docs/assets/horizon-cover-ai-native.png" alt="Horizon AI-Native：人与 Agent 共享业务能力" width="100%" />
-</p>
+# HorizonStudio
 
-<h1 align="center">Horizon</h1>
-<p align="center"><strong>让人和 Agent，围绕同一套业务能力协作。</strong></p>
-<p align="center">AI-Native Application Framework</p>
-<p align="center"><strong>简体中文</strong> · <a href="README.en.md">English</a></p>
+HorizonStudio 是 Web 端的 Horizon 项目开发工作台。Horizon 主站提供业务页面和登录，Horizon 基座通过 Capability Gateway 提供业务能力，DSH 提供 Agent 会话。
 
-Horizon 是面向企业应用的 AI 原生框架。它把业务实体、Schema 契约、可执行能力、智能决策、流程编排、人工参与和业务事件组织成一个整体，让 Agent 能够在明确的权限与业务边界内理解任务、调用工具、推进工作，并根据真实结果继续行动。
+本仓库是一份完整的 Horizon 基座 checkout，Studio 业务全部在 `applications/studio/` 内实现；上游 Horizon 的通用文档见 `docs/` 与根 README（已归档于本文末尾）。
 
-人可以从页面发起工作，Agent 可以从任务开始，流程可以由事件驱动。不同入口共享业务能力，也共享权限、审批和执行记录。
+## 架构
 
-**Horizon 所说的 AI-Native，是让智能参与成为应用的运行机制：应用向 Agent 提供业务语义、可信上下文、可执行能力和持续的任务状态，Agent 在治理边界内把目标转化为行动，应用再以真实业务结果回应。**
+HorizonStudio 工作台位于 `apps/web/src/features/studio`，通过主站的 `/studio` 路由进入。主站负责登录、会话和导航。Studio 使用当前 Horizon 会话通过 Capability Gateway 调用 `applications/studio` 的 `studio.*` 能力。DSH Web 负责本地 Agent 对话与任务绑定会话。
 
-## 概念架构
+## 本地运行（macOS / Linux）
 
-前端设计与开发：[设计系统](docs/design-system.md) · [页面模板与布局](docs/page-templates.md) · [组件使用指南](docs/ui-component-guidelines.md) · [组合与交互模式](docs/ui-interaction-patterns.md) · [代码参考](docs/code-reference/README.md) · [AI 界面参考](docs/ui-ai-patterns.md)。
-
-![Horizon 应用、能力与记忆概念架构](docs/assets/horizon-application-capability-memory.svg)
-
-[查看 SVG 原图](docs/assets/horizon-application-capability-memory.svg) · [查看概念与运行机制说明](docs/architecture.md)
-
-从上到下，框架把“谁发起工作”“如何组织任务”“什么动作被允许”“能力如何执行”和“结果如何继续驱动业务”连接起来。
-
-| 层次 | 核心概念 | 在协作中承担什么职责 |
-|---|---|---|
-| **交互与触发** | Application Runtime、页面、Agent、业务事件、外部 API、流程触发 | Runtime 承载应用、菜单、页面、表单与动作绑定；各入口接受人的意图与系统变化。 |
-| **任务与编排** | Workflow 主干、Graph 子图、ADK Agent 节点 | 将目标组织为可推进的任务：确定步骤、处理循环、开展受限的自主决策。简单动作可以直接调用能力。 |
-| **执行方案管理** | Capability Orchestration Center（能力编排中心） | 为能力版本管理 Direct / Workflow / Graph 方案、校验发布、Binding 切换与回滚，查看版本差异和本人节点轨迹。 |
-| **能力治理** | Capability Gateway | 对每次能力调用统一检查身份、权限、输入、风险和审批，并记录执行过程。 |
-| **能力体系** | Entity、Schema、能力模型、能力注册与触发 | 描述对象及其动作边界，使能力可理解、可发现、可复用，并将调用意图关联到明确的业务动作。 |
-| **业务执行** | 领域规则、数据操作、外部集成 | 执行被允许的动作，维护业务状态和数据边界，产生可确认的结果。 |
-| **业务事实与运行状态** | 业务数据、任务状态、执行记录、恢复上下文 | 保存发生过什么、当前进行到哪里，为查询、追踪和恢复提供依据。 |
-| **事件与反馈** | 业务事件、触发策略、后续行动 | 将已发生的事实送回任务与决策环节，形成下一轮受治理的行动。 |
-| **核心记忆机制** | Memory Center | 采集事件与运行元数据，支持人工记忆管理、来源追溯与作用域治理；自动提炼、向量检索、Agent 记忆使用和自动清理仍待接入。 |
-| **业务扩展** | 插件 | 接入业务实体、能力、事件与界面，复用统一的能力契约与治理边界。 |
-
-这是职责视图。编排位于 Gateway 上方表示它组织工作；流程启动和每个业务节点仍须经过 Gateway。能力模型与注册支持执行，注册本身不代表已获授权。具体运行时顺序见技术文档。
-
-## Capability Orchestration Center：能力编排中心
-
-**Capability 定义业务动作，Execution Plan 定义该动作的执行方式，Binding 选择新调用使用的已发布方案。** 能力编排中心管理三者的关联，使同一个能力入口可以从原生执行切换到受控编排，而页面、Agent 和 API 继续使用原能力契约。
-
-```mermaid
-flowchart LR
-    ENTRY[页面 / Agent / API / 事件] --> GW[Capability Gateway]
-    REG[Registry：能力契约] -. 契约与政策 .-> GW
-    CENTER[Capability Orchestration Center<br/>草稿 / 校验 / 发布 / 绑定 / 回滚] -->|管理动作经 Gateway| GW
-    GW -->|解析并固定当前方案| PLAN[Execution Plan + Binding]
-    PLAN --> DIRECT[Direct：原生 Go 实现]
-    PLAN --> WORKFLOW[Workflow：复用 Eino Workflow]
-    PLAN --> GRAPH[Graph：兼容只读分析]
-    WORKFLOW -->|业务节点经 Gateway| GW
-    GRAPH -->|固定只读能力经 Gateway| GW
+```sh
+pnpm install --frozen-lockfile
+docker compose up -d --wait postgres
+make migrate
+make dev-api             # API http://127.0.0.1:8080
+pnpm dev                 # 应用 http://127.0.0.1:5173/studio
 ```
 
-这是方案管理与运行时选择的关系图。Registry 继续负责唯一能力注册，Gateway 继续负责授权、审批、幂等、执行和审计，Workflow / Graph 继续由现有 Eino 引擎运行。能力编排中心通过已注册的管理能力维护方案及绑定，业务调用不必先访问管理页面。
+打开 [HorizonStudio](http://127.0.0.1:5173/studio)，用 Horizon 主站账号登录。Studio 入口需要 `studio:read` 权限。
 
-- **默认执行**：新能力自动拥有平台 Direct V1，原生动作和同步组合不需要再手工建租户方案。
-- **编排替换**：Workflow Plan 引用已注册的流程版本，节点组合已有能力，通过 Native 节点保留原业务结果；Graph Plan 仅替换输入输出契约一致的兼容只读能力。ADK 可用于既有业务 Workflow 的受限决策，当前不作为独立 Plan 模式，也不开放给受限 Workflow Plan 模板。
-- **版本生效**：草稿校验、发布与绑定分别进行；发布不自动生效。Binding 按修订条件切换，回滚只影响新调用，已经受理的调用和审批继续固定原方案。
-- **管理入口**：业务能力目录 → 执行方案，按独立正式权限及目标能力权限访问；支持注册实现搜索、编译图、版本差异、结构预检、绑定历史和本人节点轨迹。结构预检不运行真实业务或模型。
+要在工作台中使用本地 Agent 会话，准备并启动固定版本的 DSH：
 
-当前支持平台默认与租户覆盖，方案保存固定注册引用和摘要。画布可编辑本地草图，完整在线 DSL 保存、业务模拟/单步调试、灰度及更多作用域仍待增强。开发流程为 **需求分析 → 能力发现与拆分 → 契约实现与注册 → 执行方案选型 → 校验/发布 → 授权范围内绑定 → 真实入口验证与回滚**；简单功能走默认 Direct 分支。
+```sh
+pnpm bootstrap
+pnpm prepare:web
+pnpm web                  # DSH Agent http://127.0.0.1:3095
+```
 
-详见 [能力与执行方案开发闭环](docs/agent-workflow.md#能力与执行方案开发闭环)、[架构中的执行方案管理](docs/architecture.md#capability-orchestration-center能力编排中心) 和 [当前实现与验证边界](docs/capability-flexible-orchestration-implementation.md)。
+在 DSH 新会话的预设菜单中选择「Horizon 开发」。从 Studio 的项目、需求或事项创建 Agent 会话时会直接使用该预设。它保留 DSH Standard 的工具和计划模式，并加入 [Horizon 开发指令](patches/horizon-development.md)：需求分析与 AI 嵌入评估、能力点最小化与 Capability Gateway 的契约模型/执行语义、业务流程经 Workflow/Graph/ADK 编排、发现→需求分析→规划→实现→验证→汇报的开发模式、生成物与门禁规则，以及目标项目根下 `horizon-cli` 的用法。预设还内置四个按需加载的 Skill：[horizon-requirement-analysis](patches/skills/horizon-requirement-analysis/SKILL.md)（业务过程还原、AI 嵌入点与失败语义）、[horizon-cli](patches/skills/horizon-cli/SKILL.md)（子命令与回退）、[horizon-capability](patches/skills/horizon-capability/SKILL.md)（契约字段、风险/审批/幂等与验证）、[horizon-workflow](patches/skills/horizon-workflow/SKILL.md)（Step、分支、预算、状态机与执行方案）。修改预设后，重新执行 `pnpm prepare:web` 并重启 Web 工作台。
 
-## AI-Native 如何体现在应用中
+### Studio 会话与 MCP
 
-用户可以表达一个目标，例如“检查这些待发布内容，并把需要人工判断的部分交给审核人”。要推进这项工作，Agent 需要知道内容当前处于什么状态、适用什么规则、可以调用哪些动作、什么时候必须等待人的决定，以及怎样确认工作已经完成。
+会话栏默认按需求分组，点开需求即可查看或新建其会话。切换到「普通」可查看项目内全部 Studio 会话，包括没有关联需求的会话。现有浏览器绑定会在有写权限的用户打开对应会话时同步到后端。
 
-Horizon 围绕这些需要组织应用。业务能力构成可执行的行动空间，知识和上下文提供判断依据，任务编排连接多个动作，治理机制约束执行，业务事实和事件提供反馈。自然语言、页面操作和系统事件都可以成为这套机制的入口。
+首次启动先应用数据库迁移，启动 Horizon 后端，并执行 `pnpm prepare:web` 和 `pnpm web`。在本机登录时，Studio 使用本次输入的密码自动完成 DSH 配对。已登录时，也可从 Studio 工具栏的「连接 MCP」配对。Studio 会把 30 天凭据保存到本机 DSH，DSH 会自动连接。该 DSH 实例使用配对时的账号和部门查询 Studio 数据。过期后在同一入口重新配对。
 
-在 Horizon 中，AI 参与业务的基础由应用本身提供：
+手工设置时，也可以在「MCP」→「远程 MCP」创建同一账号和部门的 Token，并在 DSH 本机凭据中设置 `HORIZON_STUDIO_MCP_TOKEN`。DSH 的 `studio` MCP 提供会话上下文读取和附件内容读取两个只读工具。
 
-- **业务可理解**：实体描述对象、关系与状态，Schema 描述结构，能力描述可执行动作，让 Agent 有明确的业务语义依据。
-- **能力可发现、可组合**：已有业务能力可以成为页面动作、Agent 工具或流程节点，在多个场景中复用。
-- **决策可协作**：确定性规则、模型判断和人工审核各有职责，共同推进一个任务。
-- **执行可治理**：身份、权限、风险、审批与记录贯穿每一次业务动作。
-- **过程可持续**：任务可以经历多步骤、等待、暂停与恢复，已完成的业务事实得到保留。
-- **结果可反馈**：业务事件成为后续智能行为的输入，让应用持续响应变化。
+`mcp__studio__get_session_context` 接受 DSH `sessionId`，通过 Horizon `/mcp` 读取当前任务、项目开发说明和关联需求；关联需求会附带附件的 `fileId`、文件名、类型和大小。`mcp__studio__read_attachment` 按 `fileId` 读取附件内容（base64，需要 `files:read`；受远程 MCP 结果大小限制，过大的文件返回 `attachment_too_large`）。适配器每次读取时识别 Horizon CLI 管理的后端地址，端口变更后无需重配 DSH。手工启动后端时使用 `.env` 的 `API_ADDR`，也可用 `HORIZONSTUDIO_API` 显式覆盖。
 
-这些机制共同形成一个工作闭环：
+环境变量：
 
-![任务与业务事实反馈闭环](docs/assets/horizon-task-loop.svg)
-
-## 实体、Schema 与能力：AI 理解和行动的共同基础
-
-**Entity 描述业务世界里有什么，Schema 描述信息如何表达，Capability 描述可以对它做什么。** 三者共同构成框架的业务语言：Agent 据此理解对象、准备参数和识别结果，应用依据真实权限与业务约束执行动作。
-
-例如，“文章”是实体，它具有作者、正文、版本和状态；“提交文章”是能力，它接受指定版本的输入并产生明确结果；Schema 约束输入中哪些字段必填、类型是什么、允许哪些取值。一个实体可以被多个能力操作，同一个实体在不同动作中也可以有不同的字段投影。
-
-![实体、Schema 与业务能力关系](docs/assets/horizon-entity-schema-capability.svg)
-
-### 实体让业务对象具有明确语义
-
-实体表达字段的业务含义、对象之间的关系、当前状态与允许的状态变化。它还区分可编辑字段、系统字段和敏感字段，使“认识一个对象”与“获准修改它”各有边界。实体声明需要与实际数据结构核对，状态转移绑定到具体能力。
-
-### Schema 让人与模型交换可检查的结构
-
-Schema 将结构要求表达为机器可读取、可检查的契约，让工具参数、流程定义和业务结果拥有明确形状，并为代码生成、适配和兼容性检查提供依据。
-
-| 契约视角 | 回答的问题 | 在框架中的作用 |
-|---|---|---|
-| **能力输入与输出** | 这个动作接收什么、返回什么？ | 描述工具参数和业务结果，支持输入校验与适配。 |
-| **流程规格** | 任务由哪些步骤组成、如何依赖、有何预算？ | 检查定义结构、能力引用和运行边界。 |
-| **接口与传输** | 调用方如何与应用交换消息？ | 维护统一接口约定及 SDK 生成边界。 |
-| **实体模型与物理结构** | 对象声明是否符合真实字段、关系和状态？ | 对照数据库事实检查模型，避免业务语义与数据漂移。 |
-
-这些契约有各自的事实来源，不应合并成一个推导所有规则的万能 Schema。实体全字段也不能直接成为写入参数：可传什么由具体动作决定。Schema 合法仍需经过授权、数据范围和业务状态检查；模型输出按业务需要验证后才能驱动状态变化。当前生成与校验的实际覆盖范围见 [实体模型](docs/entity-model.md) 和 [Schema 路线](docs/agent-generation-plan.md)。
-
-## 从意图到结果的任务闭环
-
-AI 原生应用围绕目标推进工作，也保留每一步的责任和结果。一次任务可以按以下方式展开：
-
-| 环节 | Agent 与应用如何协作 |
+| 变量 | 说明 |
 |---|---|
-| **理解目标** | 将人的意图或事件表达为任务，识别完成条件；关键信息缺失时请求补充。 |
-| **建立上下文** | 获取当前身份、授权业务对象、相关知识、规则与已有执行结果。 |
-| **组织行动** | 在明确的流程内推进步骤，或由 Agent 从允许的能力中选择下一步。 |
-| **执行能力** | 经统一治理边界调用业务动作，得到成功、失败、待确认或已受理等真实结果。 |
-| **处理变化** | 按规则处理失败与不确定性，必要时暂停、恢复或交给人决定。 |
-| **确认结果** | 根据业务状态核对完成条件，向发起方说明结果；新的业务事件可以启动后续任务。 |
+| `HORIZONSTUDIO_API` | 手工覆盖 Studio MCP 使用的本机 Horizon 地址 |
+| `HORIZONSTUDIO_HOME` | Studio 数据根目录（会话绑定等 DSH 侧数据），默认 `.local/studio-home` |
+| `HORIZONSTUDIO_CLI` | 创建新项目使用的 horizon-cli，默认 `resources/horizon-cli/horizon-cli` |
 
-任务因此具有可查询的进度与生命周期。一次请求返回、一次模型回答和一个业务目标完成分别有自己的含义；长任务可以等待，而已提交的业务事实得到保留。
+`resources/horizon-cli/` 由本仓库源码构建（`go build -trimpath -o resources/horizon-cli/horizon-cli ./foundation/cmd/horizon-cli`），`source.json` 记录 sha256，`pnpm test` 会校验。
 
-## 一套业务能力，多种协作方式
+## 验证
 
-**Capability 是应用对人和 Agent 共同提供的业务语言。** 它表达一个有边界、可执行的动作，例如查询订单、提交文章、确认收货或归档记录。
+```sh
+pnpm test               # CLI 清单/目录 + 代理映射测试
+make check-entities     # 实体声明与迁移一致性（当前 0 问题）
+go build ./... && go test ./applications/studio/
+```
 
-一项能力应说明它处理什么对象、接受什么输入、产生什么结果，以及谁可以执行、有什么风险。页面、Agent 和流程复用这份契约，避免为不同入口建立不同的业务规则。
+浏览器 E2E 按仓库现行规则暂停；远程 CI 全量执行前需单独授权。
 
-能力之间可以组合成更大的业务任务。开发新功能时，优先发现和复用已有能力，再考虑组合、兼容扩展或新增。
+## 在 Studio 中使用
 
-这也让应用能够逐步扩展自己的行动空间：新能力接入后，可在明确开放的范围内被更多页面、Agent 和流程复用。日常任务通过调用既有能力完成；新增业务语义、规则或集成仍通过工程开发和验证交付。
-
-## Harness 为 Agent 提供工作的环境
-
-Agent 需要在一个有边界的运行环境中工作。**Harness** 负责组织模型、上下文、可用工具、执行预算与任务生命周期，让模型的判断能够进入应用的实际工作过程。
-
-在这套环境里，工具连接业务能力，知识提供参考，执行结果成为后续判断的依据。模型可以决定下一步查询什么、调用哪个已允许的工具，或说明还需要什么信息；动作是否有权执行、数据能否被修改、结果是否有效，仍由应用的确定性规则判断。
-
-Harness 与 Gateway 各有职责：前者组织智能行为，后者治理业务执行。工具范围、迭代次数和可见上下文都需要明确配置，使自主性与责任边界一起扩大。
-
-下面展示一次需要人工风险确认的工具调用。业务人工审核任务仍需按自身角色与状态规则设计；工具范围和审批要求由应用明确配置。
-
-![Harness 与 Gateway 受治理的行动时序](docs/assets/horizon-harness-action.svg)
-
-## Workflow、Graph 与 Agent 如何配合
-
-- **Workflow 组织业务主干**：明确步骤与依赖，承载长任务的等待、暂停与恢复。
-- **Graph 处理局部循环**：表达有边界的检查、复核和重试，明确何时继续、何时退出。
-- **ADK Agent 完成受限决策**：结合上下文，从允许的工具中选择行动，完成需要判断与探索的任务。
-
-三者均使用 Eino。任务按需选择组件，简单动作无需强制进入完整流程。模型提出的判断仍需接受业务规则和执行政策的校验。
-
-## 人始终可以参与工作
-
-AI 判断、风险确认与业务人工审核是不同环节。框架将人的决定纳入任务过程：谁可以审核、审核哪一版对象、为什么通过或驳回，都应有清晰边界。
-
-- **Agent** 负责理解、调查、提出判断和在允许范围内选择行动。
-- **应用与流程** 负责权限、业务约束、状态迁移、执行记录与恢复。
-- **人** 设定目标、补充信息，并承担需要人工判断与批准的决定。
-
-例如，一条内容发布流程可以设计为：
-
-![Agent 与人工审核的发布分支](docs/assets/horizon-human-review.svg)
-
-这是业务设计示例，具体接入进度见架构文档。Agent 不能批准自己的权限，也不能以模型结论替代必要的人工决定。
-
-## 上下文、知识与事件让智能有业务依据
-
-Agent 的判断需要可信上下文：当前身份、任务目标、业务对象、授权知识和已经发生的事实。知识检索为判断提供材料，能力调用提供真实结果，业务事件提示新的变化。
-
-事件携带关联关系，使后续任务可以追溯自己的来源。重复事件、递归触发与失败处理需要明确边界，避免同一业务事实引发无控制的重复行动。
-
-这种反馈使应用能够围绕真实业务变化持续开展工作：任务完成后可以触发通知，出现异常可以发起调查，获得人工结论可以继续原有流程。具体后续动作由显式策略与权限控制。
-
-业务知识、人工判断和执行记录还可以成为后续维护知识库、评估 Agent 和改进流程的依据。知识、策略与流程的更新仍需受控维护；业务事件本身不授予修改规则或训练模型的权限。
-
-## Memory Center：让经验成为受治理的上下文
-
-**Memory Center 是 AI-Native 应用框架的核心记忆机制**，连接业务事实、历史经验与下一次任务判断。它与能力执行、任务编排和事件反馈共同构成持续行动的闭环。作为规划中的平台共享记忆服务，它从业务事件、能力调用、Agent 与流程运行、知识系统等多个来源采集信息，经过规范化、敏感信息过滤和异步提炼，将有长期价值的经验关联到实体、事件和任务，供后续检索与决策使用。Gateway 是采集点之一，但不能单独代表所有业务事实。
-
-![Memory Center 系统架构](docs/assets/horizon-memory-center-agents.zh-CN.png)
-
-记忆中心面向两类使用者：**应用 Agent** 检索相关业务经验，辅助理解上下文和推进任务；**开发 Agent** 在授权范围内分析用户习惯、系统异常及历史解决经验，识别改进机会、定位问题并完善应用。开发改动仍须遵循项目权限、审查和验证流程，记忆本身不授予修改或部署权限。
-
-记忆提供历史线索，不替代业务数据库中的当前状态、原始审计记录或知识文档；检索必须遵守租户、身份和数据范围，记忆内容也不能授予执行权限。上述流程是目标架构，具体采集、存储和检索能力需按实施计划建设。详见 [Memory Center 技术架构与开发规范](docs/AI-Native%20Memory%20Center%20技术架构与开发规范.md)。
-
-## 插件：以统一契约扩展业务
-
-插件架构将业务模块的实体、能力、事件和界面扩展接入框架，使 Core 聚焦通用治理，业务模块保有自己的规则和数据边界。插件提供的能力仍只有一份契约，页面、Workflow、Agent 和外部接口通过适配复用，并统一经过 Capability Gateway；注册和发现本身不代表获得调用权限。
-
-![插件系统架构](docs/assets/horizon-plugin-architecture.zh-CN.png)
-
-
-
-设计建议先建设 Go 内置插件与前端扩展注册，再按需评估独立进程和 WASM；不同运行模式需要各自的权限、隔离、版本和生命周期治理。插件停用、升级及历史引用等机制属于分阶段建设内容，不能由概念图推定已经完成。详见 [AI-Native 插件集成方案](docs/ai-native-plugin-integration.md)。
-
-## 从开发应用，到使用应用
-
-Horizon 同时为开发阶段和运行阶段准备协作方式：
-
-| 阶段 | 配套 | 作用 |
-|---|---|---|
-| **开发应用** | AGENTS、工程 Skills、Schema、验证门禁 | 帮助编码 Agent 理解架构、复用能力、澄清业务问题，并以行为验证结果。 |
-| **使用应用** | 内置助手、MCP、WebMCP、运行时 Skills | 让 Agent 在明确开放的工具与当前权限内参与业务；账号能力与页面上下文各有适用范围。 |
-
-Skills 保存做事的方法，Schema 描述可交换的结构，Gateway 约束实际执行。三者协同，既支持生成代码，也支持应用中的持续协作。
-
-## 企业应用基础与工程落地
-
-框架提供身份与权限、组织和账号、配置治理、字典、文件、通知、国际化及统一界面基础，并以 React / TypeScript、Go / Goa、PostgreSQL 和 Eino 承载实现。
-
-框架机制与具体业务接入有各自的成熟度；概念图不表示所有场景都已开箱即用。当前支持范围、已知限制与验证记录保留在技术文档中。
-
-- [本地开发与启动](docs/local-development.md)
-- [架构与运行机制](docs/architecture.md) · [Eino 编排方案](docs/orchestration-plan.md)
-- [Capability 执行方案实施记录](docs/capability-flexible-orchestration-implementation.md)（Direct/Workflow/Graph 方案、版本发布、租户绑定与审批固定方案）
-- [完整生命周期示例](docs/orchestration-example.md)
-- [Agent 开发步骤、提问与复用策略](docs/agent-workflow.md)
-- [能力拆分与组合](docs/capability-composition.md) · [任务与 Skill 路由](docs/agent-tooling.md)
-- [安全边界](docs/security.md) · [测试与质量门禁](docs/testing.md)
-- [Schema 路线](docs/agent-generation-plan.md) · [工程验收记录](docs/verification.md)
-
-## 开源协议
-
-Copyright (C) 2026 Horizon contributors
-
-本项目采用 [GNU General Public License v3.0 or later](LICENSE)（GPL-3.0-or-later）。
-
-这意味着：你可以自由使用、修改和分发本项目，但**分发衍生作品时必须同样以 GPLv3 开源**，并提供完整对应源码。将本项目作为网络服务对外提供时，GPLv3 不要求向你服务的使用者开放源码；如需覆盖这一场景，应改用 AGPL-3.0。
-
-第三方依赖及随附的第三方内容保留各自的许可证与版权声明。其中 Eino、MCP Go SDK 等为 Apache-2.0，Goa、shadcn、MDXEditor 等为 MIT，均与 GPLv3 兼容（这也是本项目不采用 GPLv2 的原因：Apache-2.0 与 GPLv2 不兼容）。
+创建项目时填写目标绝对路径及可选 Git 来源（`horizon-cli init`）；已存在的 Horizon 项目可直接关联。开发服务控制、目录巡检和 Gateway 调用都通过目标项目根目录自建的 `horizon-cli` 执行。试跑目标项目流程时使用目标项目账号登录（`gateway.login`），调用按幂等键记录在 `studio_runs`。需求详情支持附件：上传复用共享文件服务（需要 `files:create`），下载复用 `file.content.read`（需要 `files:read`）；移除附件只解除需求绑定，文件仍保留在文件库。

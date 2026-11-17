@@ -27,6 +27,7 @@ const CookieName = "baseline_session"
 type Service struct {
 	repo            *Repository
 	SecureCookies   bool
+	CookieSuffix    string
 	Policies        PolicyProvider
 	pluginCatalog   []*genidentity.PermissionDefinition
 	analyticsInvoke analyticsInvoke
@@ -79,6 +80,8 @@ func tokenHash(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
 }
+func (s *Service) BrowserSessionCookieName() string { return CookieName + s.CookieSuffix }
+
 func (s *Service) cookie(value string, expired bool) string {
 	return s.policyCookie(value, expired, 480)
 }
@@ -87,7 +90,7 @@ func (s *Service) policyCookie(value string, expired bool, minutes int) string {
 	if expired {
 		max = -1
 	}
-	return (&http.Cookie{Name: CookieName, Value: value, Path: "/", HttpOnly: true, Secure: s.SecureCookies, SameSite: http.SameSiteLaxMode, MaxAge: max}).String()
+	return (&http.Cookie{Name: s.BrowserSessionCookieName(), Value: value, Path: "/", HttpOnly: true, Secure: s.SecureCookies, SameSite: http.SameSiteLaxMode, MaxAge: max}).String()
 }
 func (s *Service) APIKeyAuth(ctx context.Context, _ string, _ *security.APIKeyScheme) (context.Context, error) {
 	_, err := Current(ctx)

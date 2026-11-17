@@ -44928,6 +44928,77 @@
   {
     "protocol": {
       "schemaVersion": "3.0",
+      "id": "studio",
+      "version": "1.0.0",
+      "source": "com.horizon.studio",
+      "runtimeCompatibility": "3.0",
+      "labelKey": "studio:title",
+      "permission": "studio:read",
+      "route": "/studio",
+      "pages": [
+        {
+          "schemaVersion": "3.0",
+          "id": "studio.projects",
+          "route": "/studio",
+          "titleKey": "studio:title",
+          "permission": "studio:read",
+          "root": {
+            "type": "layout",
+            "layout": {
+              "id": "studio-projects-root",
+              "kind": "stack",
+              "props": {},
+              "children": [
+                {
+                  "type": "component",
+                  "component": {
+                    "id": "studio-projects-heading",
+                    "kind": "page-heading",
+                    "version": "1.0",
+                    "props": {
+                      "titleKey": "studio:title"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "providers": [],
+      "navigation": [
+        {
+          "pageId": "studio.projects",
+          "labelKey": "studio:title",
+          "icon": "boxes"
+        }
+      ]
+    },
+    "pluginVersion": "1.0.0",
+    "navigation": [
+      {
+        "pageId": "studio.projects",
+        "labelKey": "studio:title",
+        "icon": "boxes"
+      }
+    ],
+    "schemaVersion": "3.0",
+    "id": "studio",
+    "version": "1.0.0",
+    "metadataVersion": "8c60df27f6b95359445ca29c0ade3735ef619e938d6f40b6879ff908b19a7077",
+    "source": "com.horizon.studio",
+    "runtimeCompatibility": "3.0",
+    "labelKey": "studio:title",
+    "permission": "studio:read",
+    "route": "/studio",
+    "dependencies": [],
+    "pages": [],
+    "providers": [],
+    "extensions": []
+  },
+  {
+    "protocol": {
+      "schemaVersion": "3.0",
       "id": "system-settings",
       "version": "1.0.1",
       "source": "builtin:system-settings",
@@ -50150,7 +50221,7 @@
                                                                           {
                                                                             "kind": "literal",
                                                                             "path": "",
-                                                                            "literal": "{\"defaultValue\":\"\",\"labelKey\":\"governance:consumerPermission\",\"name\":\"consumerPermission\",\"options\":[{\"labelKey\":\"governance:default\",\"value\":\"\"},{\"value\":\"accounts:read\"},{\"value\":\"accounts:create\"},{\"value\":\"accounts:update\"},{\"value\":\"accounts:delete\"},{\"value\":\"organizations:read\"},{\"value\":\"organizations:create\"},{\"value\":\"organizations:update\"},{\"value\":\"organizations:delete\"},{\"value\":\"departments:read\"},{\"value\":\"departments:create\"},{\"value\":\"departments:update\"},{\"value\":\"departments:delete\"},{\"value\":\"roles:read\"},{\"value\":\"roles:create\"},{\"value\":\"roles:update\"},{\"value\":\"roles:delete\"},{\"value\":\"access:manage\"},{\"value\":\"temporary:approve\"},{\"value\":\"applications:design\"},{\"value\":\"applications:manage\"},{\"value\":\"applications:read\"},{\"value\":\"articles:read\"},{\"value\":\"articles:review\"},{\"value\":\"articles:write\"},{\"value\":\"assistant:use\"},{\"value\":\"capability:approve\"},{\"value\":\"dictionaries:create\"},{\"value\":\"dictionaries:delete\"},{\"value\":\"dictionaries:export\"},{\"value\":\"dictionaries:history\"},{\"value\":\"dictionaries:import\"},{\"value\":\"dictionaries:publish\"},{\"value\":\"dictionaries:read\"},{\"value\":\"dictionaries:rollback\"},{\"value\":\"dictionaries:update\"},{\"value\":\"dictionaries:use\"},{\"value\":\"drive:create\"},{\"value\":\"drive:use\"},{\"value\":\"example:archive\"},{\"value\":\"example:create\"},{\"value\":\"example:read\"},{\"value\":\"executionPlans:bind\"},{\"value\":\"executionPlans:edit\"},{\"value\":\"executionPlans:publish\"},{\"value\":\"executionPlans:read\"},{\"value\":\"executionPlans:records\"},{\"value\":\"executionPlans:rollback\"},{\"value\":\"executionPlans:validate\"},{\"value\":\"files:create\"},{\"value\":\"files:delete\"},{\"value\":\"files:read\"},{\"value\":\"knowledge:create\"},{\"value\":\"knowledge:delete\"},{\"value\":\"knowledge:read\"},{\"value\":\"mcp:revoke\"},{\"value\":\"memory:collect\"},{\"value\":\"memory:manage\"},{\"value\":\"memory:read\"},{\"value\":\"memory:replay\"},{\"value\":\"memory:write\"},{\"value\":\"notifications:read\"},{\"value\":\"notifications:retry\"},{\"value\":\"notifications:send\"},{\"value\":\"notifications:test\"},{\"value\":\"orchestration:cancel\"},{\"value\":\"orchestration:read\"},{\"value\":\"orchestration:run\"},{\"value\":\"projects:admin\"},{\"value\":\"projects:read\"},{\"value\":\"projects:write\"},{\"value\":\"settings:export\"},{\"value\":\"settings:history\"},{\"value\":\"settings:publish\"},{\"value\":\"settings:read\"},{\"value\":\"settings:rollback\"},{\"value\":\"settings:update\"}],\"required\":false,\"trim\":false,\"type\":\"select\",\"valuePath\":\"definition.consumerPermission\"}",
+                                                                            "literal": "{\"defaultValue\":\"\",\"labelKey\":\"governance:consumerPermission\",\"name\":\"consumerPermission\",\"options\":[{\"labelKey\":\"governance:default\",\"value\":\"\"},{\"value\":\"accounts:read\"},{\"value\":\"accounts:create\"},{\"value\":\"accounts:update\"},{\"value\":\"accounts:delete\"},{\"value\":\"organizations:read\"},{\"value\":\"organizations:create\"},{\"value\":\"organizations:update\"},{\"value\":\"organizations:delete\"},{\"value\":\"departments:read\"},{\"value\":\"departments:create\"},{\"value\":\"departments:update\"},{\"value\":\"departments:delete\"},{\"value\":\"roles:read\"},{\"value\":\"roles:create\"},{\"value\":\"roles:update\"},{\"value\":\"roles:delete\"},{\"value\":\"access:manage\"},{\"value\":\"temporary:approve\"},{\"value\":\"applications:design\"},{\"value\":\"applications:manage\"},{\"value\":\"applications:read\"},{\"value\":\"articles:read\"},{\"value\":\"articles:review\"},{\"value\":\"articles:write\"},{\"value\":\"assistant:use\"},{\"value\":\"capability:approve\"},{\"value\":\"dictionaries:create\"},{\"value\":\"dictionaries:delete\"},{\"value\":\"dictionaries:export\"},{\"value\":\"dictionaries:history\"},{\"value\":\"dictionaries:import\"},{\"value\":\"dictionaries:publish\"},{\"value\":\"dictionaries:read\"},{\"value\":\"dictionaries:rollback\"},{\"value\":\"dictionaries:update\"},{\"value\":\"dictionaries:use\"},{\"value\":\"drive:create\"},{\"value\":\"drive:use\"},{\"value\":\"example:archive\"},{\"value\":\"example:create\"},{\"value\":\"example:read\"},{\"value\":\"executionPlans:bind\"},{\"value\":\"executionPlans:edit\"},{\"value\":\"executionPlans:publish\"},{\"value\":\"executionPlans:read\"},{\"value\":\"executionPlans:records\"},{\"value\":\"executionPlans:rollback\"},{\"value\":\"executionPlans:validate\"},{\"value\":\"files:create\"},{\"value\":\"files:delete\"},{\"value\":\"files:read\"},{\"value\":\"knowledge:create\"},{\"value\":\"knowledge:delete\"},{\"value\":\"knowledge:read\"},{\"value\":\"mcp:revoke\"},{\"value\":\"memory:collect\"},{\"value\":\"memory:manage\"},{\"value\":\"memory:read\"},{\"value\":\"memory:replay\"},{\"value\":\"memory:write\"},{\"value\":\"notifications:read\"},{\"value\":\"notifications:retry\"},{\"value\":\"notifications:send\"},{\"value\":\"notifications:test\"},{\"value\":\"orchestration:cancel\"},{\"value\":\"orchestration:read\"},{\"value\":\"orchestration:run\"},{\"value\":\"projects:admin\"},{\"value\":\"projects:read\"},{\"value\":\"projects:write\"},{\"value\":\"settings:export\"},{\"value\":\"settings:history\"},{\"value\":\"settings:publish\"},{\"value\":\"settings:read\"},{\"value\":\"settings:rollback\"},{\"value\":\"settings:update\"},{\"value\":\"studio:control\"},{\"value\":\"studio:invoke\"},{\"value\":\"studio:read\"},{\"value\":\"studio:write\"}],\"required\":false,\"trim\":false,\"type\":\"select\",\"valuePath\":\"definition.consumerPermission\"}",
                                                                             "items": [],
                                                                             "fields": []
                                                                           },
@@ -51314,7 +51385,7 @@
                                                                                   {
                                                                                     "kind": "literal",
                                                                                     "path": "",
-                                                                                    "literal": "{\"defaultValue\":\"\",\"labelKey\":\"governance:consumerPermission\",\"name\":\"consumerPermission\",\"options\":[{\"labelKey\":\"governance:default\",\"value\":\"\"},{\"value\":\"accounts:read\"},{\"value\":\"accounts:create\"},{\"value\":\"accounts:update\"},{\"value\":\"accounts:delete\"},{\"value\":\"organizations:read\"},{\"value\":\"organizations:create\"},{\"value\":\"organizations:update\"},{\"value\":\"organizations:delete\"},{\"value\":\"departments:read\"},{\"value\":\"departments:create\"},{\"value\":\"departments:update\"},{\"value\":\"departments:delete\"},{\"value\":\"roles:read\"},{\"value\":\"roles:create\"},{\"value\":\"roles:update\"},{\"value\":\"roles:delete\"},{\"value\":\"access:manage\"},{\"value\":\"temporary:approve\"},{\"value\":\"applications:design\"},{\"value\":\"applications:manage\"},{\"value\":\"applications:read\"},{\"value\":\"articles:read\"},{\"value\":\"articles:review\"},{\"value\":\"articles:write\"},{\"value\":\"assistant:use\"},{\"value\":\"capability:approve\"},{\"value\":\"dictionaries:create\"},{\"value\":\"dictionaries:delete\"},{\"value\":\"dictionaries:export\"},{\"value\":\"dictionaries:history\"},{\"value\":\"dictionaries:import\"},{\"value\":\"dictionaries:publish\"},{\"value\":\"dictionaries:read\"},{\"value\":\"dictionaries:rollback\"},{\"value\":\"dictionaries:update\"},{\"value\":\"dictionaries:use\"},{\"value\":\"drive:create\"},{\"value\":\"drive:use\"},{\"value\":\"example:archive\"},{\"value\":\"example:create\"},{\"value\":\"example:read\"},{\"value\":\"executionPlans:bind\"},{\"value\":\"executionPlans:edit\"},{\"value\":\"executionPlans:publish\"},{\"value\":\"executionPlans:read\"},{\"value\":\"executionPlans:records\"},{\"value\":\"executionPlans:rollback\"},{\"value\":\"executionPlans:validate\"},{\"value\":\"files:create\"},{\"value\":\"files:delete\"},{\"value\":\"files:read\"},{\"value\":\"knowledge:create\"},{\"value\":\"knowledge:delete\"},{\"value\":\"knowledge:read\"},{\"value\":\"mcp:revoke\"},{\"value\":\"memory:collect\"},{\"value\":\"memory:manage\"},{\"value\":\"memory:read\"},{\"value\":\"memory:replay\"},{\"value\":\"memory:write\"},{\"value\":\"notifications:read\"},{\"value\":\"notifications:retry\"},{\"value\":\"notifications:send\"},{\"value\":\"notifications:test\"},{\"value\":\"orchestration:cancel\"},{\"value\":\"orchestration:read\"},{\"value\":\"orchestration:run\"},{\"value\":\"projects:admin\"},{\"value\":\"projects:read\"},{\"value\":\"projects:write\"},{\"value\":\"settings:export\"},{\"value\":\"settings:history\"},{\"value\":\"settings:publish\"},{\"value\":\"settings:read\"},{\"value\":\"settings:rollback\"},{\"value\":\"settings:update\"}],\"required\":false,\"trim\":false,\"type\":\"select\",\"valuePath\":\"definition.consumerPermission\"}",
+                                                                                    "literal": "{\"defaultValue\":\"\",\"labelKey\":\"governance:consumerPermission\",\"name\":\"consumerPermission\",\"options\":[{\"labelKey\":\"governance:default\",\"value\":\"\"},{\"value\":\"accounts:read\"},{\"value\":\"accounts:create\"},{\"value\":\"accounts:update\"},{\"value\":\"accounts:delete\"},{\"value\":\"organizations:read\"},{\"value\":\"organizations:create\"},{\"value\":\"organizations:update\"},{\"value\":\"organizations:delete\"},{\"value\":\"departments:read\"},{\"value\":\"departments:create\"},{\"value\":\"departments:update\"},{\"value\":\"departments:delete\"},{\"value\":\"roles:read\"},{\"value\":\"roles:create\"},{\"value\":\"roles:update\"},{\"value\":\"roles:delete\"},{\"value\":\"access:manage\"},{\"value\":\"temporary:approve\"},{\"value\":\"applications:design\"},{\"value\":\"applications:manage\"},{\"value\":\"applications:read\"},{\"value\":\"articles:read\"},{\"value\":\"articles:review\"},{\"value\":\"articles:write\"},{\"value\":\"assistant:use\"},{\"value\":\"capability:approve\"},{\"value\":\"dictionaries:create\"},{\"value\":\"dictionaries:delete\"},{\"value\":\"dictionaries:export\"},{\"value\":\"dictionaries:history\"},{\"value\":\"dictionaries:import\"},{\"value\":\"dictionaries:publish\"},{\"value\":\"dictionaries:read\"},{\"value\":\"dictionaries:rollback\"},{\"value\":\"dictionaries:update\"},{\"value\":\"dictionaries:use\"},{\"value\":\"drive:create\"},{\"value\":\"drive:use\"},{\"value\":\"example:archive\"},{\"value\":\"example:create\"},{\"value\":\"example:read\"},{\"value\":\"executionPlans:bind\"},{\"value\":\"executionPlans:edit\"},{\"value\":\"executionPlans:publish\"},{\"value\":\"executionPlans:read\"},{\"value\":\"executionPlans:records\"},{\"value\":\"executionPlans:rollback\"},{\"value\":\"executionPlans:validate\"},{\"value\":\"files:create\"},{\"value\":\"files:delete\"},{\"value\":\"files:read\"},{\"value\":\"knowledge:create\"},{\"value\":\"knowledge:delete\"},{\"value\":\"knowledge:read\"},{\"value\":\"mcp:revoke\"},{\"value\":\"memory:collect\"},{\"value\":\"memory:manage\"},{\"value\":\"memory:read\"},{\"value\":\"memory:replay\"},{\"value\":\"memory:write\"},{\"value\":\"notifications:read\"},{\"value\":\"notifications:retry\"},{\"value\":\"notifications:send\"},{\"value\":\"notifications:test\"},{\"value\":\"orchestration:cancel\"},{\"value\":\"orchestration:read\"},{\"value\":\"orchestration:run\"},{\"value\":\"projects:admin\"},{\"value\":\"projects:read\"},{\"value\":\"projects:write\"},{\"value\":\"settings:export\"},{\"value\":\"settings:history\"},{\"value\":\"settings:publish\"},{\"value\":\"settings:read\"},{\"value\":\"settings:rollback\"},{\"value\":\"settings:update\"},{\"value\":\"studio:control\"},{\"value\":\"studio:invoke\"},{\"value\":\"studio:read\"},{\"value\":\"studio:write\"}],\"required\":false,\"trim\":false,\"type\":\"select\",\"valuePath\":\"definition.consumerPermission\"}",
                                                                                     "items": [],
                                                                                     "fields": []
                                                                                   },
@@ -53033,7 +53104,7 @@
     "schemaVersion": "3.0",
     "id": "system-settings",
     "version": "1.0.1",
-    "metadataVersion": "30569ee443be0ba485a3b0d4b7b37f4bb79bf0ae302026efc792f03fde6740e4",
+    "metadataVersion": "0ba997967905d3b5538b849e9ab3ee8854f730fe0368897ef80090bc43267432",
     "source": "builtin:system-settings",
     "runtimeCompatibility": "3.0",
     "labelKey": "governance:settings",

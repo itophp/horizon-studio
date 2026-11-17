@@ -397,9 +397,10 @@ it("renders organization and department views from one V3 page", async () => {
   api.application.mockResolvedValue(fixture);
   const view = mount("/organizations");
   expect((await screen.findAllByText("Acme Labs")).length).toBeGreaterThan(0);
-  const departments = screen.getByRole("button", { name: /Departments/i });
+  const departments = screen.getByRole("tab", { name: /Departments/i });
   await userEvent.click(departments);
   expect(departments).toHaveClass("active");
+  expect(departments).toHaveAttribute("aria-selected", "true");
   expect(await screen.findByText("Platform")).toBeInTheDocument();
   expect(screen.getByText("Companies")).toBeInTheDocument();
   view.unmount();
@@ -442,7 +443,10 @@ it("renders the V3 permissions role gallery and detail tabs", async () => {
   api.application.mockResolvedValue(fixture);
   mount("/permissions?type=roles");
   expect(await screen.findByText("Administrator")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /Roles/i })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: /^Roles$/i })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
 });
 
 it("renders the schema-declared role permission matrix", async () => {

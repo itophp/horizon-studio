@@ -107,6 +107,7 @@ func (r *Registrar) references(kind string, names []string) {
 }
 
 type Catalog struct {
+	Manifests    []Manifest
 	Applications []ar.ApplicationV2
 	Entries      []registry.Entry
 	Entities     []contracts.Entity
@@ -268,6 +269,7 @@ func (m *Manager) Register(ctx context.Context) error {
 				return fmt.Errorf("plugin %s has unused %s reference", r.manifest.ID, key)
 			}
 		}
+		staged.Manifests = append(staged.Manifests, r.manifest)
 		staged.Entries = append(staged.Entries, r.entries...)
 		staged.Entities = append(staged.Entities, r.entities...)
 		for _, application := range r.applications {

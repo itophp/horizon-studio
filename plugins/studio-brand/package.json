@@ -1,0 +1,17 @@
+{
+  "name": "@horizonstudio/studio-brand",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./host.mjs",
+  "exports": {
+    ".": "./host.mjs",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  }
+}
