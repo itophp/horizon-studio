@@ -43,7 +43,7 @@ V3 应用以 `ApplicationV2.protocol: ApplicationV3` 随部署定义发布，外
 
 Phase 4 起，账号、组织和权限管理页已由 `system.identity` V3 定义提供，当前部署包为 `system.identity@2.3.0`，并通过通用 `table-panel`、`page-tabs`、`tree-table-panel`、`cards-panel`、`master-detail-panel` 与表单 Workbench 渲染。原账号/组织/权限 React 页面、custom-view 贡献和旧页面路由已移除。浏览器验收覆盖账号列表与账号表单、组织/部门两个视图、角色卡片/列表与账号独立授权，实际数据分别来自 `identity.accounts.admin.read`、`identity.organizations.read`、`identity.departments.read` 和 `identity.roles.read`。
 
-Phase 5 起，文章与项目也全部改为 V3：`builtin:articles@2.0.0` 提供列表、详情、创建与编辑页，`com.horizon.projects@2.0.0` 提供项目、概览/计划/任务/成员详情页、项目任务与任务详情页。前端只保留通用 `detail-panel`、`record-form-panel`、`search-picker-panel`、`markdown`、分页表格和事件动作适配；文章/项目专用 React 路由、页面和扩展贡献已删除。Provider、表单命令与事件调用都在装配时绑定能力输入 Schema，前端按 Schema 做类型转换后仍经 Gateway 执行。设计契约同样只暴露 V3 Layout、Component 与 Interaction，不再暴露 V2 Composition/container/custom-view 目录。
+项目应用使用 V3，由 `com.horizon.projects` 提供项目、计划、任务和成员页面。前端复用通用详情、表单、关联选择和分页表格，Provider、表单命令与事件调用在装配时绑定能力 Schema，执行经 Gateway。文章管理已从部署目录移除，历史文章及发布记录保留。
 
 `/analytics` 由 `builtin:analytics@1.0.1` 提供，是覆盖现有租户和新租户的平台基本应用，版本随部署自动升级，租户不能停用或卸载。作为已登录用户的默认回落入口，应用和部署包均受保护。页面采用响应式网格、卡片、`layout-tabs` 与 `layout-tab-panel` 内容插槽。指标和图表读取 `identity.analytics.read@1.0.0` 投影，近期列表只显示当前范围内的创建记录。
 

@@ -25,7 +25,7 @@ ADR 012 的内嵌助手是「浏览器内工具循环 + 服务端单轮模型网
 - Eino 侧用 `eino-ext/components/model/openai` 的 `ChatModel`，只支持 Chat Completion 协议，因此新增设置 `agent.baseUrl`（默认 `https://open.bigmodel.cn/api/coding/paas/v4`），不复用带 `/responses` 语义的 `assistant.baseUrl`。
 - `agent.model` 与 `agent.token` 不新增：复用 `assistant.model` / `assistant.token`，避免同一凭证存两份、轮换两处。
 - 开关 `agent.enabled`（默认 false）；`/api/assistant/status` 增加 `agentEnabled` 供前端决定是否展示模式切换。
-- 三个键都在工作空间作用域、UI 可见；token 仍是密封 secret，沿用既有发布与重新认证流程。
+- 三个键都在租户作用域、UI 可见；token 仍是密封 secret，沿用既有发布与重新认证流程。
 
 ## 知识库
 

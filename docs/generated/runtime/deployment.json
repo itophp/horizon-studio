@@ -3,7 +3,7 @@
     "dependencyVersions": [],
     "pluginId": "builtin:automation",
     "version": "1.0.1",
-    "digest": "8d18a6babdc96a0dfa6a0b3de579c7b1388786f93d5d2745076b4c8269038a49",
+    "digest": "5cb20085bf644b5d25946dda091d277f0ca2c7581e475331749da8d53ddefc4e",
     "applications": [
       "automation"
     ],
@@ -15,14 +15,42 @@
   },
   {
     "dependencyVersions": [],
+    "pluginId": "builtin:account-security",
+    "version": "1.0.0",
+    "digest": "ac5c0493a4e13ffcdb177545178df1ddbbf9ff625fa6e3423afddbf5b8fa2154",
+    "applications": [
+      "account-security"
+    ],
+    "dependencies": [],
+    "base": true,
+    "labelKeys": {
+      "account-security": "admin:security.title"
+    }
+  },
+  {
+    "dependencyVersions": [],
+    "pluginId": "builtin:iam-governance",
+    "version": "1.0.0",
+    "digest": "283f25015f8cdbb4bb5ed8bfaf1cee94c10b0918863387b69766fd2f49228057",
+    "applications": [
+      "iam-governance"
+    ],
+    "dependencies": [],
+    "base": true,
+    "labelKeys": {
+      "iam-governance": "admin:policy.title"
+    }
+  },
+  {
+    "dependencyVersions": [],
     "pluginId": "system.identity",
     "version": "2.3.0",
-    "digest": "350d42d713fdff90a3f0735ca9b58f31e8a170e1a19629562c9439e6c4e948f9",
+    "digest": "c964962998f2b7db40fa7d1c725e08fffbc5c8893d35948bfe8f6f6e52867a9a",
     "applications": [
-      "permissions",
-      "organizations",
+      "runtime-protocol",
       "accounts",
-      "runtime-protocol"
+      "organizations",
+      "permissions"
     ],
     "dependencies": [],
     "base": true,
@@ -65,7 +93,7 @@
     "dependencyVersions": [],
     "pluginId": "builtin:agent-collaboration",
     "version": "1.0.0",
-    "digest": "97381a2d05b252bd3612de68a333636c283311c56a0c7565b03e42b0d6e4ee66",
+    "digest": "20d02bd61e7a02ea0e5e71011a73e8b35918b28b5b80fb3d02e6ef240d130535",
     "applications": [
       "agent-collaboration"
     ],
@@ -79,7 +107,7 @@
     "dependencyVersions": [],
     "pluginId": "builtin:agent-collaboration",
     "version": "1.0.1",
-    "digest": "e222543b0a7ecf90cfc0e8fed6e2cd89cdf888b1a1c2da612f77c6b760a25fe9",
+    "digest": "f4be1dc4ea2bda664789c96b1dc3a0b6503104eb12d49d22648382e0c6639d0d",
     "applications": [
       "agent-collaboration"
     ],
@@ -93,7 +121,21 @@
     "dependencyVersions": [],
     "pluginId": "builtin:agent-collaboration",
     "version": "1.0.2",
-    "digest": "77c1bbbdb155141e74dc357cb2bbfe45044c59f261cb99aa3a3783e4abbe279e",
+    "digest": "ed6a344a8c47c5ee9c7efda9ca29bfeaaaf7966373a04f295bd73711aa81aba6",
+    "applications": [
+      "agent-collaboration"
+    ],
+    "dependencies": [],
+    "base": true,
+    "labelKeys": {
+      "agent-collaboration": "mcp:hub.title"
+    }
+  },
+  {
+    "dependencyVersions": [],
+    "pluginId": "builtin:agent-collaboration",
+    "version": "1.0.3",
+    "digest": "31f20e0ba3bbae787be6ba6388c307069ff0680d3ffda15536c217969497d184",
     "applications": [
       "agent-collaboration"
     ],
@@ -149,7 +191,7 @@
     "dependencyVersions": [],
     "pluginId": "builtin:system-settings",
     "version": "1.0.1",
-    "digest": "8fe750188e8238b59a8580ff179412c1e49a4ff3cd4cb28b21022111d34e148d",
+    "digest": "a4e8b0db49be0b3ada4c47dd4d71187696c35d41474d7464dec4d501cd90d66f",
     "applications": [
       "system-settings"
     ],
@@ -163,7 +205,7 @@
     "dependencyVersions": [],
     "pluginId": "builtin:system-settings",
     "version": "1.0.2",
-    "digest": "86f03a7c33bc9a614f8ba894ae1767713f21295ad5795c7ca49f7e51a62d73ce",
+    "digest": "a082c334bc0a90a45d5aea5a2c0b5ebe1cf963d19cd798fa02a5fbe553a1d9ba",
     "applications": [
       "system-settings"
     ],
@@ -177,7 +219,7 @@
     "dependencyVersions": [],
     "pluginId": "builtin:system-settings",
     "version": "1.0.3",
-    "digest": "515ec4c451429509fb0ac6214931843276e68531b66a3d5a15f75867af6b0604",
+    "digest": "f8ab8be54075be1109468b0f077e31ed0c683c212744b430bcf2494918fd5502",
     "applications": [
       "system-settings"
     ],
@@ -191,7 +233,21 @@
     "dependencyVersions": [],
     "pluginId": "builtin:system-settings",
     "version": "1.0.4",
-    "digest": "ab99ba50d8a9665594020667cb8ac7a25a93b5f0ac260f5e7360cfbe68763620",
+    "digest": "ab6fc2b36157562b35d35afc29b4f1ccef997507fff364476fb15fb28cc12e34",
+    "applications": [
+      "system-settings"
+    ],
+    "dependencies": [],
+    "base": true,
+    "labelKeys": {
+      "system-settings": "governance:settings"
+    }
+  },
+  {
+    "dependencyVersions": [],
+    "pluginId": "builtin:system-settings",
+    "version": "1.0.5",
+    "digest": "a17567dc1aa81b6b01fa5cc1ade232d163a384acf715ea4e1114095416bbd9de",
     "applications": [
       "system-settings"
     ],
@@ -273,23 +329,9 @@
   },
   {
     "dependencyVersions": [],
-    "pluginId": "builtin:articles",
-    "version": "2.0.0",
-    "digest": "79b707f4bcfcc996ecac4e5c2d66b961e4af0166390ec0bc78f76973b037c841",
-    "applications": [
-      "articles"
-    ],
-    "dependencies": [],
-    "base": false,
-    "labelKeys": {
-      "articles": "articles:heading"
-    }
-  },
-  {
-    "dependencyVersions": [],
     "pluginId": "com.horizon.example",
-    "version": "1.0.0",
-    "digest": "d0c7ff246aab66cfbf6db1bd1eee5a2945378c411ea4a8f8398c0dcdf3c9decd",
+    "version": "1.0.2",
+    "digest": "d6bf942e4161bb5768e77cf3b6e2fa8c8126058d4caac086f846ee31e5200979",
     "applications": [
       "example-playground"
     ],
@@ -302,8 +344,8 @@
   {
     "dependencyVersions": [],
     "pluginId": "builtin:mail",
-    "version": "1.0.0",
-    "digest": "86bdd9c1e0a71daa0539fd337428d451cd88d278e7b55c893cf8b11345c1163c",
+    "version": "1.1.11",
+    "digest": "6ba48271968dbb8b3fad155193939a5712f6cd42fc86e21eaecd0c361d4b26b0",
     "applications": [
       "mail"
     ],

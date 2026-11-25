@@ -53,9 +53,10 @@ func (p Plugin) Register(_ context.Context, r *plugin.Registrar) error {
 // supervision with the gateway attached.
 func (p Plugin) Workers() []app.Worker {
 	return []app.Worker{func(ctx context.Context, gw *gateway.Gateway, _ *harness.Service) {
-		Run(ctx, p.Module.Pool, gw, p.Module)
+		Run(ctx, p.Module.Pool, gw)
 	}}
 }
 
-func (p Plugin) Start(context.Context) error { return nil }
-func (p Plugin) Stop(context.Context) error  { return nil }
+func (p Plugin) AttachGateway(gw *gateway.Gateway) { p.Module.gateway = gw }
+
+func (p Plugin) Stop(context.Context) error { return nil }

@@ -8,7 +8,7 @@ import {
   EditorDialog,
   ErrorBanner,
   Loading,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import { Button } from "@/components/ui/button";
 import { usePlanScope, type Target, type PlanRow } from "./state";
 

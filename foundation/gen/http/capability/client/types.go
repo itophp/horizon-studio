@@ -25,6 +25,14 @@ type InvokeRequestBody struct {
 	Runtime        *RuntimeInvocationReferenceRequestBody `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 }
 
+// InvokeMachineRequestBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP request body.
+type InvokeMachineRequestBody struct {
+	Version        string  `form:"version" json:"version" xml:"version"`
+	Input          any     `form:"input" json:"input" xml:"input"`
+	IdempotencyKey *string `form:"idempotencyKey,omitempty" json:"idempotencyKey,omitempty" xml:"idempotencyKey,omitempty"`
+}
+
 // DecideRequestBody is the type of the "capability" service "decide" endpoint
 // HTTP request body.
 type DecideRequestBody struct {
@@ -35,6 +43,19 @@ type DecideRequestBody struct {
 // InvokeResponseBody is the type of the "capability" service "invoke" endpoint
 // HTTP response body.
 type InvokeResponseBody struct {
+	InvocationID *string  `form:"invocationId,omitempty" json:"invocationId,omitempty" xml:"invocationId,omitempty"`
+	Status       *string  `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	Data         any      `form:"data,omitempty" json:"data,omitempty" xml:"data,omitempty"`
+	EventIds     []string `form:"eventIds,omitempty" json:"eventIds,omitempty" xml:"eventIds,omitempty"`
+	ApprovalID   *int64   `form:"approvalId,omitempty" json:"approvalId,omitempty" xml:"approvalId,omitempty"`
+	ErrorCode    *string  `form:"errorCode,omitempty" json:"errorCode,omitempty" xml:"errorCode,omitempty"`
+	TraceID      *string  `form:"traceId,omitempty" json:"traceId,omitempty" xml:"traceId,omitempty"`
+	Replayed     *bool    `form:"replayed,omitempty" json:"replayed,omitempty" xml:"replayed,omitempty"`
+}
+
+// InvokeMachineResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body.
+type InvokeMachineResponseBody struct {
 	InvocationID *string  `form:"invocationId,omitempty" json:"invocationId,omitempty" xml:"invocationId,omitempty"`
 	Status       *string  `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	Data         any      `form:"data,omitempty" json:"data,omitempty" xml:"data,omitempty"`
@@ -162,6 +183,49 @@ type InvokeUnavailableResponseBody struct {
 // InvokeInternalResponseBody is the type of the "capability" service "invoke"
 // endpoint HTTP response body for the "internal" error.
 type InvokeInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// InvokeMachineUnauthenticatedResponseBody is the type of the "capability"
+// service "invoke_machine" endpoint HTTP response body for the
+// "unauthenticated" error.
+type InvokeMachineUnauthenticatedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// InvokeMachineForbiddenResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body for the "forbidden" error.
+type InvokeMachineForbiddenResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// InvokeMachineInvalidResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body for the "invalid" error.
+type InvokeMachineInvalidResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// InvokeMachineNotFoundResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body for the "not_found" error.
+type InvokeMachineNotFoundResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// InvokeMachineConflictResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body for the "conflict" error.
+type InvokeMachineConflictResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// InvokeMachineUnavailableResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body for the "unavailable" error.
+type InvokeMachineUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// InvokeMachineInternalResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body for the "internal" error.
+type InvokeMachineInternalResponseBody struct {
 	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
 }
 
@@ -487,6 +551,17 @@ func NewInvokeRequestBody(p *capability.InvokePayload) *InvokeRequestBody {
 	return body
 }
 
+// NewInvokeMachineRequestBody builds the HTTP request body from the payload of
+// the "invoke_machine" endpoint of the "capability" service.
+func NewInvokeMachineRequestBody(p *capability.InvokeMachinePayload) *InvokeMachineRequestBody {
+	body := &InvokeMachineRequestBody{
+		Version:        p.Version,
+		Input:          p.Input,
+		IdempotencyKey: p.IdempotencyKey,
+	}
+	return body
+}
+
 // NewDecideRequestBody builds the HTTP request body from the payload of the
 // "decide" endpoint of the "capability" service.
 func NewDecideRequestBody(p *capability.DecidePayload) *DecideRequestBody {
@@ -662,6 +737,96 @@ func NewInvokeUnavailable(body *InvokeUnavailableResponseBody) *capability.IAMPr
 
 // NewInvokeInternal builds a capability service invoke endpoint internal error.
 func NewInvokeInternal(body *InvokeInternalResponseBody) *capability.IAMProblem {
+	v := &capability.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewInvokeMachineCapabilityResultOK builds a "capability" service
+// "invoke_machine" endpoint result from a HTTP "OK" response.
+func NewInvokeMachineCapabilityResultOK(body *InvokeMachineResponseBody) *capability.CapabilityResult {
+	v := &capability.CapabilityResult{
+		InvocationID: *body.InvocationID,
+		Status:       *body.Status,
+		Data:         body.Data,
+		ApprovalID:   body.ApprovalID,
+		ErrorCode:    *body.ErrorCode,
+		TraceID:      *body.TraceID,
+		Replayed:     *body.Replayed,
+	}
+	v.EventIds = make([]string, len(body.EventIds))
+	for i, val := range body.EventIds {
+		v.EventIds[i] = val
+	}
+
+	return v
+}
+
+// NewInvokeMachineUnauthenticated builds a capability service invoke_machine
+// endpoint unauthenticated error.
+func NewInvokeMachineUnauthenticated(body *InvokeMachineUnauthenticatedResponseBody) *capability.IAMProblem {
+	v := &capability.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewInvokeMachineForbidden builds a capability service invoke_machine
+// endpoint forbidden error.
+func NewInvokeMachineForbidden(body *InvokeMachineForbiddenResponseBody) *capability.IAMProblem {
+	v := &capability.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewInvokeMachineInvalid builds a capability service invoke_machine endpoint
+// invalid error.
+func NewInvokeMachineInvalid(body *InvokeMachineInvalidResponseBody) *capability.IAMProblem {
+	v := &capability.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewInvokeMachineNotFound builds a capability service invoke_machine endpoint
+// not_found error.
+func NewInvokeMachineNotFound(body *InvokeMachineNotFoundResponseBody) *capability.IAMProblem {
+	v := &capability.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewInvokeMachineConflict builds a capability service invoke_machine endpoint
+// conflict error.
+func NewInvokeMachineConflict(body *InvokeMachineConflictResponseBody) *capability.IAMProblem {
+	v := &capability.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewInvokeMachineUnavailable builds a capability service invoke_machine
+// endpoint unavailable error.
+func NewInvokeMachineUnavailable(body *InvokeMachineUnavailableResponseBody) *capability.IAMProblem {
+	v := &capability.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewInvokeMachineInternal builds a capability service invoke_machine endpoint
+// internal error.
+func NewInvokeMachineInternal(body *InvokeMachineInternalResponseBody) *capability.IAMProblem {
 	v := &capability.IAMProblem{
 		Code: *body.Code,
 	}
@@ -1132,6 +1297,35 @@ func ValidateInvokeResponseBody(body *InvokeResponseBody) (err error) {
 	return
 }
 
+// ValidateInvokeMachineResponseBody runs the validations defined on
+// InvokeMachineResponseBody
+func ValidateInvokeMachineResponseBody(body *InvokeMachineResponseBody) (err error) {
+	if body.InvocationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("invocationId", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.EventIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("eventIds", "body"))
+	}
+	if body.ErrorCode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("errorCode", "body"))
+	}
+	if body.TraceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("traceId", "body"))
+	}
+	if body.Replayed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("replayed", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "requested" || *body.Status == "awaiting_approval" || *body.Status == "executing" || *body.Status == "succeeded" || *body.Status == "failed" || *body.Status == "cancelled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"requested", "awaiting_approval", "executing", "succeeded", "failed", "cancelled"}))
+		}
+	}
+	return
+}
+
 // ValidateInvocationResponseBody runs the validations defined on
 // InvocationResponseBody
 func ValidateInvocationResponseBody(body *InvocationResponseBody) (err error) {
@@ -1344,6 +1538,69 @@ func ValidateInvokeUnavailableResponseBody(body *InvokeUnavailableResponseBody) 
 // ValidateInvokeInternalResponseBody runs the validations defined on
 // InvokeInternalResponseBody
 func ValidateInvokeInternalResponseBody(body *InvokeInternalResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateInvokeMachineUnauthenticatedResponseBody runs the validations
+// defined on InvokeMachineUnauthenticatedResponseBody
+func ValidateInvokeMachineUnauthenticatedResponseBody(body *InvokeMachineUnauthenticatedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateInvokeMachineForbiddenResponseBody runs the validations defined on
+// InvokeMachineForbiddenResponseBody
+func ValidateInvokeMachineForbiddenResponseBody(body *InvokeMachineForbiddenResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateInvokeMachineInvalidResponseBody runs the validations defined on
+// InvokeMachineInvalidResponseBody
+func ValidateInvokeMachineInvalidResponseBody(body *InvokeMachineInvalidResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateInvokeMachineNotFoundResponseBody runs the validations defined on
+// InvokeMachineNotFoundResponseBody
+func ValidateInvokeMachineNotFoundResponseBody(body *InvokeMachineNotFoundResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateInvokeMachineConflictResponseBody runs the validations defined on
+// InvokeMachineConflictResponseBody
+func ValidateInvokeMachineConflictResponseBody(body *InvokeMachineConflictResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateInvokeMachineUnavailableResponseBody runs the validations defined on
+// InvokeMachineUnavailableResponseBody
+func ValidateInvokeMachineUnavailableResponseBody(body *InvokeMachineUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateInvokeMachineInternalResponseBody runs the validations defined on
+// InvokeMachineInternalResponseBody
+func ValidateInvokeMachineInternalResponseBody(body *InvokeMachineInternalResponseBody) (err error) {
 	if body.Code == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
 	}

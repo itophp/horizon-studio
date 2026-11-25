@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"horizon/foundation/ai/harness"
+	"horizon/foundation/kernel/capability/gateway"
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
 	"horizon/internal/repository/dbgen"
@@ -32,6 +33,8 @@ type Worker struct {
 	Pool     *pgxpool.Pool
 	Launcher *harness.Service
 	Identity *identity.Service
+	Core     *governance.Core
+	Gateway  *gateway.Gateway
 	slots    chan struct{}
 }
 
@@ -43,7 +46,7 @@ func NewWorker(pool *pgxpool.Pool, launcher *harness.Service, iam *identity.Serv
 
 // Run schedules due tasks and launches queued runs until the context ends.
 func (w *Worker) Run(ctx context.Context) {
-	if w == nil || w.Pool == nil || w.Launcher == nil || w.Identity == nil {
+	if w == nil || w.Pool == nil || w.Identity == nil || (w.Launcher == nil && w.Gateway == nil) {
 		return
 	}
 	w.recoverInterrupted(ctx)
@@ -158,10 +161,18 @@ func (w *Worker) dispatch(ctx context.Context) {
 }
 
 func (w *Worker) execute(ctx context.Context, row dbgen.AutomationRunsClaimRow) {
-	p, err := w.Identity.PrincipalForTask(ctx, row.TenantID, row.OwnerID, row.DepartmentID)
+	if row.ServiceExecution.Valid {
+		w.executeService(ctx, row)
+		return
+	}
+	if w.Launcher == nil {
+		w.finish(ctx, row.TenantID, row.ID, "failed", "unavailable", 0)
+		return
+	}
+	p, err := w.Identity.PrincipalForBoundTask(ctx, row.TenantID, row.OwnerID, row.IdentityBindingID.String())
 	if err != nil {
 		w.finish(ctx, row.TenantID, row.ID, "skipped", "forbidden", 0)
-		w.stop(row.TenantID, row.OwnerID, row.TaskID)
+		w.stop(row)
 		return
 	}
 	runCtx, cancel := context.WithTimeout(identity.WithPrincipal(ctx, p), runTimeout)
@@ -195,7 +206,7 @@ func (w *Worker) execute(ctx context.Context, row dbgen.AutomationRunsClaimRow) 
 	if status == "skipped" {
 		// A revoked owner would fail every future occurrence; stop the schedule
 		// and leave the reason on the run instead of retrying silently.
-		w.stop(row.TenantID, row.OwnerID, row.TaskID)
+		w.stop(row)
 	}
 }
 
@@ -221,12 +232,13 @@ func (w *Worker) record(ctx context.Context, tenant string, taskID int64, failed
 	}
 }
 
-func (w *Worker) stop(tenant string, ownerID, taskID int64) {
+func (w *Worker) stop(row dbgen.AutomationRunsClaimRow) {
 	write, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if _, err := dbgen.New(w.Pool).AutomationTaskSetEnabled(write, dbgen.AutomationTaskSetEnabledParams{
-		TenantID: tenant, OwnerID: ownerID, ID: taskID, Enabled: false,
+		TenantID: row.TenantID, OwnerID: row.OwnerID, ID: row.TaskID, Enabled: false,
+		DepartmentID: row.DepartmentID, BindingID: row.IdentityBindingID.String(),
 	}); err != nil {
-		slog.Error("automation task disable failed", "task", taskID, "error", err)
+		slog.Error("automation task disable failed", "task", row.TaskID, "error", err)
 	}
 }

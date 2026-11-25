@@ -3,7 +3,7 @@ import { ArrowLeft, MessageSquare } from "lucide-react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import { ApplicationPage } from "@/features/application-runtime/page";
 import { RuntimeRouteParams } from "@/features/application-runtime/route-params";
 import { runtimeRead } from "@/lib/capabilities";

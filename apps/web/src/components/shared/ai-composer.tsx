@@ -51,6 +51,7 @@ export function AIComposer({
   label,
   placeholder,
   maxLength,
+  allowAttachments = true,
   file,
   onFileChange,
   onSubmit,
@@ -65,6 +66,7 @@ export function AIComposer({
   label: string;
   placeholder: string;
   maxLength: number;
+  allowAttachments?: boolean;
   file?: File;
   onFileChange: (file: File | undefined) => void;
   onSubmit: () => void;
@@ -160,16 +162,18 @@ export function AIComposer({
         />
         <InputGroupAddon align="block-end" className="justify-between">
           <div className="flex min-w-0 items-center gap-2">
-            <InputGroupButton
-              type="button"
-              size="icon-sm"
-              aria-label={t("ai.addAttachment")}
-              title={t("ai.attachmentHint")}
-              disabled={disabled || busy}
-              onClick={() => picker.current?.click()}
-            >
-              <Plus />
-            </InputGroupButton>
+            {allowAttachments && (
+              <InputGroupButton
+                type="button"
+                size="icon-sm"
+                aria-label={t("ai.addAttachment")}
+                title={t("ai.attachmentHint")}
+                disabled={disabled || busy}
+                onClick={() => picker.current?.click()}
+              >
+                <Plus />
+              </InputGroupButton>
+            )}
             <InputGroupText
               id={`${id}-hint`}
               className="hidden text-xs sm:inline"
@@ -180,19 +184,21 @@ export function AIComposer({
           {action}
         </InputGroupAddon>
       </InputGroup>
-      <input
-        ref={picker}
-        type="file"
-        hidden
-        aria-label={t("ai.attachment")}
-        accept={extensions.join(",")}
-        disabled={disabled || busy}
-        onChange={(event) => {
-          const selected = event.target.files?.[0];
-          if (selected) onFileChange(selected);
-          event.target.value = "";
-        }}
-      />
+      {allowAttachments && (
+        <input
+          ref={picker}
+          type="file"
+          hidden
+          aria-label={t("ai.attachment")}
+          accept={extensions.join(",")}
+          disabled={disabled || busy}
+          onChange={(event) => {
+            const selected = event.target.files?.[0];
+            if (selected) onFileChange(selected);
+            event.target.value = "";
+          }}
+        />
+      )}
       {invalidFile && (
         <p role="status" className="text-sm text-destructive">
           {t("ai.attachmentInvalid")}

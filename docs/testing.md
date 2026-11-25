@@ -23,6 +23,7 @@
 | ./horizon-cli ci-fast | check-rules + 格式 + ESLint/Go vet + TypeScript + Vitest/Go/HTTP + i18n keys + 生成一致性 + 构建 | 代码批次阶段验收统一执行一次；不需要 DB/浏览器 |
 | ./horizon-cli test-integration | 隔离真实 PostgreSQL、迁移、约束、scope、事务与并发 | SQL、Repository、事务或权限范围改动 |
 | ./horizon-cli test-security | 认证/授权/config/scope/HTTP 单元负向用例 + 数据库范围/字段投影/撤销 | 受保护端点、身份、权限、租户、敏感字段及配置边界变更 |
+| ./horizon-cli test-iam-migration-drill | 隔离 schema 的旧库备份、升级、恢复、数据/序列对比与再次升级 | IAM 发布前演练；需匹配 PostgreSQL 版本的客户端或显式指定本地容器 |
 | ./horizon-cli test-e2e | 真实 Go + 生产构建 preview 的关键流程，失败 screenshot/trace 和诊断 | 全量集合：暂停，须用户当轮明确授权才执行；需指定相关 spec |
 | ./horizon-cli test-e2e-changed | 按 git 改动映射到相关 spec 文件；纯文档/规则改动直接不启动浏览器 | 唯一默认可用的浏览器入口：只跑映射命中的模块 spec |
 | ./horizon-cli test-e2e-smoke | `@smoke` 两条最便宜链路：API→SDK→UI、登录会话与主题持久化 | 默认不用；映射未命中且用户当轮要求旁证时才启，须说明理由 |
@@ -64,13 +65,15 @@
 
 CI 先运行 ci-fast，再数据库，再浏览器。依赖/工具缺失应失败；失败报告保留 artifacts。`./horizon-cli ci` 本地通过不等于 GitHub Actions 已执行。
 
+IAM 备份恢复使用 `./horizon-cli test-iam-migration-drill`，独立于默认 `integration` build tag，以免普通数据库测试隐式要求备份工具。设置隔离本地 `TEST_DATABASE_URL`，并安装匹配服务端版本的 PostgreSQL 客户端；使用仓库 Docker 服务时可设置 `IAM_DRILL_CONTAINER=xxh-baseline-postgres-1`。未安装客户端、连接非 loopback、备份/恢复失败或数据不一致均失败，不跳过。演练只操作测试唯一 schema，包含 identity 序列；不备份整个提供的数据库。范围与实际结果见 [IAM 实施记录](iam-implementation.md#可重复备份恢复演练)。
+
 ## 规则与覆盖的边界
 
 check-rules 能检查结构完整与引用，不理解自然语言是否写对，也不能保证 Agent 服从。lint/key 检查能阻挡明确的硬编码或翻译遗漏，不能发现所有运行时拼接和语义错误。安全行为由负向测试与审查共同保障；没有可靠自动化实现的威胁评估/字段分类必须明确人工审查，不能写成“已自动保证”。
 
 当前 rules profile 还执行 ESLint 项目规则的行为测试：允许翻译函数和技术属性；拒绝 JSX 静态可见文案、占位/辅助名称硬编码，以及 app/features/components 中绕过 SDK 的直接 fetch。它不能证明间接封装、动态消息和权限设计正确，仍要审查。
 
-身份端到端服务使用 cmd/e2e：TEST_DATABASE_URL 必填，创建唯一 schema、迁移、测试专用管理员，并在退出时清理。不会初始化或覆写开发工作区。浏览器验收包含登录保护、主题刷新保持、退出、组织/部门/角色创建、账号关联和独立范围保存、编辑与删除；后端集成覆盖六类范围、越权 ID、跨工作区、CSRF、停用和密码重置。测试固定密码只用于隔离 schema。
+身份端到端服务使用 cmd/e2e：TEST_DATABASE_URL 必填，创建唯一 schema、迁移、测试专用管理员，并在退出时清理。不会初始化或覆写开发租户。浏览器验收包含登录保护、主题刷新保持、退出、组织/部门/角色创建、账号关联和独立范围保存、编辑与删除；后端集成覆盖六类范围、越权 ID、跨租户、CSRF、停用和密码重置。测试固定密码只用于隔离 schema。
 
 
 多部门回归覆盖 tests/memberships_test.go 的真实 HTTP + PostgreSQL：角色/覆盖隔离、SQL 成员匹配、非法切换/CSRF、跨租户及持久授权边界、临时权限部门绑定、移除/重新加入不复活；UI 使用 Playwright 验证多部门编辑与当前部门切换。

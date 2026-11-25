@@ -260,7 +260,8 @@ func (s *Service) start(ctx context.Context, p *identity.Principal, cfg governan
 	}
 	return s.runs.Start(ctx, Run{
 		TenantID: p.TenantID, AccountID: p.Account.ID, DepartmentID: p.Account.DepartmentID,
-		SessionID: in.SessionID, ConversationTitle: in.ConversationTitle, Agent: agentName, Model: cfg.Name,
+		IdentityBindingID: p.IdentityBindingID,
+		SessionID:         in.SessionID, ConversationTitle: in.ConversationTitle, Agent: agentName, Model: cfg.Name,
 		InstructionVersion: instructionVersion, Question: in.Question,
 		TraceID: in.TraceID, Origin: string(in.Origin), CorrelationID: correlation,
 		CausationID: in.CausationID, TriggerDepth: in.Depth, TriggerPolicy: in.Policy,
@@ -283,7 +284,7 @@ func (s *Service) loop(ctx context.Context, p *identity.Principal, cfg governanc
 		return fail(ctx, s.runs, p.TenantID, run, "forbidden", started)
 	}
 	adapter := &tools.Adapter{AllowedKeys: keys,
-		Gateway: s.gateway, Registry: s.registry, Caller: callerOf(p),
+		Gateway: s.gateway, Registry: s.registry, Caller: callerOf(p), IdentityBindingID: p.IdentityBindingID,
 		TraceID: run.TraceID, RunID: run.ID, Depth: depth,
 		Observe: func(capability, status string) {
 			kind := "tool_end"
@@ -600,7 +601,7 @@ func (s *Service) Answer(ctx context.Context, question string) (*Reply, error) {
 func (s *Service) contextOf(ctx context.Context, p *identity.Principal, page aicontext.Page, event *aicontext.EventContext) aicontext.Context {
 	return aicontext.Context{
 		AccountName: p.Account.FullName, Username: p.Account.Username,
-		DepartmentID: p.Account.DepartmentID, Admin: p.Account.IsAdmin,
+		Admin:       p.Account.IsAdmin,
 		Permissions: p.Effective(), Page: page, Entities: s.entityContexts(ctx), Event: event,
 	}
 }
@@ -660,7 +661,7 @@ func entityContext(entity contracts.Entity) aicontext.EntityContext {
 
 func callerOf(p *identity.Principal) contracts.Caller {
 	return contracts.Caller{
-		TenantID: p.TenantID, AccountID: p.Account.ID, DepartmentID: p.Account.DepartmentID,
+		TenantID: p.TenantID, AccountID: p.Account.ID,
 		Admin: p.Account.IsAdmin, RestrictAdmin: true, Grants: p.Effective(),
 	}
 }

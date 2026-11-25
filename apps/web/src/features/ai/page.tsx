@@ -12,8 +12,8 @@ import {
 } from "@/api/generated/baseline";
 import type { AIConversation } from "@/api/generated/models";
 import { ApiError } from "@/api/client/request";
-import { PageHeading } from "@/features/administration/shared";
-import { useSession } from "@/features/administration/auth";
+import { PageHeading } from "@/features/identity/shared";
+import { useSession } from "@/features/identity/auth";
 import { Workbench } from "./workbench";
 import { TaskList } from "./tasks";
 import { useAiKey } from "./shared";

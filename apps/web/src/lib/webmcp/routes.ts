@@ -2,13 +2,15 @@ import { runtimeProtocolRoutes } from "@/api/generated/runtime";
 
 const runtimeRoutePolicy: Record<
   string,
-  { module: string; permission?: string }
+  { module: string; permission?: string; connected?: boolean }
 > = {
   "/capabilities": { module: "capability", permission: "example:read" },
   "/analytics": { module: "workspace" },
   "/mcp": { module: "development" },
   "/settings": { module: "governance", permission: "settings:read" },
   "/preferences": { module: "governance" },
+  "/account-security": { module: "identity", connected: false },
+  "/iam-governance": { module: "identity", connected: false },
 };
 
 const runtimeRoutes = runtimeProtocolRoutes.map((route) => {
@@ -19,7 +21,7 @@ const runtimeRoutes = runtimeProtocolRoutes.map((route) => {
     permission:
       policy?.permission ??
       (route.permission === "authenticated" ? "" : route.permission),
-    connected: true,
+    connected: policy?.connected ?? true,
   };
 });
 
@@ -43,30 +45,6 @@ export const webMcpRoutes = [
     path: "/applications",
     module: "runtime",
     permission: "applications:read",
-    connected: false,
-  },
-  {
-    path: "/drive",
-    module: "drive",
-    permission: "drive:use",
-    connected: false,
-  },
-  {
-    path: "/drive/:id",
-    module: "drive",
-    permission: "drive:use",
-    connected: false,
-  },
-  {
-    path: "/drive/:id/members",
-    module: "drive",
-    permission: "drive:use",
-    connected: false,
-  },
-  {
-    path: "/drive/:id/trash",
-    module: "drive",
-    permission: "drive:use",
     connected: false,
   },
   {
@@ -170,6 +148,14 @@ export const webMcpRoutes = [
   },
   { path: "/webmcp", module: "development", permission: "", connected: true },
   { path: "/login", module: "public", permission: "", connected: false },
+  {
+    path: "/sign-in/:application",
+    module: "public",
+    permission: "",
+    connected: false,
+  },
+  { path: "/login/oidc", module: "public", permission: "", connected: false },
+  { path: "/login/saml", module: "public", permission: "", connected: false },
   { path: "/foundation", module: "example", permission: "", connected: false },
   {
     path: "/architecture",

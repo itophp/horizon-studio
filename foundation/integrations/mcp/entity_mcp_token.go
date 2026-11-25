@@ -14,7 +14,6 @@ func tokenEntity() contracts.Entity {
 		Attributes: []contracts.Attribute{
 			{Name: "id", Kind: contracts.AttributeSystem, Type: contracts.TypeInteger, Required: true},
 			{Name: "accountId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Required: true},
-			{Name: "departmentId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Required: true},
 			{Name: "name", Kind: contracts.AttributeBusiness, Type: contracts.TypeString, Required: true},
 			{Name: "tokenHash", Kind: contracts.AttributeSystem, Type: contracts.TypeString, Required: true,
 				Sensitive: true, Description: "SHA-256 of the secret; the secret itself is never stored."},

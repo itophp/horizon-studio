@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RuntimeTabs, TabsContent } from "./runtime-tabs";
 import { pathValue } from "../expression";
 import type { ComponentRendererProps } from "./component-registry";
 
@@ -45,14 +46,24 @@ export function ChangeListForm({
 }: ComponentRendererProps) {
   const { t } = useTranslation();
   const formId = useId();
-  const fields = (props.fields ?? []) as Field[];
-  const groups = (props.groups ?? []) as Group[];
+  const definitions = pathValue(data, "definitions");
+  const registered = Array.isArray(definitions)
+    ? new Set(definitions.map((definition) => pathValue(definition, "key")))
+    : undefined;
+  const fields = ((props.fields ?? []) as Field[]).filter(
+    (field) => !registered || registered.has(field.key),
+  );
+  const groups = ((props.groups ?? []) as Group[]).filter((item) =>
+    fields.some((field) => field.group === item.id),
+  );
   const source =
     typeof props.entriesPath === "string"
       ? pathValue(data, props.entriesPath)
       : data;
   const entries = (Array.isArray(source) ? source : []) as Entry[];
-  const [group, selectGroup] = useState(groups[0]?.id);
+  const [selectedGroup, selectGroup] = useState<string>();
+  const group =
+    groups.find((item) => item.id === selectedGroup)?.id ?? groups[0]?.id;
   const [edits, setEdits] = useState<Record<string, Edit>>({});
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<
@@ -163,24 +174,10 @@ export function ChangeListForm({
     }
   }
 
-  return (
-    <form className="gov-settings" onSubmit={(event) => void submit(event)}>
-      {groups.length > 1 && (
-        <div className="gov-tabs">
-          {groups.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={group === item.id}
-              onClick={() => selectGroup(item.id)}
-            >
-              {t(item.labelKey)}
-            </button>
-          ))}
-        </div>
-      )}
+  function renderFields(panelFields: Field[]) {
+    return (
       <section className="admin-panel entity-card gov-fields">
-        {fields.map((field) => {
+        {panelFields.map((field) => {
           const original = entryFor(field.key);
           const raw = original?.value ?? field.defaultValue ?? "";
           const initialValue =
@@ -207,11 +204,7 @@ export function ChangeListForm({
             );
           const locked = fieldDisabled || current.operation !== "set";
           return (
-            <div
-              className="gov-setting-row"
-              hidden={!!group && field.group !== group}
-              key={field.key}
-            >
+            <div className="gov-setting-row" key={field.key}>
               <div>
                 <label htmlFor={id}>{label}</label>
                 {field.type === "password" &&
@@ -304,6 +297,32 @@ export function ChangeListForm({
           );
         })}
       </section>
+    );
+  }
+
+  return (
+    <form className="gov-settings" onSubmit={(event) => void submit(event)}>
+      {groups.length > 1 && group ? (
+        <RuntimeTabs
+          tabs={groups.map((item) => ({
+            id: item.id,
+            label: t(item.labelKey),
+          }))}
+          value={group}
+          onValueChange={selectGroup}
+          wrap
+        >
+          {groups.map((item) => (
+            <TabsContent key={item.id} value={item.id} keepMounted>
+              {renderFields(fields.filter((field) => field.group === item.id))}
+            </TabsContent>
+          ))}
+        </RuntimeTabs>
+      ) : (
+        renderFields(
+          group ? fields.filter((field) => field.group === group) : fields,
+        )
+      )}
       {writable && (
         <div className="gov-save">
           {typeof props.reasonKey === "string" && (

@@ -254,7 +254,7 @@ func (s *Service) AskBrowser(ctx context.Context, in BrowserTurn) (*BrowserReply
 			}
 			return nil, err
 		}
-		if run.Agent != agentName || run.DepartmentID != p.Account.DepartmentID || run.Status != StatusRunning || run.SessionID != in.SessionID || run.Model != cfg.Name || run.Question != in.Question {
+		if run.Agent != agentName || run.DepartmentID != p.Account.DepartmentID || run.IdentityBindingID != p.IdentityBindingID || run.Status != StatusRunning || run.SessionID != in.SessionID || run.Model != cfg.Name || run.Question != in.Question {
 			return nil, governance.Problem("invalid")
 		}
 		sealed, e := q.OrchGetCheckpoint(ctx, dbgen.OrchGetCheckpointParams{TenantID: p.TenantID, AccountID: p.Account.ID, RunID: run.ID, CheckpointKey: "embedded:manifest"})

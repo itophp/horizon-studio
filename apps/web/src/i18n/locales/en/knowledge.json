@@ -36,7 +36,7 @@
     "title": "Knowledge document",
     "back": "Back to knowledge base",
     "loading": "Loading document…",
-    "notFound": "This document is unavailable in this workspace.",
+    "notFound": "This document is unavailable in this tenant.",
     "failed": "Could not load the document.",
     "empty": "No original text is stored for this document."
   },

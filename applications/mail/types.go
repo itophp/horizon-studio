@@ -1,6 +1,7 @@
 package mail
 
 type OnboardInput struct {
+	ReceiveInput
 	Name         string `json:"name"`
 	EmailAddress string `json:"emailAddress"`
 	Password     string `json:"password"`
@@ -8,12 +9,10 @@ type OnboardInput struct {
 	SMTPPort     int    `json:"smtpPort"`
 	SMTPTLS      string `json:"smtpTls"`
 	SMTPUsername string `json:"smtpUsername"`
-	POP3Host     string `json:"pop3Host"`
-	POP3Port     int    `json:"pop3Port"`
-	POP3Username string `json:"pop3Username"`
 }
 
 type MailboxUpdateInput struct {
+	ReceiveInput
 	ID           int64  `json:"id"`
 	Revision     int64  `json:"revision"`
 	Name         string `json:"name"`
@@ -23,6 +22,15 @@ type MailboxUpdateInput struct {
 	SMTPPort     int    `json:"smtpPort"`
 	SMTPTLS      string `json:"smtpTls"`
 	SMTPUsername string `json:"smtpUsername"`
+}
+
+type ReceiveInput struct {
+	Protocol string `json:"receiveProtocol"`
+	Host     string `json:"receiveHost"`
+	Port     int    `json:"receivePort"`
+	TLSMode  string `json:"receiveTls"`
+	Username string `json:"receiveUsername"`
+
 	POP3Host     string `json:"pop3Host"`
 	POP3Port     int    `json:"pop3Port"`
 	POP3Username string `json:"pop3Username"`
@@ -73,6 +81,7 @@ type SendMessage struct {
 	BCC       []Address `json:"bcc"`
 	Subject   string    `json:"subject"`
 	Markdown  string    `json:"markdown"`
+	HTML      string    `json:"html"`
 	FileIDs   []int64   `json:"fileIds"`
 	ReplyTo   string    `json:"replyTo"`
 }

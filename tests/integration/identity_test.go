@@ -6,12 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	genidentity "horizon/foundation/gen/identity"
-	"horizon/foundation/runtime/app"
-	"horizon/foundation/system/governance"
-	"horizon/foundation/system/identity"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -19,6 +13,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"horizon/deployment"
+	"horizon/deployment/database"
+	genidentity "horizon/foundation/gen/identity"
+	"horizon/foundation/runtime/app"
+	"horizon/foundation/system/governance"
+	"horizon/foundation/system/identity"
+	"horizon/internal/repository/dbgen"
 )
 
 type iamClient struct {
@@ -92,7 +97,53 @@ func loginIAM(t *testing.T, handler http.Handler, username string) iamClient {
 	}
 	return iamClient{handler: handler, cookie: cookies[0], csrf: result.Profile.CsrfToken}
 }
-func iamFixture(t *testing.T) (http.Handler, *pgxpool.Pool, *genidentity.AccountRecord) {
+
+type iamFixtureDeployment struct {
+	http.Handler
+	forTenant func(string) http.Handler
+}
+
+func deploymentForTenant(handler http.Handler, tenant string) http.Handler {
+	if deployment, ok := handler.(*iamFixtureDeployment); ok {
+		return deployment.forTenant(tenant)
+	}
+	return handler
+}
+
+func loginTenantIAM(t *testing.T, handler http.Handler, username, tenant string) iamClient {
+	t.Helper()
+	client := loginIAM(t, deploymentForTenant(handler, tenant), username)
+	response := client.request(t, "GET", "/api/auth/me", nil, false)
+	checkStatus(t, response, 200)
+	profile := decodeBody[genidentity.SessionProfile](t, response)
+	if profile.TenantID != tenant || profile.Account == nil {
+		t.Fatalf("expected account in deployment tenant %s, got tenant %s", tenant, profile.TenantID)
+	}
+	return client
+}
+
+func seedTenantRole(t *testing.T, pool *pgxpool.Pool, tenant, code string, grantorID, accountID int64, grants []*genidentity.PermissionGrant) {
+	t.Helper()
+	encoded, err := json.Marshal(grants)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := dbgen.New(pool)
+	roleID, err := q.IAMCreateRole(t.Context(), dbgen.IAMCreateRoleParams{
+		TenantID: tenant, Name: code, Code: code, Status: "active", TemplateKey: "custom", Grants: encoded,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.IAMCreateContextRoleGrant(t.Context(), dbgen.IAMCreateContextRoleGrantParams{
+		TenantID: tenant, AccountID: accountID, RoleID: roleID, GrantedBy: grantorID,
+		Reason: "Integration test fixture", ValidMinutes: 120,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func isolatedIAMDatabase(t *testing.T) string {
 	t.Helper()
 	source := os.Getenv("TEST_DATABASE_URL")
 	if source == "" {
@@ -108,6 +159,14 @@ func iamFixture(t *testing.T) (http.Handler, *pgxpool.Pool, *genidentity.Account
 	if _, err = admin.Exec(ctx, "CREATE SCHEMA "+quoted); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if _, err := admin.Exec(context.Background(), "DROP SCHEMA "+quoted+" CASCADE"); err != nil {
+			t.Error(err)
+		}
+		if err := admin.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
 	parsed, err := url.Parse(source)
 	if err != nil {
 		t.Fatal(err)
@@ -118,51 +177,63 @@ func iamFixture(t *testing.T) (http.Handler, *pgxpool.Pool, *genidentity.Account
 	// knowledge retrieval) remain resolvable.
 	query.Set("search_path", schema+",public")
 	parsed.RawQuery = query.Encode()
-	dsn := parsed.String()
-	if err = identity.Migrate(ctx, dsn); err != nil {
+	return parsed.String()
+}
+
+func iamFixture(t *testing.T, configure ...func(*identity.Service, *pgxpool.Pool, *genidentity.AccountRecord)) (http.Handler, *pgxpool.Pool, *genidentity.AccountRecord) {
+	t.Helper()
+	ctx := t.Context()
+	dsn := isolatedIAMDatabase(t)
+	if _, err := database.Initialize(ctx, dsn, database.Options{SkipAdministrator: true}); err != nil {
 		t.Fatal(err)
 	}
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		pool.Close()
-		if _, err := admin.Exec(context.Background(), "DROP SCHEMA "+quoted+" CASCADE"); err != nil {
-			t.Error(err)
-		}
-		if err := admin.Close(context.Background()); err != nil {
-			t.Error(err)
-		}
-	})
-	root, err := identity.Bootstrap(ctx, pool, "tenant-a", "root-admin", "TestOnly!2026Secure")
+	t.Cleanup(pool.Close)
+	root, err := identity.BootstrapWithTenantProvisioning(ctx, pool, "tenant-a", "root-admin", "TestOnly!2026Secure", deployment.ProvisionIdentityTenant)
 	if err != nil {
 		t.Fatal(err)
 	}
 	iam := identity.New(pool, false)
+	for _, configureIAM := range configure {
+		configureIAM(iam, pool, root)
+	}
 	core := governance.New(pool, iam, governance.Options{
 		EncryptionKey:   []byte("01234567890123456789012345678901"),
 		StorageRoot:     t.TempDir(),
 		PublicWorkspace: "tenant-a",
 	})
 	handler := deploymentHandler(app.System{}, core, iam)
-	return handler, pool, root
+	deployments := map[string]http.Handler{"tenant-a": handler}
+	return &iamFixtureDeployment{Handler: handler, forTenant: func(tenant string) http.Handler {
+		if existing := deployments[tenant]; existing != nil {
+			return existing
+		}
+		options := core.Options
+		options.PublicWorkspace = tenant
+		tenantIAM := identity.New(pool, false)
+		next := deploymentHandler(app.System{}, governance.New(pool, tenantIAM, options), tenantIAM)
+		deployments[tenant] = next
+		return next
+	}}, pool, root
 }
 func TestPersistentIdentityAuthorization(t *testing.T) {
-	handler, _, rootAccount := iamFixture(t)
+	handler, pool, _ := iamFixture(t)
 	anonymous := iamClient{handler: handler}
 	checkStatus(t, anonymous.request(t, "GET", "/api/admin/snapshot", nil, false), 401)
 	checkStatus(t, anonymous.request(t, "POST", "/api/auth/login", map[string]string{"username": "root-admin", "password": "incorrect"}, false), 401)
-	root := loginIAM(t, handler, "root-admin")
+	root := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	initial := decodeBody[genidentity.AdminSnapshot](t, root.request(t, "GET", "/api/admin/snapshot", nil, false))
-	if len(initial.Accounts) != 1 || len(initial.Organizations) != 2 || len(initial.Roles) != 2 {
+	if len(initial.Accounts) != 1 || len(initial.Organizations) != 1 || len(initial.Departments) != 0 || len(initial.Roles) != 1 {
 		t.Fatal("bootstrap did not persist expected records")
 	}
 
 	t.Run("origin and CSRF enforce write boundaries", func(t *testing.T) {
-		input := map[string]any{"name": "Extra", "code": "extra", "kind": "enterprise", "parentId": 0, "status": "active", "description": ""}
-		checkStatus(t, root.invoke(t, "identity.organization.create", input, false), 403)
-		r := httptest.NewRequest("POST", "http://console.test/api/capabilities/identity.organization.create/invocations", strings.NewReader(`{"input":{}}`))
+		input := map[string]any{"id": initial.Organizations[0].ID}
+		checkStatus(t, root.invoke(t, "identity.organization.update", input, false), 403)
+		r := httptest.NewRequest("POST", "http://console.test/api/capabilities/identity.organization.update/invocations", strings.NewReader(`{"input":{}}`))
 		r.Header.Set("Origin", "https://attacker.test")
 		r.Header.Set("X-CSRF-Token", root.csrf)
 		r.AddCookie(root.cookie)
@@ -171,58 +242,58 @@ func TestPersistentIdentityAuthorization(t *testing.T) {
 		checkStatus(t, w, 403)
 	})
 
-	var engineering genidentity.DepartmentRecord
-	var enterprise genidentity.OrganizationRecord
-	for _, dept := range initial.Departments {
-		if dept.ID != rootAccount.DepartmentID {
-			engineering = *dept
-		}
-	}
-	for _, org := range initial.Organizations {
-		if org.Kind == "enterprise" {
-			enterprise = *org
-		}
+	for _, capability := range []string{
+		"organization.registry.create", "organization.registry.list", "organization.unit.create",
+		"organization.membership.confirm", "identity.organizationAccess.bind",
+		"identity.organization.create", "identity.organization.delete", "example.supplier.organization.bind",
+	} {
+		checkStatus(t, root.invoke(t, capability, map[string]any{}, true), 404)
 	}
 
-	response := root.invoke(t, "identity.department.create", map[string]any{
-		"name": "Quality", "code": "quality", "organizationId": rootAccount.OrganizationID,
-		"parentId": engineering.ID, "manager": "", "status": "active", "description": "",
-	}, true)
-	checkSucceeded(t, response)
-	_ = decodeData[genidentity.DepartmentRecord](t, response)
-
-	response = root.invoke(t, "identity.organization.create", map[string]any{
-		"name": "Another company", "code": "another-company", "kind": "company",
-		"parentId": enterprise.ID, "status": "active", "description": "",
-	}, true)
-	checkSucceeded(t, response)
-	another := decodeData[genidentity.OrganizationRecord](t, response)
-
-	response = root.invoke(t, "identity.department.create", map[string]any{
-		"name": "Outside", "code": "outside", "organizationId": another.ID,
-		"parentId": 0, "manager": "", "status": "active", "description": "",
-	}, true)
-	checkSucceeded(t, response)
-	outside := decodeData[genidentity.DepartmentRecord](t, response)
+	profile := initial.Organizations[0]
+	renamed := decodeData[genidentity.OrganizationRecord](t, root.invoke(t, "identity.organization.update", map[string]any{
+		"id": profile.ID, "name": "Renamed organization", "code": profile.Code, "kind": profile.Kind,
+		"parentId": profile.ParentID, "status": profile.Status, "description": profile.Description,
+	}, true))
+	if renamed.ID != profile.ID || renamed.Name != "Renamed organization" {
+		t.Fatalf("unexpected organization after renaming: %+v", renamed)
+	}
 
 	grants := []map[string]any{{"permission": "accounts:read", "effect": "allow", "scope": "ALL"}}
-	response = root.invoke(t, "identity.role.create", map[string]any{
+	response := root.invoke(t, "identity.role.create", map[string]any{
 		"name": "Scoped manager", "code": "scoped-manager", "description": "", "status": "active", "grants": grants,
 	}, true)
 	checkSucceeded(t, response)
 	role := decodeData[genidentity.RoleRecord](t, response)
 
 	response = root.invoke(t, "identity.account.create", map[string]any{
-		"username": "scoped-manager", "fullName": "Scoped manager", "email": "", "status": "active",
-		"organizationId": another.ID, "departmentId": outside.ID, "roleIds": []int64{role.ID},
-		"overrides": []map[string]any{}, "password": "TestOnly!2026Secure",
+		"username": "scoped-manager", "fullName": "Scoped manager", "email": "manager@example.test", "initialStatus": "active",
+		"password": "TestOnly!2026Secure",
 	}, true)
-	checkSucceeded(t, response)
+	account := decodeData[genidentity.AccountRecord](t, response)
+
+	var profileName, profileEmail string
+	if err := pool.QueryRow(t.Context(), `SELECT display_name, email FROM identity_account_profiles
+	WHERE tenant_id = $1 AND account_id = $2`, "tenant-a", account.ID).Scan(&profileName, &profileEmail); err != nil ||
+		profileName != "Scoped manager" || profileEmail != "manager@example.test" {
+		t.Fatalf("identity application profile was not preserved: %q %q %v", profileName, profileEmail, err)
+	}
+	var retiredColumns int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM information_schema.columns
+	WHERE table_schema = current_schema() AND table_name = 'iam_accounts'
+	AND column_name IN ('full_name', 'email', 'organization_id', 'department_id')`).Scan(&retiredColumns); err != nil || retiredColumns != 0 {
+		t.Fatalf("IAM accounts retained application fields: %d %v", retiredColumns, err)
+	}
+	checkIAMInvocation(t, root.invoke(t, "identity.roleGrant.create", map[string]any{
+		"accountId": account.ID, "roleId": role.ID, "minutes": 30, "reason": "Tenant access test",
+	}, true))
 	manager := loginIAM(t, handler, "scoped-manager")
+	selected := manager.request(t, "POST", "/api/auth/identity", map[string]any{"tenantId": "tenant-a"}, true)
+	checkStatus(t, selected, 200)
+	manager.csrf = decodeBody[genidentity.SessionProfile](t, selected).CsrfToken
 	checkStatus(t, manager.invoke(t, "identity.account.create", map[string]any{
-		"username": "sneaky", "fullName": "Sneaky", "status": "active",
-		"organizationId": another.ID, "departmentId": outside.ID, "roleIds": []int64{},
-		"overrides": []map[string]any{}, "password": "TestOnly!2026Secure",
+		"username": "sneaky", "fullName": "Sneaky", "initialStatus": "active",
+		"password": "TestOnly!2026Secure",
 	}, true), 403)
 	checkStatus(t, manager.request(t, "GET", "/api/admin/snapshot", nil, false), 200)
 }

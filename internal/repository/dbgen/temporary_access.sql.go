@@ -12,13 +12,15 @@ import (
 )
 
 const iAMActiveTemporaryGrants = `-- name: IAMActiveTemporaryGrants :many
-SELECT r.approved_grants,r.resolved_scopes FROM iam_temporary_requests r JOIN iam_accounts reviewer ON reviewer.tenant_id=r.tenant_id AND reviewer.id=r.reviewer_id WHERE r.tenant_id=$1 AND r.applicant_id=$2 AND r.department_id=$3 AND r.status='approved' AND r.expires_at>now() AND reviewer.status='active'
+SELECT r.approved_grants,r.resolved_scopes
+FROM iam_temporary_requests r
+JOIN iam_active_account_subjects reviewer ON reviewer.tenant_id=r.tenant_id AND reviewer.account_id=r.reviewer_id
+WHERE r.tenant_id=$1 AND r.applicant_id=$2 AND r.status='approved' AND r.expires_at>now()
 `
 
 type IAMActiveTemporaryGrantsParams struct {
-	TenantID     string
-	ApplicantID  int64
-	DepartmentID int64
+	TenantID    string
+	ApplicantID int64
 }
 
 type IAMActiveTemporaryGrantsRow struct {
@@ -27,7 +29,7 @@ type IAMActiveTemporaryGrantsRow struct {
 }
 
 func (q *Queries) IAMActiveTemporaryGrants(ctx context.Context, arg IAMActiveTemporaryGrantsParams) ([]IAMActiveTemporaryGrantsRow, error) {
-	rows, err := q.db.Query(ctx, iAMActiveTemporaryGrants, arg.TenantID, arg.ApplicantID, arg.DepartmentID)
+	rows, err := q.db.Query(ctx, iAMActiveTemporaryGrants, arg.TenantID, arg.ApplicantID)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +66,7 @@ func (q *Queries) IAMCancelTemporaryRequest(ctx context.Context, arg IAMCancelTe
 }
 
 const iAMCreateTemporaryRequest = `-- name: IAMCreateTemporaryRequest :one
-INSERT INTO iam_temporary_requests(tenant_id,applicant_id,requested_grants,requested_minutes,reason,department_id) VALUES($1,$2,$3,$4,$5,$6) RETURNING id
+INSERT INTO iam_temporary_requests(tenant_id,applicant_id,requested_grants,requested_minutes,reason) VALUES($1,$2,$3,$4,$5) RETURNING id
 `
 
 type IAMCreateTemporaryRequestParams struct {
@@ -73,7 +75,6 @@ type IAMCreateTemporaryRequestParams struct {
 	RequestedGrants  []byte
 	RequestedMinutes int32
 	Reason           string
-	DepartmentID     int64
 }
 
 func (q *Queries) IAMCreateTemporaryRequest(ctx context.Context, arg IAMCreateTemporaryRequestParams) (int64, error) {
@@ -83,7 +84,6 @@ func (q *Queries) IAMCreateTemporaryRequest(ctx context.Context, arg IAMCreateTe
 		arg.RequestedGrants,
 		arg.RequestedMinutes,
 		arg.Reason,
-		arg.DepartmentID,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -91,7 +91,7 @@ func (q *Queries) IAMCreateTemporaryRequest(ctx context.Context, arg IAMCreateTe
 }
 
 const iAMGetTemporaryRequest = `-- name: IAMGetTemporaryRequest :one
-SELECT id,applicant_id,department_id,requested_grants,requested_minutes,status FROM iam_temporary_requests WHERE tenant_id=$1 AND id=$2
+SELECT id,applicant_id,status FROM iam_temporary_requests WHERE tenant_id=$1 AND id=$2
 `
 
 type IAMGetTemporaryRequestParams struct {
@@ -100,34 +100,23 @@ type IAMGetTemporaryRequestParams struct {
 }
 
 type IAMGetTemporaryRequestRow struct {
-	ID               int64
-	ApplicantID      int64
-	DepartmentID     int64
-	RequestedGrants  []byte
-	RequestedMinutes int32
-	Status           string
+	ID          int64
+	ApplicantID int64
+	Status      string
 }
 
 func (q *Queries) IAMGetTemporaryRequest(ctx context.Context, arg IAMGetTemporaryRequestParams) (IAMGetTemporaryRequestRow, error) {
 	row := q.db.QueryRow(ctx, iAMGetTemporaryRequest, arg.TenantID, arg.ID)
 	var i IAMGetTemporaryRequestRow
-	err := row.Scan(
-		&i.ID,
-		&i.ApplicantID,
-		&i.DepartmentID,
-		&i.RequestedGrants,
-		&i.RequestedMinutes,
-		&i.Status,
-	)
+	err := row.Scan(&i.ID, &i.ApplicantID, &i.Status)
 	return i, err
 }
 
 const iAMListTemporaryRequests = `-- name: IAMListTemporaryRequests :many
-SELECT r.id,r.applicant_id,a.full_name AS applicant_name,r.department_id,d.name AS department_name,r.requested_grants,r.requested_minutes,r.reason,
+SELECT r.id,r.applicant_id,a.username AS applicant_name,r.requested_grants,r.requested_minutes,r.reason,
  CASE WHEN r.status='approved' AND r.expires_at<=now() THEN 'expired' ELSE r.status END::text AS status,
- r.approved_grants,r.approved_minutes,COALESCE(r.reviewer_id,0)::bigint AS reviewer_id,COALESCE(reviewer.full_name,'')::text AS reviewer_name,r.review_note,r.created_at,r.reviewed_at,r.expires_at
+ r.approved_grants,r.approved_minutes,COALESCE(r.reviewer_id,0)::bigint AS reviewer_id,COALESCE(reviewer.username,'')::text AS reviewer_name,r.review_note,r.created_at,r.reviewed_at,r.expires_at
 FROM iam_temporary_requests r JOIN iam_accounts a ON a.tenant_id=r.tenant_id AND a.id=r.applicant_id
-JOIN iam_departments d ON d.tenant_id=r.tenant_id AND d.id=r.department_id
 LEFT JOIN iam_accounts reviewer ON reviewer.tenant_id=r.tenant_id AND reviewer.id=r.reviewer_id
 WHERE r.tenant_id=$1 AND ($2::boolean OR r.applicant_id=$3) ORDER BY r.created_at DESC,r.id DESC
 `
@@ -142,8 +131,6 @@ type IAMListTemporaryRequestsRow struct {
 	ID               int64
 	ApplicantID      int64
 	ApplicantName    string
-	DepartmentID     int64
-	DepartmentName   string
 	RequestedGrants  []byte
 	RequestedMinutes int32
 	Reason           string
@@ -171,8 +158,6 @@ func (q *Queries) IAMListTemporaryRequests(ctx context.Context, arg IAMListTempo
 			&i.ID,
 			&i.ApplicantID,
 			&i.ApplicantName,
-			&i.DepartmentID,
-			&i.DepartmentName,
 			&i.RequestedGrants,
 			&i.RequestedMinutes,
 			&i.Reason,
@@ -251,46 +236,4 @@ func (q *Queries) IAMRevokeTemporaryRequest(ctx context.Context, arg IAMRevokeTe
 	var id int64
 	err := row.Scan(&id)
 	return id, err
-}
-
-const iAMScopeDepartmentChoices = `-- name: IAMScopeDepartmentChoices :many
-SELECT d.id,d.name,d.organization_id,o.name AS organization_name FROM iam_departments d JOIN iam_organizations o ON o.tenant_id=d.tenant_id AND o.id=d.organization_id WHERE d.tenant_id=$1 AND ($2::boolean OR d.organization_id=$3) AND d.status='active' AND o.status='active' ORDER BY o.id,d.id
-`
-
-type IAMScopeDepartmentChoicesParams struct {
-	TenantID       string
-	AllCompanies   bool
-	OrganizationID int64
-}
-
-type IAMScopeDepartmentChoicesRow struct {
-	ID               int64
-	Name             string
-	OrganizationID   int64
-	OrganizationName string
-}
-
-func (q *Queries) IAMScopeDepartmentChoices(ctx context.Context, arg IAMScopeDepartmentChoicesParams) ([]IAMScopeDepartmentChoicesRow, error) {
-	rows, err := q.db.Query(ctx, iAMScopeDepartmentChoices, arg.TenantID, arg.AllCompanies, arg.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []IAMScopeDepartmentChoicesRow{}
-	for rows.Next() {
-		var i IAMScopeDepartmentChoicesRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.OrganizationID,
-			&i.OrganizationName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }

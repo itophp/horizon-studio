@@ -5,7 +5,6 @@ import { collectActivity, type ActivityObservation } from "@/lib/capabilities";
 const pages = new Set([
   "analytics",
   "ai",
-  "articles",
   "drive",
   "knowledge",
   "projects",

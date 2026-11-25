@@ -16,6 +16,7 @@ func settingsScheduleEntity() contracts.Entity {
 			{Name: "draftId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Required: true},
 			{Name: "actorId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Required: true},
 			{Name: "departmentId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Required: true},
+			{Name: "identityBindingId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Nullable: true},
 			{Name: "baseRevision", Kind: contracts.AttributeSystem, Type: contracts.TypeInteger, Required: true},
 			{Name: "draftHash", Kind: contracts.AttributeSystem, Type: contracts.TypeString, Required: true,
 				Description: "Binds the schedule to the exact draft content."},
@@ -30,6 +31,7 @@ func settingsScheduleEntity() contracts.Entity {
 		Relations: []contracts.Relation{
 			{Name: "draft", Target: "settings_draft", Kind: "one", Via: "draft_id", Required: true},
 			{Name: "actor", Target: "account", Kind: "one", Via: "actor_id", Required: true},
+			{Name: "identityBinding", Target: "identity_binding", Kind: "one", Via: "identity_binding_id"},
 		},
 		States: []contracts.State{
 			{Name: "pending"},

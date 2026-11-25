@@ -31,6 +31,7 @@ func (m *Module) dataEntries() []registry.Entry {
 			required = append(required, "actionId", "metadataVersion")
 		}
 		d := contracts.Definition{Name: "application.runtime." + kind, Version: "1.0.0", Title: "Runtime " + kind, Description: "Resolve a trusted active definition and invoke fixed authorized providers or actions.", Domain: "runtime", Entity: "runtime_installation", Layer: contracts.LayerOrchestration, Input: contracts.Object(props, required...), Output: obj(), Risk: contracts.RiskLow, Approval: contracts.ApprovalAuto, ReadOnly: !write, TransientResult: !write, Loggable: []string{"applicationId", "pageId", "providerId"}, Executor: "go:application.runtime." + kind}
+		d.Tags = append(d.Tags, contracts.OrganizationScopedTag)
 		if kind == "context.resolve" {
 			d.Output = ar.Schema(ar.SemanticContext{})
 		}
@@ -62,13 +63,7 @@ func (m *Module) activePage(ctx context.Context, p *identity.Principal, in contr
 		if e != nil {
 			return candidate, ar.PageV2{}, e
 		}
-		available := candidate.Source == runtimeHost && candidate.PluginVersion == "1.0.0"
-		for _, source := range m.contributions() {
-			if source.ID == candidate.ID && source.Source == candidate.Source && source.PluginVersion == candidate.PluginVersion {
-				available = true
-			}
-		}
-		if !available {
+		if !m.hasDefinitionSource(candidate) {
 			return candidate, ar.PageV2{}, contracts.Problem("unavailable")
 		}
 		apps = []ar.ApplicationV2{candidate}

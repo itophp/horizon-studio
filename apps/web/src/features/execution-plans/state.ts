@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import type * as EP from "@/api/generated/capability-execution-plans";
 
 export type Target = EP.ExecutionPlanListInput;
@@ -23,7 +23,7 @@ export function usePlanScope(target: Target) {
     "execution-plans",
     session.tenantId,
     session.account.id,
-    session.activeDepartmentId,
+    session.identityBindingId,
     session.authorizationVersion,
     target.capability,
     target.capabilityVersion,

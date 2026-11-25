@@ -418,6 +418,213 @@ func DecodeInvokeResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildInvokeMachineRequest instantiates a HTTP request object with method and
+// path set to call the "capability" service "invoke_machine" endpoint
+func (c *Client) BuildInvokeMachineRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		name string
+	)
+	{
+		p, ok := v.(*capability.InvokeMachinePayload)
+		if !ok {
+			return nil, goahttp.ErrInvalidType("capability", "invoke_machine", "*capability.InvokeMachinePayload", v)
+		}
+		name = p.Name
+	}
+
+	rawPath := fmt.Sprintf("/api/capabilities/%v/machine-invocations", url.PathEscape(fmt.Sprint(name)))
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: InvokeMachineCapabilityPath(name), RawPath: rawPath}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("capability", "invoke_machine", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeInvokeMachineRequest returns an encoder for requests sent to the
+// capability invoke_machine server.
+func EncodeInvokeMachineRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*capability.InvokeMachinePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("capability", "invoke_machine", "*capability.InvokeMachinePayload", v)
+		}
+		{
+			head := p.Authorization
+			req.Header.Set("Authorization", head)
+		}
+		if p.DelegationID != nil {
+			head := *p.DelegationID
+			req.Header.Set("X-Horizon-Delegation", head)
+		}
+		body := NewInvokeMachineRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("capability", "invoke_machine", err)
+		}
+		return nil
+	}
+}
+
+// DecodeInvokeMachineResponse returns a decoder for responses returned by the
+// capability invoke_machine endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeInvokeMachineResponse may return the following errors:
+//   - "unauthenticated" (type *capability.IAMProblem): http.StatusUnauthorized
+//   - "forbidden" (type *capability.IAMProblem): http.StatusForbidden
+//   - "invalid" (type *capability.IAMProblem): http.StatusBadRequest
+//   - "not_found" (type *capability.IAMProblem): http.StatusNotFound
+//   - "conflict" (type *capability.IAMProblem): http.StatusConflict
+//   - "unavailable" (type *capability.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *capability.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeInvokeMachineResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("capability", "invoke_machine", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("capability", "invoke_machine", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body InvokeMachineResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("capability", "invoke_machine", err)
+			}
+			err = ValidateInvokeMachineResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("capability", "invoke_machine", err)
+			}
+			res := NewInvokeMachineCapabilityResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body InvokeMachineUnauthenticatedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("capability", "invoke_machine", err)
+			}
+			err = ValidateInvokeMachineUnauthenticatedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("capability", "invoke_machine", err)
+			}
+			return nil, NewInvokeMachineUnauthenticated(&body)
+		case http.StatusForbidden:
+			var (
+				body InvokeMachineForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("capability", "invoke_machine", err)
+			}
+			err = ValidateInvokeMachineForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("capability", "invoke_machine", err)
+			}
+			return nil, NewInvokeMachineForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body InvokeMachineInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("capability", "invoke_machine", err)
+			}
+			err = ValidateInvokeMachineInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("capability", "invoke_machine", err)
+			}
+			return nil, NewInvokeMachineInvalid(&body)
+		case http.StatusNotFound:
+			var (
+				body InvokeMachineNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("capability", "invoke_machine", err)
+			}
+			err = ValidateInvokeMachineNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("capability", "invoke_machine", err)
+			}
+			return nil, NewInvokeMachineNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body InvokeMachineConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("capability", "invoke_machine", err)
+			}
+			err = ValidateInvokeMachineConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("capability", "invoke_machine", err)
+			}
+			return nil, NewInvokeMachineConflict(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body InvokeMachineUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("capability", "invoke_machine", err)
+			}
+			err = ValidateInvokeMachineUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("capability", "invoke_machine", err)
+			}
+			return nil, NewInvokeMachineUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body InvokeMachineInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("capability", "invoke_machine", err)
+			}
+			err = ValidateInvokeMachineInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("capability", "invoke_machine", err)
+			}
+			return nil, NewInvokeMachineInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("capability", "invoke_machine", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("capability", "invoke_machine", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildInvocationsRequest instantiates a HTTP request object with method and
 // path set to call the "capability" service "invocations" endpoint
 func (c *Client) BuildInvocationsRequest(ctx context.Context, v any) (*http.Request, error) {

@@ -23,7 +23,7 @@ func (e *Engine) observeStep(state execution, row dbgen.AIGetRunRow, step Step, 
 	}
 	key := fmt.Sprintf("wf:%d:%s:%d:%s", state.ID, step.ID, iteration, phase)
 	event := canonical.Envelope{EventID: key, EventType: "workflow.node." + phase, TenantID: state.Tenant, OccurredAt: occurred,
-		Actor: canonical.Actor{ID: strconv.FormatInt(state.Account, 10), Type: "user"}, DepartmentID: row.DepartmentID,
+		Actor:  canonical.Actor{ID: strconv.FormatInt(state.Account, 10), Type: "user"},
 		Source: canonical.Source{Type: "workflow", ID: step.ID}, Resource: canonical.Resource{Type: "ai_run", ID: strconv.FormatInt(state.ID, 10)},
 		TaskID: strconv.FormatInt(state.ID, 10), WorkflowInstanceID: strconv.FormatInt(state.ID, 10),
 		TraceID: row.TraceID, CorrelationID: row.CorrelationID, CausationID: row.CausationID, Depth: int(row.TriggerDepth), Sensitivity: "internal",

@@ -9,7 +9,7 @@ import {
 import { useLocation, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   PageToolRegistry,
   pageTool,

@@ -7,9 +7,10 @@ package deployment
 import (
 	"context"
 
-	"horizon/applications/articles"
-	"horizon/applications/drive"
+	"github.com/jackc/pgx/v5"
+
 	"horizon/applications/example"
+	"horizon/applications/identity"
 	"horizon/applications/mail"
 	"horizon/applications/projects"
 	ar "horizon/foundation/kernel/applicationruntime"
@@ -17,9 +18,9 @@ import (
 	"horizon/foundation/kernel/plugin"
 	workflow "horizon/foundation/kernel/workflow/spec"
 	"horizon/foundation/runtime/app"
-	"horizon/foundation/system/files"
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
+	"horizon/internal/repository/dbgen"
 )
 
 // Register composes the deployment from the builtin plugin catalog.
@@ -38,9 +39,13 @@ func WithPlugins(core *governance.Core, plugins *plugin.Manager) app.Registratio
 	if plugins == nil {
 		plugins = BuiltinPlugins(core)
 	}
+	signIns, defaultSignIn := applicationSignIns(plugins)
 	return app.Registration{
-		Plugins:      plugins,
-		Applications: []ar.ApplicationV2{app.CapabilityRuntimeApplication()},
+		Plugins:            plugins,
+		Applications:       []ar.ApplicationV2{app.CapabilityRuntimeApplication()},
+		SignInApplications: signIns,
+		DefaultSignIn:      defaultSignIn,
+		Authentication:     identityapp.Authentication{IAM: core.Identity},
 		// Platform workflow definitions, compiled graphs and plugin gateway
 		// hooks stay deployment composition: plugins contribute permissions,
 		// entries, entities and applications through the catalog, while these
@@ -54,7 +59,7 @@ func WithPlugins(core *governance.Core, plugins *plugin.Manager) app.Registratio
 
 		// Application-domain wiring for platform services; see the
 		// Registration field docs. The names are deployment composition data.
-		MemoryActivityPages:    []string{"articles", "drive", "projects"},
+		MemoryActivityPages:    []string{"projects"},
 		MemoryProjectWrite:     "projects:write",
 		MemoryProjectAuthority: "project.get@1.0.0",
 		MemoryEntityScopes: []app.MemoryEntityScope{{
@@ -66,24 +71,19 @@ func WithPlugins(core *governance.Core, plugins *plugin.Manager) app.Registratio
 // BuiltinPlugins constructs and registers every builtin application plugin.
 // Business limits resolve from deployment configuration into plugin options.
 func BuiltinPlugins(core *governance.Core) *plugin.Manager {
-	fileService, _ := core.Logos.(*files.Service)
-	if fileService == nil {
-		fileService = files.New(core)
-	}
 	mailOptions, err := mail.OptionsFromEnv()
 	if err != nil {
 		panic(err)
 	}
-	// The drive module shares the assembled identity catalog: its last
-	// administrator check must resolve plugin permissions like the gateway.
-	driveModule := drive.NewWithFiles(core.Pool, fileService)
-	driveModule.AttachIdentity(core.Identity)
+	exampleModule := example.New(core.Pool)
+	core.Identity.ConfigureTenantProvisioning([]string{identityapp.AccountProfileEntity, "organization"}, ProvisionIdentityTenant)
+	core.Identity.ConfigureApplicationDirectoryReader(identityapp.ReadDirectoryStructure)
+	core.Identity.ConfigureAccountProfileWriter(identityapp.StoreAccountProfile)
 	manager := plugin.New(
+		identityapp.Plugin{IAM: core.Identity},
 		projects.Plugin{Module: projects.New(core.Pool)},
 		mail.Plugin{Module: mail.New(core, mailOptions)},
-		articles.Plugin{Module: articles.New(core)},
-		drive.Plugin{Module: driveModule},
-		example.Plugin{Module: example.New(core.Pool)},
+		example.Plugin{Module: exampleModule},
 	)
 	if err := manager.Register(context.Background()); err != nil {
 		panic(err)
@@ -93,6 +93,29 @@ func BuiltinPlugins(core *governance.Core) *plugin.Manager {
 	}
 	governance.RegisterDefinitions(PluginSettings(manager)...)
 	return manager
+}
+
+func applicationSignIns(manager *plugin.Manager) ([]app.SignInApplication, string) {
+	var entries []app.SignInApplication
+	var defaultID string
+	for _, instance := range manager.Plugins() {
+		entry := instance.Manifest().SignIn
+		if entry == nil {
+			continue
+		}
+		signIn := app.SignInApplication{ID: entry.ID, Namespace: entry.Namespace}
+		if _, identityApplication := instance.(identityapp.Plugin); identityApplication {
+			signIn.Aliases = []string{"administration"}
+		}
+		entries = append(entries, signIn)
+		if entry.Default {
+			if defaultID != "" {
+				panic("multiple default application authentication entries")
+			}
+			defaultID = entry.ID
+		}
+	}
+	return entries, defaultID
 }
 
 // PluginSettings converts plugin-declared configuration keys into the
@@ -161,9 +184,19 @@ func PluginGraphs(manager *plugin.Manager) []workflow.GraphDefinition {
 // WorkflowDefinitions is the shared deployment catalog for offline generators:
 // plugin workflow assets plus the platform runtime designer.
 func WorkflowDefinitions() []workflow.Definition {
-	return append(append(append([]workflow.Definition(nil),
-		articles.Workflows()...), projects.Workflows()...), append(example.Workflows(), app.WorkflowDefinitions()...)...)
+	return append(append(projects.Workflows(), example.Workflows()...), app.WorkflowDefinitions()...)
 }
 
 // GraphDefinitions is the shared deployment graph catalog for offline tools.
 func GraphDefinitions() []workflow.GraphDefinition { return example.Graphs() }
+
+// ProvisionIdentityTenant initializes the identity application's records within
+// IAM's tenant provisioning transaction. The schema provisions the organization
+// when the tenant row is inserted.
+func ProvisionIdentityTenant(ctx context.Context, tx pgx.Tx, tenant string, accountID int64) error {
+	account, err := dbgen.New(tx).IAMGetAuthorityAccount(ctx, dbgen.IAMGetAuthorityAccountParams{TenantID: tenant, ID: accountID})
+	if err != nil {
+		return err
+	}
+	return identityapp.StoreAccountProfile(ctx, tx, tenant, accountID, account.Username, "")
+}

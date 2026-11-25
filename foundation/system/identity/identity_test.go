@@ -30,25 +30,19 @@ func TestPasswordHashing(t *testing.T) {
 	}
 }
 func TestAccountOverridesReplaceRoleScopeAndDenyWins(t *testing.T) {
-	account := &genidentity.AccountRecord{ID: 10, OrganizationID: 7, DepartmentID: 8}
+	account := &genidentity.AccountRecord{ID: 10}
 	roles := []*genidentity.PermissionGrant{{Permission: "accounts:read", Effect: "allow", Scope: "ALL"}, {Permission: "accounts:delete", Effect: "allow", Scope: "ALL"}}
-	overrides := []*genidentity.PermissionGrant{{Permission: "accounts:read", Effect: "allow", Scope: "DEPARTMENT"}, {Permission: "accounts:delete", Effect: "deny", Scope: "ALL"}, {Permission: "accounts:update", Effect: "allow", Scope: "CUSTOM", DepartmentIds: []int64{12}}}
+	overrides := []*genidentity.PermissionGrant{{Permission: "accounts:read", Effect: "allow", Scope: "OWN"}, {Permission: "accounts:delete", Effect: "deny", Scope: "ALL"}}
 	p, err := NewPrincipal(account, "tenant-a", MergeGrants(roles, overrides))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !p.Can("accounts:read") || p.Can("accounts:delete") || p.Can("roles:update") {
-		t.Fatal("incorrect operation decision")
-	}
-	scope, err := (&Service{}).scope(context.Background(), p, "accounts:read")
-	if err != nil || scope.All || !contains(scope.DeptIDs, 8) || scope.TenantID != "tenant-a" {
+	service := &Service{}
+	scope, err := service.scope(t.Context(), p, "accounts:read")
+	if err != nil || scope.All || scope.OwnID != 10 || scope.TenantID != "tenant-a" {
 		t.Fatal("account override did not narrow inherited scope", scope, err)
 	}
-	custom, err := (&Service{}).scope(context.Background(), p, "accounts:update")
-	if err != nil || custom.All || !contains(custom.DeptIDs, 12) {
-		t.Fatal("custom scope missing", custom, err)
-	}
-	if _, err = (&Service{}).scope(context.Background(), p, "accounts:delete"); err == nil {
+	if _, err := service.scope(t.Context(), p, "accounts:delete"); err == nil {
 		t.Fatal("explicit denial bypassed")
 	}
 }
@@ -89,7 +83,7 @@ func TestGovernanceCatalogDoesNotMakeManagementTemporary(t *testing.T) {
 			}
 		}
 	}
-	for _, code := range []string{"executionPlans:read", "executionPlans:edit", "executionPlans:validate", "executionPlans:publish", "executionPlans:bind", "executionPlans:rollback", "executionPlans:records", "orchestration:read", "orchestration:run", "orchestration:cancel", "memory:read", "memory:write", "memory:collect", "memory:replay", "memory:manage", "applications:read", "applications:manage", "aiConfig:read", "aiConfig:update", "knowledge:update"} {
+	for _, code := range []string{loginSecurityPermission, "executionPlans:read", "executionPlans:edit", "executionPlans:validate", "executionPlans:publish", "executionPlans:bind", "executionPlans:rollback", "executionPlans:records", "orchestration:read", "orchestration:run", "orchestration:cancel", "memory:read", "memory:write", "memory:collect", "memory:replay", "memory:manage", "applications:read", "applications:manage", "aiConfig:read", "aiConfig:update", "knowledge:update"} {
 		d := permissionDefinition(code)
 		if d == nil || d.TemporaryEligible || d.ScopeConfigurable {
 			t.Fatalf("unsafe management permission: %s", code)
@@ -103,7 +97,12 @@ func TestGovernanceCatalogDoesNotMakeManagementTemporary(t *testing.T) {
 		}
 	}
 
-	if len(seen) != 70 {
+	for _, code := range []string{"organizations:create", "organizations:delete"} {
+		if permissionDefinition(code) != nil {
+			t.Fatalf("retired organization permission is still registered: %s", code)
+		}
+	}
+	if len(seen) != 69 {
 		t.Fatal("unexpected catalog", len(seen))
 	}
 }

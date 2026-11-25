@@ -9,7 +9,7 @@ logs="$root/apps/web/.local"
 mkdir -p "$logs" || exit 1
 
 default_specs=(
-  e2e/administration.spec.ts
+  e2e/identity.spec.ts
   e2e/foundation.spec.ts
   e2e/mcp.spec.ts
   e2e/webmcp.spec.ts

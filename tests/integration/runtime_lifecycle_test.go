@@ -5,7 +5,11 @@ package tests
 import (
 	"encoding/json"
 	"fmt"
+
 	gencap "horizon/foundation/gen/capability"
+	"horizon/foundation/runtime/app"
+	"horizon/foundation/system/governance"
+	"horizon/foundation/system/identity"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +17,7 @@ import (
 
 func TestRuntimeLifecycleEnforcedAcrossEntries(t *testing.T) {
 	handler, pool, _ := iamFixture(t)
-	root := loginIAM(t, handler, "root-admin")
+	root := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	invoke := func(name string, input map[string]any) map[string]any {
 		t.Helper()
 		result := invokeCapability(t, root, name, map[string]any{"input": input, "idempotencyKey": fmt.Sprintf("lifecycle-%s-%v", name, input)})
@@ -77,7 +81,7 @@ func TestRuntimeLifecycleEnforcedAcrossEntries(t *testing.T) {
 
 func TestRuntimeContextAndStaleUIReference(t *testing.T) {
 	handler, _, _ := iamFixture(t)
-	client := loginIAM(t, handler, "root-admin")
+	client := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	call := func(name string, input map[string]any) map[string]any {
 		t.Helper()
 		r := invokeCapability(t, client, name, map[string]any{"input": input, "idempotencyKey": fmt.Sprintf("context-%s-%d", name, time.Now().UnixNano())})
@@ -108,5 +112,40 @@ func TestRuntimeContextAndStaleUIReference(t *testing.T) {
 	current := call("article.get", map[string]any{"id": article["id"]})
 	if current["title"] != "Safe title" {
 		t.Fatal(current)
+	}
+}
+
+func TestRuntimeUpgradeWithRetiredApplication(t *testing.T) {
+	legacy, pool, _ := articleFixture(t)
+	legacyAdmin := loginTenantIAM(t, legacy, "root-admin", "tenant-a")
+	checkSucceeded(t, legacyAdmin.invoke(t, "application.runtime.resolve", map[string]any{"applicationId": "articles"}, true))
+
+	iam := identity.New(pool, false)
+	core := governance.New(pool, iam, governance.Options{
+		PublicWorkspace: "tenant-a",
+		EncryptionKey:   []byte("01234567890123456789012345678901"),
+		StorageRoot:     t.TempDir(),
+	})
+	admin := loginTenantIAM(t, deploymentHandler(app.System{}, core, iam), "root-admin", "tenant-a")
+	var revision int64
+	if err := pool.QueryRow(t.Context(), `SELECT revision FROM runtime_installations
+		WHERE tenant_id='tenant-a' AND plugin_id='com.horizon.projects'`).Scan(&revision); err != nil {
+		t.Fatal(err)
+	}
+	checkSucceeded(t, admin.invoke(t, "application.runtime.installation.upgrade", map[string]any{
+		"pluginId": "com.horizon.projects", "version": "2.0.3", "revision": revision,
+	}, true))
+	project := decodeData[map[string]any](t, admin.invoke(t, "application.runtime.resolve", map[string]any{"applicationId": "projects"}, true))
+	raw, err := json.Marshal(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if project["applicationVersion"] != "2.0.3.0" || !strings.Contains(string(raw), `"name":"aiRisk"`) {
+		t.Fatal("upgraded project definition is missing the AI risk column")
+	}
+	var published string
+	if err := pool.QueryRow(t.Context(), `SELECT published_version FROM runtime_application_heads
+		WHERE tenant_id='tenant-a' AND application_id='articles'`).Scan(&published); err != nil || published != "2.0.0.0" {
+		t.Fatalf("retired application history changed: %q, %v", published, err)
 	}
 }

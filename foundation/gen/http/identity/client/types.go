@@ -14,6 +14,36 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SamlCallbackRequestBody is the type of the "identity" service
+// "saml_callback" endpoint HTTP request body.
+type SamlCallbackRequestBody struct {
+	SAMLResponse string `form:"SAMLResponse" json:"SAMLResponse" xml:"SAMLResponse"`
+	RelayState   string `form:"RelayState" json:"RelayState" xml:"RelayState"`
+}
+
+// CompleteSamlRequestBody is the type of the "identity" service
+// "complete_saml" endpoint HTTP request body.
+type CompleteSamlRequestBody struct {
+	MfaCode      *string `form:"mfaCode,omitempty" json:"mfaCode,omitempty" xml:"mfaCode,omitempty"`
+	RecoveryCode *string `form:"recoveryCode,omitempty" json:"recoveryCode,omitempty" xml:"recoveryCode,omitempty"`
+}
+
+// StartFederationRequestBody is the type of the "identity" service
+// "start_federation" endpoint HTTP request body.
+type StartFederationRequestBody struct {
+	ProviderID string `form:"providerId" json:"providerId" xml:"providerId"`
+	Purpose    string `form:"purpose" json:"purpose" xml:"purpose"`
+}
+
+// CompleteFederationRequestBody is the type of the "identity" service
+// "complete_federation" endpoint HTTP request body.
+type CompleteFederationRequestBody struct {
+	State        string  `form:"state" json:"state" xml:"state"`
+	Code         string  `form:"code" json:"code" xml:"code"`
+	MfaCode      *string `form:"mfaCode,omitempty" json:"mfaCode,omitempty" xml:"mfaCode,omitempty"`
+	RecoveryCode *string `form:"recoveryCode,omitempty" json:"recoveryCode,omitempty" xml:"recoveryCode,omitempty"`
+}
+
 // RequestTemporaryAccessRequestBody is the type of the "identity" service
 // "request_temporary_access" endpoint HTTP request body.
 type RequestTemporaryAccessRequestBody struct {
@@ -31,17 +61,86 @@ type ReviewTemporaryAccessRequestBody struct {
 	Note     string                        `form:"note" json:"note" xml:"note"`
 }
 
-// SwitchDepartmentRequestBody is the type of the "identity" service
-// "switch_department" endpoint HTTP request body.
-type SwitchDepartmentRequestBody struct {
-	DepartmentID int64 `form:"departmentId" json:"departmentId" xml:"departmentId"`
+// SelectSignInIdentityRequestBody is the type of the "identity" service
+// "select_sign_in_identity" endpoint HTTP request body.
+type SelectSignInIdentityRequestBody struct {
+	IdentityBindingID    *string `form:"identityBindingId,omitempty" json:"identityBindingId,omitempty" xml:"identityBindingId,omitempty"`
+	ActingOrganizationID *int64  `form:"actingOrganizationId,omitempty" json:"actingOrganizationId,omitempty" xml:"actingOrganizationId,omitempty"`
+	Portal               *string `form:"portal,omitempty" json:"portal,omitempty" xml:"portal,omitempty"`
+}
+
+// RedeemSignInInvitationRequestBody is the type of the "identity" service
+// "redeem_sign_in_invitation" endpoint HTTP request body.
+type RedeemSignInInvitationRequestBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
 }
 
 // LoginRequestBody is the type of the "identity" service "login" endpoint HTTP
 // request body.
 type LoginRequestBody struct {
-	Username string `form:"username" json:"username" xml:"username"`
+	Username     string  `form:"username" json:"username" xml:"username"`
+	Password     string  `form:"password" json:"password" xml:"password"`
+	MfaCode      *string `form:"mfaCode,omitempty" json:"mfaCode,omitempty" xml:"mfaCode,omitempty"`
+	RecoveryCode *string `form:"recoveryCode,omitempty" json:"recoveryCode,omitempty" xml:"recoveryCode,omitempty"`
+}
+
+// RequestRegistrationRequestBody is the type of the "identity" service
+// "request_registration" endpoint HTTP request body.
+type RequestRegistrationRequestBody struct {
+	Username    string `form:"username" json:"username" xml:"username"`
+	DisplayName string `form:"displayName" json:"displayName" xml:"displayName"`
+	Password    string `form:"password" json:"password" xml:"password"`
+	Destination string `form:"destination" json:"destination" xml:"destination"`
+}
+
+// CompleteRegistrationRequestBody is the type of the "identity" service
+// "complete_registration" endpoint HTTP request body.
+type CompleteRegistrationRequestBody struct {
+	Token    string `form:"token" json:"token" xml:"token"`
 	Password string `form:"password" json:"password" xml:"password"`
+}
+
+// RequestPasswordResetRequestBody is the type of the "identity" service
+// "request_password_reset" endpoint HTTP request body.
+type RequestPasswordResetRequestBody struct {
+	Username string `form:"username" json:"username" xml:"username"`
+	Channel  string `form:"channel" json:"channel" xml:"channel"`
+}
+
+// CompletePasswordResetRequestBody is the type of the "identity" service
+// "complete_password_reset" endpoint HTTP request body.
+type CompletePasswordResetRequestBody struct {
+	Token        string  `form:"token" json:"token" xml:"token"`
+	NewPassword  string  `form:"newPassword" json:"newPassword" xml:"newPassword"`
+	MfaCode      *string `form:"mfaCode,omitempty" json:"mfaCode,omitempty" xml:"mfaCode,omitempty"`
+	RecoveryCode *string `form:"recoveryCode,omitempty" json:"recoveryCode,omitempty" xml:"recoveryCode,omitempty"`
+}
+
+// RefreshSessionRequestBody is the type of the "identity" service
+// "refresh_session" endpoint HTTP request body.
+type RefreshSessionRequestBody struct {
+	Password string  `form:"password" json:"password" xml:"password"`
+	Factor   *string `form:"factor,omitempty" json:"factor,omitempty" xml:"factor,omitempty"`
+}
+
+// CompleteSamlResponseBody is the type of the "identity" service
+// "complete_saml" endpoint HTTP response body.
+type CompleteSamlResponseBody struct {
+	Profile   *SessionProfileResponseBody `form:"profile,omitempty" json:"profile,omitempty" xml:"profile,omitempty"`
+	LinkProof *string                     `form:"linkProof,omitempty" json:"linkProof,omitempty" xml:"linkProof,omitempty"`
+}
+
+// StartFederationResponseBody is the type of the "identity" service
+// "start_federation" endpoint HTTP response body.
+type StartFederationResponseBody struct {
+	AuthorizationURL *string `form:"authorizationUrl,omitempty" json:"authorizationUrl,omitempty" xml:"authorizationUrl,omitempty"`
+}
+
+// CompleteFederationResponseBody is the type of the "identity" service
+// "complete_federation" endpoint HTTP response body.
+type CompleteFederationResponseBody struct {
+	Profile   *SessionProfileResponseBody `form:"profile,omitempty" json:"profile,omitempty" xml:"profile,omitempty"`
+	LinkProof *string                     `form:"linkProof,omitempty" json:"linkProof,omitempty" xml:"linkProof,omitempty"`
 }
 
 // TemporaryAccessResponseBody is the type of the "identity" service
@@ -49,7 +148,6 @@ type LoginRequestBody struct {
 type TemporaryAccessResponseBody struct {
 	Requests        []*TemporaryAccessRecordResponseBody `form:"requests,omitempty" json:"requests,omitempty" xml:"requests,omitempty"`
 	Catalog         []*PermissionDefinitionResponseBody  `form:"catalog,omitempty" json:"catalog,omitempty" xml:"catalog,omitempty"`
-	Departments     []*ScopeDepartmentChoiceResponseBody `form:"departments,omitempty" json:"departments,omitempty" xml:"departments,omitempty"`
 	EffectiveGrants []*PermissionGrantResponseBody       `form:"effectiveGrants,omitempty" json:"effectiveGrants,omitempty" xml:"effectiveGrants,omitempty"`
 	CanReview       *bool                                `form:"canReview,omitempty" json:"canReview,omitempty" xml:"canReview,omitempty"`
 }
@@ -60,8 +158,6 @@ type RequestTemporaryAccessResponseBody struct {
 	ID               *int64                         `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	ApplicantID      *int64                         `form:"applicantId,omitempty" json:"applicantId,omitempty" xml:"applicantId,omitempty"`
 	ApplicantName    *string                        `form:"applicantName,omitempty" json:"applicantName,omitempty" xml:"applicantName,omitempty"`
-	DepartmentID     *int64                         `form:"departmentId,omitempty" json:"departmentId,omitempty" xml:"departmentId,omitempty"`
-	DepartmentName   *string                        `form:"departmentName,omitempty" json:"departmentName,omitempty" xml:"departmentName,omitempty"`
 	RequestedGrants  []*PermissionGrantResponseBody `form:"requestedGrants,omitempty" json:"requestedGrants,omitempty" xml:"requestedGrants,omitempty"`
 	RequestedMinutes *int                           `form:"requestedMinutes,omitempty" json:"requestedMinutes,omitempty" xml:"requestedMinutes,omitempty"`
 	Reason           *string                        `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -82,8 +178,6 @@ type ReviewTemporaryAccessResponseBody struct {
 	ID               *int64                         `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	ApplicantID      *int64                         `form:"applicantId,omitempty" json:"applicantId,omitempty" xml:"applicantId,omitempty"`
 	ApplicantName    *string                        `form:"applicantName,omitempty" json:"applicantName,omitempty" xml:"applicantName,omitempty"`
-	DepartmentID     *int64                         `form:"departmentId,omitempty" json:"departmentId,omitempty" xml:"departmentId,omitempty"`
-	DepartmentName   *string                        `form:"departmentName,omitempty" json:"departmentName,omitempty" xml:"departmentName,omitempty"`
 	RequestedGrants  []*PermissionGrantResponseBody `form:"requestedGrants,omitempty" json:"requestedGrants,omitempty" xml:"requestedGrants,omitempty"`
 	RequestedMinutes *int                           `form:"requestedMinutes,omitempty" json:"requestedMinutes,omitempty" xml:"requestedMinutes,omitempty"`
 	Reason           *string                        `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -104,8 +198,6 @@ type CancelTemporaryAccessResponseBody struct {
 	ID               *int64                         `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	ApplicantID      *int64                         `form:"applicantId,omitempty" json:"applicantId,omitempty" xml:"applicantId,omitempty"`
 	ApplicantName    *string                        `form:"applicantName,omitempty" json:"applicantName,omitempty" xml:"applicantName,omitempty"`
-	DepartmentID     *int64                         `form:"departmentId,omitempty" json:"departmentId,omitempty" xml:"departmentId,omitempty"`
-	DepartmentName   *string                        `form:"departmentName,omitempty" json:"departmentName,omitempty" xml:"departmentName,omitempty"`
 	RequestedGrants  []*PermissionGrantResponseBody `form:"requestedGrants,omitempty" json:"requestedGrants,omitempty" xml:"requestedGrants,omitempty"`
 	RequestedMinutes *int                           `form:"requestedMinutes,omitempty" json:"requestedMinutes,omitempty" xml:"requestedMinutes,omitempty"`
 	Reason           *string                        `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -126,8 +218,6 @@ type RevokeTemporaryAccessResponseBody struct {
 	ID               *int64                         `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	ApplicantID      *int64                         `form:"applicantId,omitempty" json:"applicantId,omitempty" xml:"applicantId,omitempty"`
 	ApplicantName    *string                        `form:"applicantName,omitempty" json:"applicantName,omitempty" xml:"applicantName,omitempty"`
-	DepartmentID     *int64                         `form:"departmentId,omitempty" json:"departmentId,omitempty" xml:"departmentId,omitempty"`
-	DepartmentName   *string                        `form:"departmentName,omitempty" json:"departmentName,omitempty" xml:"departmentName,omitempty"`
 	RequestedGrants  []*PermissionGrantResponseBody `form:"requestedGrants,omitempty" json:"requestedGrants,omitempty" xml:"requestedGrants,omitempty"`
 	RequestedMinutes *int                           `form:"requestedMinutes,omitempty" json:"requestedMinutes,omitempty" xml:"requestedMinutes,omitempty"`
 	Reason           *string                        `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -142,16 +232,25 @@ type RevokeTemporaryAccessResponseBody struct {
 	ExpiresAt        *string                        `form:"expiresAt,omitempty" json:"expiresAt,omitempty" xml:"expiresAt,omitempty"`
 }
 
-// SwitchDepartmentResponseBody is the type of the "identity" service
-// "switch_department" endpoint HTTP response body.
-type SwitchDepartmentResponseBody struct {
+// SelectSignInIdentityResponseBody is the type of the "identity" service
+// "select_sign_in_identity" endpoint HTTP response body.
+type SelectSignInIdentityResponseBody struct {
 	// Opaque non-secret authorization cache revision.
-	AuthorizationVersion *string                    `form:"authorizationVersion,omitempty" json:"authorizationVersion,omitempty" xml:"authorizationVersion,omitempty"`
-	Account              *AccountRecordResponseBody `form:"account,omitempty" json:"account,omitempty" xml:"account,omitempty"`
-	CsrfToken            *string                    `form:"csrfToken,omitempty" json:"csrfToken,omitempty" xml:"csrfToken,omitempty"`
-	Permissions          []string                   `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	TenantID             *string                    `form:"tenantId,omitempty" json:"tenantId,omitempty" xml:"tenantId,omitempty"`
-	ActiveDepartmentID   *int64                     `form:"activeDepartmentId,omitempty" json:"activeDepartmentId,omitempty" xml:"activeDepartmentId,omitempty"`
+	AuthorizationVersion *string `form:"authorizationVersion,omitempty" json:"authorizationVersion,omitempty" xml:"authorizationVersion,omitempty"`
+	// Platform operator management is available in this session.
+	PlatformOperator *bool `form:"platformOperator,omitempty" json:"platformOperator,omitempty" xml:"platformOperator,omitempty"`
+	// Tenant account when a work context is active.
+	Account           *SessionAccountResponseBody `form:"account,omitempty" json:"account,omitempty" xml:"account,omitempty"`
+	CsrfToken         *string                     `form:"csrfToken,omitempty" json:"csrfToken,omitempty" xml:"csrfToken,omitempty"`
+	Permissions       []string                    `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	TenantID          *string                     `form:"tenantId,omitempty" json:"tenantId,omitempty" xml:"tenantId,omitempty"`
+	IdentityBindingID *string                     `form:"identityBindingId,omitempty" json:"identityBindingId,omitempty" xml:"identityBindingId,omitempty"`
+	// Organization verified for the active portal binding.
+	ActingOrganizationID *int64 `form:"actingOrganizationId,omitempty" json:"actingOrganizationId,omitempty" xml:"actingOrganizationId,omitempty"`
+	// Display name of the verified organization.
+	ActingOrganizationName *string `form:"actingOrganizationName,omitempty" json:"actingOrganizationName,omitempty" xml:"actingOrganizationName,omitempty"`
+	// Application portal verified for the active binding.
+	Portal *string `form:"portal,omitempty" json:"portal,omitempty" xml:"portal,omitempty"`
 }
 
 // LoginResponseBody is the type of the "identity" service "login" endpoint
@@ -164,12 +263,27 @@ type LoginResponseBody struct {
 // response body.
 type MeResponseBody struct {
 	// Opaque non-secret authorization cache revision.
-	AuthorizationVersion *string                    `form:"authorizationVersion,omitempty" json:"authorizationVersion,omitempty" xml:"authorizationVersion,omitempty"`
-	Account              *AccountRecordResponseBody `form:"account,omitempty" json:"account,omitempty" xml:"account,omitempty"`
-	CsrfToken            *string                    `form:"csrfToken,omitempty" json:"csrfToken,omitempty" xml:"csrfToken,omitempty"`
-	Permissions          []string                   `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	TenantID             *string                    `form:"tenantId,omitempty" json:"tenantId,omitempty" xml:"tenantId,omitempty"`
-	ActiveDepartmentID   *int64                     `form:"activeDepartmentId,omitempty" json:"activeDepartmentId,omitempty" xml:"activeDepartmentId,omitempty"`
+	AuthorizationVersion *string `form:"authorizationVersion,omitempty" json:"authorizationVersion,omitempty" xml:"authorizationVersion,omitempty"`
+	// Platform operator management is available in this session.
+	PlatformOperator *bool `form:"platformOperator,omitempty" json:"platformOperator,omitempty" xml:"platformOperator,omitempty"`
+	// Tenant account when a work context is active.
+	Account           *SessionAccountResponseBody `form:"account,omitempty" json:"account,omitempty" xml:"account,omitempty"`
+	CsrfToken         *string                     `form:"csrfToken,omitempty" json:"csrfToken,omitempty" xml:"csrfToken,omitempty"`
+	Permissions       []string                    `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	TenantID          *string                     `form:"tenantId,omitempty" json:"tenantId,omitempty" xml:"tenantId,omitempty"`
+	IdentityBindingID *string                     `form:"identityBindingId,omitempty" json:"identityBindingId,omitempty" xml:"identityBindingId,omitempty"`
+	// Organization verified for the active portal binding.
+	ActingOrganizationID *int64 `form:"actingOrganizationId,omitempty" json:"actingOrganizationId,omitempty" xml:"actingOrganizationId,omitempty"`
+	// Display name of the verified organization.
+	ActingOrganizationName *string `form:"actingOrganizationName,omitempty" json:"actingOrganizationName,omitempty" xml:"actingOrganizationName,omitempty"`
+	// Application portal verified for the active binding.
+	Portal *string `form:"portal,omitempty" json:"portal,omitempty" xml:"portal,omitempty"`
+}
+
+// RefreshSessionResponseBody is the type of the "identity" service
+// "refresh_session" endpoint HTTP response body.
+type RefreshSessionResponseBody struct {
+	Profile *SessionProfileResponseBody `form:"profile,omitempty" json:"profile,omitempty" xml:"profile,omitempty"`
 }
 
 // SnapshotResponseBody is the type of the "identity" service "snapshot"
@@ -181,6 +295,121 @@ type SnapshotResponseBody struct {
 	Roles         []*RoleRecordResponseBody           `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
 	Permissions   []string                            `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	Catalog       []*PermissionDefinitionResponseBody `form:"catalog,omitempty" json:"catalog,omitempty" xml:"catalog,omitempty"`
+}
+
+// SamlCallbackUnauthenticatedResponseBody is the type of the "identity"
+// service "saml_callback" endpoint HTTP response body for the
+// "unauthenticated" error.
+type SamlCallbackUnauthenticatedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// SamlCallbackRateLimitedResponseBody is the type of the "identity" service
+// "saml_callback" endpoint HTTP response body for the "rate_limited" error.
+type SamlCallbackRateLimitedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// SamlCallbackUnavailableResponseBody is the type of the "identity" service
+// "saml_callback" endpoint HTTP response body for the "unavailable" error.
+type SamlCallbackUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// SamlCallbackInternalResponseBody is the type of the "identity" service
+// "saml_callback" endpoint HTTP response body for the "internal" error.
+type SamlCallbackInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompleteSamlUnauthenticatedResponseBody is the type of the "identity"
+// service "complete_saml" endpoint HTTP response body for the
+// "unauthenticated" error.
+type CompleteSamlUnauthenticatedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompleteSamlRateLimitedResponseBody is the type of the "identity" service
+// "complete_saml" endpoint HTTP response body for the "rate_limited" error.
+type CompleteSamlRateLimitedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompleteSamlUnavailableResponseBody is the type of the "identity" service
+// "complete_saml" endpoint HTTP response body for the "unavailable" error.
+type CompleteSamlUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompleteSamlInternalResponseBody is the type of the "identity" service
+// "complete_saml" endpoint HTTP response body for the "internal" error.
+type CompleteSamlInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// FederationProvidersUnavailableResponseBody is the type of the "identity"
+// service "federation_providers" endpoint HTTP response body for the
+// "unavailable" error.
+type FederationProvidersUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// FederationProvidersInternalResponseBody is the type of the "identity"
+// service "federation_providers" endpoint HTTP response body for the
+// "internal" error.
+type FederationProvidersInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// StartFederationInvalidResponseBody is the type of the "identity" service
+// "start_federation" endpoint HTTP response body for the "invalid" error.
+type StartFederationInvalidResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// StartFederationRateLimitedResponseBody is the type of the "identity" service
+// "start_federation" endpoint HTTP response body for the "rate_limited" error.
+type StartFederationRateLimitedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// StartFederationUnavailableResponseBody is the type of the "identity" service
+// "start_federation" endpoint HTTP response body for the "unavailable" error.
+type StartFederationUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// StartFederationInternalResponseBody is the type of the "identity" service
+// "start_federation" endpoint HTTP response body for the "internal" error.
+type StartFederationInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompleteFederationUnauthenticatedResponseBody is the type of the "identity"
+// service "complete_federation" endpoint HTTP response body for the
+// "unauthenticated" error.
+type CompleteFederationUnauthenticatedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompleteFederationRateLimitedResponseBody is the type of the "identity"
+// service "complete_federation" endpoint HTTP response body for the
+// "rate_limited" error.
+type CompleteFederationRateLimitedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompleteFederationUnavailableResponseBody is the type of the "identity"
+// service "complete_federation" endpoint HTTP response body for the
+// "unavailable" error.
+type CompleteFederationUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompleteFederationInternalResponseBody is the type of the "identity" service
+// "complete_federation" endpoint HTTP response body for the "internal" error.
+type CompleteFederationInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
 }
 
 // TemporaryAccessUnauthenticatedResponseBody is the type of the "identity"
@@ -422,29 +651,80 @@ type RevokeTemporaryAccessInternalResponseBody struct {
 	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
 }
 
-// SwitchDepartmentUnauthenticatedResponseBody is the type of the "identity"
-// service "switch_department" endpoint HTTP response body for the
-// "unauthenticated" error.
-type SwitchDepartmentUnauthenticatedResponseBody struct {
+// ListSignInIdentitiesUnauthenticatedResponseBody is the type of the
+// "identity" service "list_sign_in_identities" endpoint HTTP response body for
+// the "unauthenticated" error.
+type ListSignInIdentitiesUnauthenticatedResponseBody struct {
 	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
 }
 
-// SwitchDepartmentForbiddenResponseBody is the type of the "identity" service
-// "switch_department" endpoint HTTP response body for the "forbidden" error.
-type SwitchDepartmentForbiddenResponseBody struct {
-	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
-}
-
-// SwitchDepartmentUnavailableResponseBody is the type of the "identity"
-// service "switch_department" endpoint HTTP response body for the
+// ListSignInIdentitiesUnavailableResponseBody is the type of the "identity"
+// service "list_sign_in_identities" endpoint HTTP response body for the
 // "unavailable" error.
-type SwitchDepartmentUnavailableResponseBody struct {
+type ListSignInIdentitiesUnavailableResponseBody struct {
 	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
 }
 
-// SwitchDepartmentInternalResponseBody is the type of the "identity" service
-// "switch_department" endpoint HTTP response body for the "internal" error.
-type SwitchDepartmentInternalResponseBody struct {
+// ListSignInIdentitiesInternalResponseBody is the type of the "identity"
+// service "list_sign_in_identities" endpoint HTTP response body for the
+// "internal" error.
+type ListSignInIdentitiesInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// SelectSignInIdentityUnauthenticatedResponseBody is the type of the
+// "identity" service "select_sign_in_identity" endpoint HTTP response body for
+// the "unauthenticated" error.
+type SelectSignInIdentityUnauthenticatedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// SelectSignInIdentityForbiddenResponseBody is the type of the "identity"
+// service "select_sign_in_identity" endpoint HTTP response body for the
+// "forbidden" error.
+type SelectSignInIdentityForbiddenResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// SelectSignInIdentityUnavailableResponseBody is the type of the "identity"
+// service "select_sign_in_identity" endpoint HTTP response body for the
+// "unavailable" error.
+type SelectSignInIdentityUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// SelectSignInIdentityInternalResponseBody is the type of the "identity"
+// service "select_sign_in_identity" endpoint HTTP response body for the
+// "internal" error.
+type SelectSignInIdentityInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RedeemSignInInvitationUnauthenticatedResponseBody is the type of the
+// "identity" service "redeem_sign_in_invitation" endpoint HTTP response body
+// for the "unauthenticated" error.
+type RedeemSignInInvitationUnauthenticatedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RedeemSignInInvitationForbiddenResponseBody is the type of the "identity"
+// service "redeem_sign_in_invitation" endpoint HTTP response body for the
+// "forbidden" error.
+type RedeemSignInInvitationForbiddenResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RedeemSignInInvitationUnavailableResponseBody is the type of the "identity"
+// service "redeem_sign_in_invitation" endpoint HTTP response body for the
+// "unavailable" error.
+type RedeemSignInInvitationUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RedeemSignInInvitationInternalResponseBody is the type of the "identity"
+// service "redeem_sign_in_invitation" endpoint HTTP response body for the
+// "internal" error.
+type RedeemSignInInvitationInternalResponseBody struct {
 	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
 }
 
@@ -475,6 +755,117 @@ type LoginUnavailableResponseBody struct {
 // LoginInternalResponseBody is the type of the "identity" service "login"
 // endpoint HTTP response body for the "internal" error.
 type LoginInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RequestRegistrationInvalidResponseBody is the type of the "identity" service
+// "request_registration" endpoint HTTP response body for the "invalid" error.
+type RequestRegistrationInvalidResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RequestRegistrationRateLimitedResponseBody is the type of the "identity"
+// service "request_registration" endpoint HTTP response body for the
+// "rate_limited" error.
+type RequestRegistrationRateLimitedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RequestRegistrationUnavailableResponseBody is the type of the "identity"
+// service "request_registration" endpoint HTTP response body for the
+// "unavailable" error.
+type RequestRegistrationUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RequestRegistrationInternalResponseBody is the type of the "identity"
+// service "request_registration" endpoint HTTP response body for the
+// "internal" error.
+type RequestRegistrationInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompleteRegistrationForbiddenResponseBody is the type of the "identity"
+// service "complete_registration" endpoint HTTP response body for the
+// "forbidden" error.
+type CompleteRegistrationForbiddenResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompleteRegistrationRateLimitedResponseBody is the type of the "identity"
+// service "complete_registration" endpoint HTTP response body for the
+// "rate_limited" error.
+type CompleteRegistrationRateLimitedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompleteRegistrationUnavailableResponseBody is the type of the "identity"
+// service "complete_registration" endpoint HTTP response body for the
+// "unavailable" error.
+type CompleteRegistrationUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompleteRegistrationInternalResponseBody is the type of the "identity"
+// service "complete_registration" endpoint HTTP response body for the
+// "internal" error.
+type CompleteRegistrationInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RequestPasswordResetRateLimitedResponseBody is the type of the "identity"
+// service "request_password_reset" endpoint HTTP response body for the
+// "rate_limited" error.
+type RequestPasswordResetRateLimitedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RequestPasswordResetUnavailableResponseBody is the type of the "identity"
+// service "request_password_reset" endpoint HTTP response body for the
+// "unavailable" error.
+type RequestPasswordResetUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RequestPasswordResetInternalResponseBody is the type of the "identity"
+// service "request_password_reset" endpoint HTTP response body for the
+// "internal" error.
+type RequestPasswordResetInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompletePasswordResetInvalidResponseBody is the type of the "identity"
+// service "complete_password_reset" endpoint HTTP response body for the
+// "invalid" error.
+type CompletePasswordResetInvalidResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompletePasswordResetForbiddenResponseBody is the type of the "identity"
+// service "complete_password_reset" endpoint HTTP response body for the
+// "forbidden" error.
+type CompletePasswordResetForbiddenResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompletePasswordResetRateLimitedResponseBody is the type of the "identity"
+// service "complete_password_reset" endpoint HTTP response body for the
+// "rate_limited" error.
+type CompletePasswordResetRateLimitedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompletePasswordResetUnavailableResponseBody is the type of the "identity"
+// service "complete_password_reset" endpoint HTTP response body for the
+// "unavailable" error.
+type CompletePasswordResetUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// CompletePasswordResetInternalResponseBody is the type of the "identity"
+// service "complete_password_reset" endpoint HTTP response body for the
+// "internal" error.
+type CompletePasswordResetInternalResponseBody struct {
 	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
 }
 
@@ -514,9 +905,46 @@ type LogoutInternalResponseBody struct {
 	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
 }
 
+// RefreshSessionInvalidResponseBody is the type of the "identity" service
+// "refresh_session" endpoint HTTP response body for the "invalid" error.
+type RefreshSessionInvalidResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RefreshSessionUnauthenticatedResponseBody is the type of the "identity"
+// service "refresh_session" endpoint HTTP response body for the
+// "unauthenticated" error.
+type RefreshSessionUnauthenticatedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RefreshSessionForbiddenResponseBody is the type of the "identity" service
+// "refresh_session" endpoint HTTP response body for the "forbidden" error.
+type RefreshSessionForbiddenResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RefreshSessionUnavailableResponseBody is the type of the "identity" service
+// "refresh_session" endpoint HTTP response body for the "unavailable" error.
+type RefreshSessionUnavailableResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// RefreshSessionInternalResponseBody is the type of the "identity" service
+// "refresh_session" endpoint HTTP response body for the "internal" error.
+type RefreshSessionInternalResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
 // SnapshotUnauthenticatedResponseBody is the type of the "identity" service
 // "snapshot" endpoint HTTP response body for the "unauthenticated" error.
 type SnapshotUnauthenticatedResponseBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
+// SnapshotForbiddenResponseBody is the type of the "identity" service
+// "snapshot" endpoint HTTP response body for the "forbidden" error.
+type SnapshotForbiddenResponseBody struct {
 	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
 }
 
@@ -532,14 +960,46 @@ type SnapshotInternalResponseBody struct {
 	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
 }
 
+// SessionProfileResponseBody is used to define fields on response body types.
+type SessionProfileResponseBody struct {
+	// Opaque non-secret authorization cache revision.
+	AuthorizationVersion *string `form:"authorizationVersion,omitempty" json:"authorizationVersion,omitempty" xml:"authorizationVersion,omitempty"`
+	// Platform operator management is available in this session.
+	PlatformOperator *bool `form:"platformOperator,omitempty" json:"platformOperator,omitempty" xml:"platformOperator,omitempty"`
+	// Tenant account when a work context is active.
+	Account           *SessionAccountResponseBody `form:"account,omitempty" json:"account,omitempty" xml:"account,omitempty"`
+	CsrfToken         *string                     `form:"csrfToken,omitempty" json:"csrfToken,omitempty" xml:"csrfToken,omitempty"`
+	Permissions       []string                    `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
+	TenantID          *string                     `form:"tenantId,omitempty" json:"tenantId,omitempty" xml:"tenantId,omitempty"`
+	IdentityBindingID *string                     `form:"identityBindingId,omitempty" json:"identityBindingId,omitempty" xml:"identityBindingId,omitempty"`
+	// Organization verified for the active portal binding.
+	ActingOrganizationID *int64 `form:"actingOrganizationId,omitempty" json:"actingOrganizationId,omitempty" xml:"actingOrganizationId,omitempty"`
+	// Display name of the verified organization.
+	ActingOrganizationName *string `form:"actingOrganizationName,omitempty" json:"actingOrganizationName,omitempty" xml:"actingOrganizationName,omitempty"`
+	// Application portal verified for the active binding.
+	Portal *string `form:"portal,omitempty" json:"portal,omitempty" xml:"portal,omitempty"`
+}
+
+// SessionAccountResponseBody is used to define fields on response body types.
+type SessionAccountResponseBody struct {
+	ID       *int64  `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Username *string `form:"username,omitempty" json:"username,omitempty" xml:"username,omitempty"`
+	Status   *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	IsAdmin  *bool   `form:"isAdmin,omitempty" json:"isAdmin,omitempty" xml:"isAdmin,omitempty"`
+}
+
+// FederationProviderResponse is used to define fields on response body types.
+type FederationProviderResponse struct {
+	ID   *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // TemporaryAccessRecordResponseBody is used to define fields on response body
 // types.
 type TemporaryAccessRecordResponseBody struct {
 	ID               *int64                         `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	ApplicantID      *int64                         `form:"applicantId,omitempty" json:"applicantId,omitempty" xml:"applicantId,omitempty"`
 	ApplicantName    *string                        `form:"applicantName,omitempty" json:"applicantName,omitempty" xml:"applicantName,omitempty"`
-	DepartmentID     *int64                         `form:"departmentId,omitempty" json:"departmentId,omitempty" xml:"departmentId,omitempty"`
-	DepartmentName   *string                        `form:"departmentName,omitempty" json:"departmentName,omitempty" xml:"departmentName,omitempty"`
 	RequestedGrants  []*PermissionGrantResponseBody `form:"requestedGrants,omitempty" json:"requestedGrants,omitempty" xml:"requestedGrants,omitempty"`
 	RequestedMinutes *int                           `form:"requestedMinutes,omitempty" json:"requestedMinutes,omitempty" xml:"requestedMinutes,omitempty"`
 	Reason           *string                        `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -556,10 +1016,9 @@ type TemporaryAccessRecordResponseBody struct {
 
 // PermissionGrantResponseBody is used to define fields on response body types.
 type PermissionGrantResponseBody struct {
-	Permission    *string `form:"permission,omitempty" json:"permission,omitempty" xml:"permission,omitempty"`
-	Effect        *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
-	Scope         *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	DepartmentIds []int64 `form:"departmentIds,omitempty" json:"departmentIds,omitempty" xml:"departmentIds,omitempty"`
+	Permission *string `form:"permission,omitempty" json:"permission,omitempty" xml:"permission,omitempty"`
+	Effect     *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
+	Scope      *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 }
 
 // PermissionDefinitionResponseBody is used to define fields on response body
@@ -573,13 +1032,11 @@ type PermissionDefinitionResponseBody struct {
 	ScopeConfigurable *bool   `form:"scopeConfigurable,omitempty" json:"scopeConfigurable,omitempty" xml:"scopeConfigurable,omitempty"`
 }
 
-// ScopeDepartmentChoiceResponseBody is used to define fields on response body
-// types.
-type ScopeDepartmentChoiceResponseBody struct {
-	ID               *int64  `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	Name             *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	OrganizationID   *int64  `form:"organizationId,omitempty" json:"organizationId,omitempty" xml:"organizationId,omitempty"`
-	OrganizationName *string `form:"organizationName,omitempty" json:"organizationName,omitempty" xml:"organizationName,omitempty"`
+// SignInIdentityResponse is used to define fields on response body types.
+type SignInIdentityResponse struct {
+	IdentityBindingID      *string `form:"identityBindingId,omitempty" json:"identityBindingId,omitempty" xml:"identityBindingId,omitempty"`
+	ActingOrganizationName *string `form:"actingOrganizationName,omitempty" json:"actingOrganizationName,omitempty" xml:"actingOrganizationName,omitempty"`
+	IdentityType           *string `form:"identityType,omitempty" json:"identityType,omitempty" xml:"identityType,omitempty"`
 }
 
 // AccountRecordResponseBody is used to define fields on response body types.
@@ -607,17 +1064,6 @@ type DepartmentMembershipResponseBody struct {
 	DepartmentName *string                        `form:"departmentName,omitempty" json:"departmentName,omitempty" xml:"departmentName,omitempty"`
 	RoleIds        []int64                        `form:"roleIds,omitempty" json:"roleIds,omitempty" xml:"roleIds,omitempty"`
 	Overrides      []*PermissionGrantResponseBody `form:"overrides,omitempty" json:"overrides,omitempty" xml:"overrides,omitempty"`
-}
-
-// SessionProfileResponseBody is used to define fields on response body types.
-type SessionProfileResponseBody struct {
-	// Opaque non-secret authorization cache revision.
-	AuthorizationVersion *string                    `form:"authorizationVersion,omitempty" json:"authorizationVersion,omitempty" xml:"authorizationVersion,omitempty"`
-	Account              *AccountRecordResponseBody `form:"account,omitempty" json:"account,omitempty" xml:"account,omitempty"`
-	CsrfToken            *string                    `form:"csrfToken,omitempty" json:"csrfToken,omitempty" xml:"csrfToken,omitempty"`
-	Permissions          []string                   `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
-	TenantID             *string                    `form:"tenantId,omitempty" json:"tenantId,omitempty" xml:"tenantId,omitempty"`
-	ActiveDepartmentID   *int64                     `form:"activeDepartmentId,omitempty" json:"activeDepartmentId,omitempty" xml:"activeDepartmentId,omitempty"`
 }
 
 // OrganizationRecordResponseBody is used to define fields on response body
@@ -660,10 +1106,51 @@ type RoleRecordResponseBody struct {
 
 // PermissionGrantRequestBody is used to define fields on request body types.
 type PermissionGrantRequestBody struct {
-	Permission    string  `form:"permission" json:"permission" xml:"permission"`
-	Effect        string  `form:"effect" json:"effect" xml:"effect"`
-	Scope         string  `form:"scope" json:"scope" xml:"scope"`
-	DepartmentIds []int64 `form:"departmentIds" json:"departmentIds" xml:"departmentIds"`
+	Permission string `form:"permission" json:"permission" xml:"permission"`
+	Effect     string `form:"effect" json:"effect" xml:"effect"`
+	Scope      string `form:"scope" json:"scope" xml:"scope"`
+}
+
+// NewSamlCallbackRequestBody builds the HTTP request body from the payload of
+// the "saml_callback" endpoint of the "identity" service.
+func NewSamlCallbackRequestBody(p *identity.SamlCallbackPayload) *SamlCallbackRequestBody {
+	body := &SamlCallbackRequestBody{
+		SAMLResponse: p.SAMLResponse,
+		RelayState:   p.RelayState,
+	}
+	return body
+}
+
+// NewCompleteSamlRequestBody builds the HTTP request body from the payload of
+// the "complete_saml" endpoint of the "identity" service.
+func NewCompleteSamlRequestBody(p *identity.CompleteSamlPayload) *CompleteSamlRequestBody {
+	body := &CompleteSamlRequestBody{
+		MfaCode:      p.MfaCode,
+		RecoveryCode: p.RecoveryCode,
+	}
+	return body
+}
+
+// NewStartFederationRequestBody builds the HTTP request body from the payload
+// of the "start_federation" endpoint of the "identity" service.
+func NewStartFederationRequestBody(p *identity.StartFederationPayload) *StartFederationRequestBody {
+	body := &StartFederationRequestBody{
+		ProviderID: p.ProviderID,
+		Purpose:    p.Purpose,
+	}
+	return body
+}
+
+// NewCompleteFederationRequestBody builds the HTTP request body from the
+// payload of the "complete_federation" endpoint of the "identity" service.
+func NewCompleteFederationRequestBody(p *identity.CompleteFederationPayload) *CompleteFederationRequestBody {
+	body := &CompleteFederationRequestBody{
+		State:        p.State,
+		Code:         p.Code,
+		MfaCode:      p.MfaCode,
+		RecoveryCode: p.RecoveryCode,
+	}
+	return body
 }
 
 // NewRequestTemporaryAccessRequestBody builds the HTTP request body from the
@@ -711,11 +1198,23 @@ func NewReviewTemporaryAccessRequestBody(p *identity.ReviewTemporaryAccessPayloa
 	return body
 }
 
-// NewSwitchDepartmentRequestBody builds the HTTP request body from the payload
-// of the "switch_department" endpoint of the "identity" service.
-func NewSwitchDepartmentRequestBody(p *identity.SwitchDepartmentPayload) *SwitchDepartmentRequestBody {
-	body := &SwitchDepartmentRequestBody{
-		DepartmentID: p.DepartmentID,
+// NewSelectSignInIdentityRequestBody builds the HTTP request body from the
+// payload of the "select_sign_in_identity" endpoint of the "identity" service.
+func NewSelectSignInIdentityRequestBody(p *identity.SelectSignInIdentityPayload) *SelectSignInIdentityRequestBody {
+	body := &SelectSignInIdentityRequestBody{
+		IdentityBindingID:    p.IdentityBindingID,
+		ActingOrganizationID: p.ActingOrganizationID,
+		Portal:               p.Portal,
+	}
+	return body
+}
+
+// NewRedeemSignInInvitationRequestBody builds the HTTP request body from the
+// payload of the "redeem_sign_in_invitation" endpoint of the "identity"
+// service.
+func NewRedeemSignInInvitationRequestBody(p *identity.RedeemSignInInvitationPayload) *RedeemSignInInvitationRequestBody {
+	body := &RedeemSignInInvitationRequestBody{
+		Code: p.Code,
 	}
 	return body
 }
@@ -724,10 +1223,310 @@ func NewSwitchDepartmentRequestBody(p *identity.SwitchDepartmentPayload) *Switch
 // "login" endpoint of the "identity" service.
 func NewLoginRequestBody(p *identity.LoginPayload) *LoginRequestBody {
 	body := &LoginRequestBody{
-		Username: p.Username,
+		Username:     p.Username,
+		Password:     p.Password,
+		MfaCode:      p.MfaCode,
+		RecoveryCode: p.RecoveryCode,
+	}
+	return body
+}
+
+// NewRequestRegistrationRequestBody builds the HTTP request body from the
+// payload of the "request_registration" endpoint of the "identity" service.
+func NewRequestRegistrationRequestBody(p *identity.RequestRegistrationPayload) *RequestRegistrationRequestBody {
+	body := &RequestRegistrationRequestBody{
+		Username:    p.Username,
+		DisplayName: p.DisplayName,
+		Password:    p.Password,
+		Destination: p.Destination,
+	}
+	return body
+}
+
+// NewCompleteRegistrationRequestBody builds the HTTP request body from the
+// payload of the "complete_registration" endpoint of the "identity" service.
+func NewCompleteRegistrationRequestBody(p *identity.CompleteRegistrationPayload) *CompleteRegistrationRequestBody {
+	body := &CompleteRegistrationRequestBody{
+		Token:    p.Token,
 		Password: p.Password,
 	}
 	return body
+}
+
+// NewRequestPasswordResetRequestBody builds the HTTP request body from the
+// payload of the "request_password_reset" endpoint of the "identity" service.
+func NewRequestPasswordResetRequestBody(p *identity.RequestPasswordResetPayload) *RequestPasswordResetRequestBody {
+	body := &RequestPasswordResetRequestBody{
+		Username: p.Username,
+		Channel:  p.Channel,
+	}
+	return body
+}
+
+// NewCompletePasswordResetRequestBody builds the HTTP request body from the
+// payload of the "complete_password_reset" endpoint of the "identity" service.
+func NewCompletePasswordResetRequestBody(p *identity.CompletePasswordResetPayload) *CompletePasswordResetRequestBody {
+	body := &CompletePasswordResetRequestBody{
+		Token:        p.Token,
+		NewPassword:  p.NewPassword,
+		MfaCode:      p.MfaCode,
+		RecoveryCode: p.RecoveryCode,
+	}
+	return body
+}
+
+// NewRefreshSessionRequestBody builds the HTTP request body from the payload
+// of the "refresh_session" endpoint of the "identity" service.
+func NewRefreshSessionRequestBody(p *identity.RefreshSessionPayload) *RefreshSessionRequestBody {
+	body := &RefreshSessionRequestBody{
+		Password: p.Password,
+		Factor:   p.Factor,
+	}
+	return body
+}
+
+// NewSamlCallbackFederationStartResultSeeOther builds a "identity" service
+// "saml_callback" endpoint result from a HTTP "SeeOther" response.
+func NewSamlCallbackFederationStartResultSeeOther(authorizationURL string, cookie string) *identity.FederationStartResult {
+	v := &identity.FederationStartResult{}
+	v.AuthorizationURL = authorizationURL
+	v.Cookie = cookie
+
+	return v
+}
+
+// NewSamlCallbackUnauthenticated builds a identity service saml_callback
+// endpoint unauthenticated error.
+func NewSamlCallbackUnauthenticated(body *SamlCallbackUnauthenticatedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewSamlCallbackRateLimited builds a identity service saml_callback endpoint
+// rate_limited error.
+func NewSamlCallbackRateLimited(body *SamlCallbackRateLimitedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewSamlCallbackUnavailable builds a identity service saml_callback endpoint
+// unavailable error.
+func NewSamlCallbackUnavailable(body *SamlCallbackUnavailableResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewSamlCallbackInternal builds a identity service saml_callback endpoint
+// internal error.
+func NewSamlCallbackInternal(body *SamlCallbackInternalResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompleteSamlFederationCompleteResultOK builds a "identity" service
+// "complete_saml" endpoint result from a HTTP "OK" response.
+func NewCompleteSamlFederationCompleteResultOK(body *CompleteSamlResponseBody, cookie *string) *identity.FederationCompleteResult {
+	v := &identity.FederationCompleteResult{
+		LinkProof: body.LinkProof,
+	}
+	if body.Profile != nil {
+		v.Profile = unmarshalSessionProfileResponseBodyToIdentitySessionProfile(body.Profile)
+	}
+	v.Cookie = cookie
+
+	return v
+}
+
+// NewCompleteSamlUnauthenticated builds a identity service complete_saml
+// endpoint unauthenticated error.
+func NewCompleteSamlUnauthenticated(body *CompleteSamlUnauthenticatedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompleteSamlRateLimited builds a identity service complete_saml endpoint
+// rate_limited error.
+func NewCompleteSamlRateLimited(body *CompleteSamlRateLimitedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompleteSamlUnavailable builds a identity service complete_saml endpoint
+// unavailable error.
+func NewCompleteSamlUnavailable(body *CompleteSamlUnavailableResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompleteSamlInternal builds a identity service complete_saml endpoint
+// internal error.
+func NewCompleteSamlInternal(body *CompleteSamlInternalResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewFederationProvidersFederationProviderOK builds a "identity" service
+// "federation_providers" endpoint result from a HTTP "OK" response.
+func NewFederationProvidersFederationProviderOK(body []*FederationProviderResponse) []*identity.FederationProvider {
+	v := make([]*identity.FederationProvider, len(body))
+	for i, val := range body {
+		if val == nil {
+			v[i] = nil
+			continue
+		}
+		v[i] = unmarshalFederationProviderResponseToIdentityFederationProvider(val)
+	}
+
+	return v
+}
+
+// NewFederationProvidersUnavailable builds a identity service
+// federation_providers endpoint unavailable error.
+func NewFederationProvidersUnavailable(body *FederationProvidersUnavailableResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewFederationProvidersInternal builds a identity service
+// federation_providers endpoint internal error.
+func NewFederationProvidersInternal(body *FederationProvidersInternalResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewStartFederationFederationStartResultOK builds a "identity" service
+// "start_federation" endpoint result from a HTTP "OK" response.
+func NewStartFederationFederationStartResultOK(body *StartFederationResponseBody, cookie string) *identity.FederationStartResult {
+	v := &identity.FederationStartResult{
+		AuthorizationURL: *body.AuthorizationURL,
+	}
+	v.Cookie = cookie
+
+	return v
+}
+
+// NewStartFederationInvalid builds a identity service start_federation
+// endpoint invalid error.
+func NewStartFederationInvalid(body *StartFederationInvalidResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewStartFederationRateLimited builds a identity service start_federation
+// endpoint rate_limited error.
+func NewStartFederationRateLimited(body *StartFederationRateLimitedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewStartFederationUnavailable builds a identity service start_federation
+// endpoint unavailable error.
+func NewStartFederationUnavailable(body *StartFederationUnavailableResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewStartFederationInternal builds a identity service start_federation
+// endpoint internal error.
+func NewStartFederationInternal(body *StartFederationInternalResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompleteFederationFederationCompleteResultOK builds a "identity" service
+// "complete_federation" endpoint result from a HTTP "OK" response.
+func NewCompleteFederationFederationCompleteResultOK(body *CompleteFederationResponseBody, cookie *string) *identity.FederationCompleteResult {
+	v := &identity.FederationCompleteResult{
+		LinkProof: body.LinkProof,
+	}
+	if body.Profile != nil {
+		v.Profile = unmarshalSessionProfileResponseBodyToIdentitySessionProfile(body.Profile)
+	}
+	v.Cookie = cookie
+
+	return v
+}
+
+// NewCompleteFederationUnauthenticated builds a identity service
+// complete_federation endpoint unauthenticated error.
+func NewCompleteFederationUnauthenticated(body *CompleteFederationUnauthenticatedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompleteFederationRateLimited builds a identity service
+// complete_federation endpoint rate_limited error.
+func NewCompleteFederationRateLimited(body *CompleteFederationRateLimitedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompleteFederationUnavailable builds a identity service
+// complete_federation endpoint unavailable error.
+func NewCompleteFederationUnavailable(body *CompleteFederationUnavailableResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompleteFederationInternal builds a identity service complete_federation
+// endpoint internal error.
+func NewCompleteFederationInternal(body *CompleteFederationInternalResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
 }
 
 // NewTemporaryAccessTemporaryAccessWorkspaceOK builds a "identity" service
@@ -751,14 +1550,6 @@ func NewTemporaryAccessTemporaryAccessWorkspaceOK(body *TemporaryAccessResponseB
 			continue
 		}
 		v.Catalog[i] = unmarshalPermissionDefinitionResponseBodyToIdentityPermissionDefinition(val)
-	}
-	v.Departments = make([]*identity.ScopeDepartmentChoice, len(body.Departments))
-	for i, val := range body.Departments {
-		if val == nil {
-			v.Departments[i] = nil
-			continue
-		}
-		v.Departments[i] = unmarshalScopeDepartmentChoiceResponseBodyToIdentityScopeDepartmentChoice(val)
 	}
 	v.EffectiveGrants = make([]*identity.PermissionGrant, len(body.EffectiveGrants))
 	for i, val := range body.EffectiveGrants {
@@ -849,8 +1640,6 @@ func NewRequestTemporaryAccessTemporaryAccessRecordOK(body *RequestTemporaryAcce
 		ID:               *body.ID,
 		ApplicantID:      *body.ApplicantID,
 		ApplicantName:    *body.ApplicantName,
-		DepartmentID:     *body.DepartmentID,
-		DepartmentName:   *body.DepartmentName,
 		RequestedMinutes: *body.RequestedMinutes,
 		Reason:           *body.Reason,
 		Status:           *body.Status,
@@ -959,8 +1748,6 @@ func NewReviewTemporaryAccessTemporaryAccessRecordOK(body *ReviewTemporaryAccess
 		ID:               *body.ID,
 		ApplicantID:      *body.ApplicantID,
 		ApplicantName:    *body.ApplicantName,
-		DepartmentID:     *body.DepartmentID,
-		DepartmentName:   *body.DepartmentName,
 		RequestedMinutes: *body.RequestedMinutes,
 		Reason:           *body.Reason,
 		Status:           *body.Status,
@@ -1069,8 +1856,6 @@ func NewCancelTemporaryAccessTemporaryAccessRecordOK(body *CancelTemporaryAccess
 		ID:               *body.ID,
 		ApplicantID:      *body.ApplicantID,
 		ApplicantName:    *body.ApplicantName,
-		DepartmentID:     *body.DepartmentID,
-		DepartmentName:   *body.DepartmentName,
 		RequestedMinutes: *body.RequestedMinutes,
 		Reason:           *body.Reason,
 		Status:           *body.Status,
@@ -1179,8 +1964,6 @@ func NewRevokeTemporaryAccessTemporaryAccessRecordOK(body *RevokeTemporaryAccess
 		ID:               *body.ID,
 		ApplicantID:      *body.ApplicantID,
 		ApplicantName:    *body.ApplicantName,
-		DepartmentID:     *body.DepartmentID,
-		DepartmentName:   *body.DepartmentName,
 		RequestedMinutes: *body.RequestedMinutes,
 		Reason:           *body.Reason,
 		Status:           *body.Status,
@@ -1282,16 +2065,67 @@ func NewRevokeTemporaryAccessInternal(body *RevokeTemporaryAccessInternalRespons
 	return v
 }
 
-// NewSwitchDepartmentSessionProfileOK builds a "identity" service
-// "switch_department" endpoint result from a HTTP "OK" response.
-func NewSwitchDepartmentSessionProfileOK(body *SwitchDepartmentResponseBody) *identity.SessionProfile {
-	v := &identity.SessionProfile{
-		AuthorizationVersion: body.AuthorizationVersion,
-		CsrfToken:            *body.CsrfToken,
-		TenantID:             *body.TenantID,
-		ActiveDepartmentID:   *body.ActiveDepartmentID,
+// NewListSignInIdentitiesSignInIdentityOK builds a "identity" service
+// "list_sign_in_identities" endpoint result from a HTTP "OK" response.
+func NewListSignInIdentitiesSignInIdentityOK(body []*SignInIdentityResponse) []*identity.SignInIdentity {
+	v := make([]*identity.SignInIdentity, len(body))
+	for i, val := range body {
+		if val == nil {
+			v[i] = nil
+			continue
+		}
+		v[i] = unmarshalSignInIdentityResponseToIdentitySignInIdentity(val)
 	}
-	v.Account = unmarshalAccountRecordResponseBodyToIdentityAccountRecord(body.Account)
+
+	return v
+}
+
+// NewListSignInIdentitiesUnauthenticated builds a identity service
+// list_sign_in_identities endpoint unauthenticated error.
+func NewListSignInIdentitiesUnauthenticated(body *ListSignInIdentitiesUnauthenticatedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewListSignInIdentitiesUnavailable builds a identity service
+// list_sign_in_identities endpoint unavailable error.
+func NewListSignInIdentitiesUnavailable(body *ListSignInIdentitiesUnavailableResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewListSignInIdentitiesInternal builds a identity service
+// list_sign_in_identities endpoint internal error.
+func NewListSignInIdentitiesInternal(body *ListSignInIdentitiesInternalResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewSelectSignInIdentitySessionProfileOK builds a "identity" service
+// "select_sign_in_identity" endpoint result from a HTTP "OK" response.
+func NewSelectSignInIdentitySessionProfileOK(body *SelectSignInIdentityResponseBody) *identity.SessionProfile {
+	v := &identity.SessionProfile{
+		AuthorizationVersion:   body.AuthorizationVersion,
+		PlatformOperator:       body.PlatformOperator,
+		CsrfToken:              *body.CsrfToken,
+		TenantID:               *body.TenantID,
+		IdentityBindingID:      body.IdentityBindingID,
+		ActingOrganizationID:   body.ActingOrganizationID,
+		ActingOrganizationName: body.ActingOrganizationName,
+		Portal:                 body.Portal,
+	}
+	if body.Account != nil {
+		v.Account = unmarshalSessionAccountResponseBodyToIdentitySessionAccount(body.Account)
+	}
 	v.Permissions = make([]string, len(body.Permissions))
 	for i, val := range body.Permissions {
 		v.Permissions[i] = val
@@ -1300,9 +2134,9 @@ func NewSwitchDepartmentSessionProfileOK(body *SwitchDepartmentResponseBody) *id
 	return v
 }
 
-// NewSwitchDepartmentUnauthenticated builds a identity service
-// switch_department endpoint unauthenticated error.
-func NewSwitchDepartmentUnauthenticated(body *SwitchDepartmentUnauthenticatedResponseBody) *identity.IAMProblem {
+// NewSelectSignInIdentityUnauthenticated builds a identity service
+// select_sign_in_identity endpoint unauthenticated error.
+func NewSelectSignInIdentityUnauthenticated(body *SelectSignInIdentityUnauthenticatedResponseBody) *identity.IAMProblem {
 	v := &identity.IAMProblem{
 		Code: *body.Code,
 	}
@@ -1310,9 +2144,9 @@ func NewSwitchDepartmentUnauthenticated(body *SwitchDepartmentUnauthenticatedRes
 	return v
 }
 
-// NewSwitchDepartmentForbidden builds a identity service switch_department
-// endpoint forbidden error.
-func NewSwitchDepartmentForbidden(body *SwitchDepartmentForbiddenResponseBody) *identity.IAMProblem {
+// NewSelectSignInIdentityForbidden builds a identity service
+// select_sign_in_identity endpoint forbidden error.
+func NewSelectSignInIdentityForbidden(body *SelectSignInIdentityForbiddenResponseBody) *identity.IAMProblem {
 	v := &identity.IAMProblem{
 		Code: *body.Code,
 	}
@@ -1320,9 +2154,9 @@ func NewSwitchDepartmentForbidden(body *SwitchDepartmentForbiddenResponseBody) *
 	return v
 }
 
-// NewSwitchDepartmentUnavailable builds a identity service switch_department
-// endpoint unavailable error.
-func NewSwitchDepartmentUnavailable(body *SwitchDepartmentUnavailableResponseBody) *identity.IAMProblem {
+// NewSelectSignInIdentityUnavailable builds a identity service
+// select_sign_in_identity endpoint unavailable error.
+func NewSelectSignInIdentityUnavailable(body *SelectSignInIdentityUnavailableResponseBody) *identity.IAMProblem {
 	v := &identity.IAMProblem{
 		Code: *body.Code,
 	}
@@ -1330,9 +2164,49 @@ func NewSwitchDepartmentUnavailable(body *SwitchDepartmentUnavailableResponseBod
 	return v
 }
 
-// NewSwitchDepartmentInternal builds a identity service switch_department
-// endpoint internal error.
-func NewSwitchDepartmentInternal(body *SwitchDepartmentInternalResponseBody) *identity.IAMProblem {
+// NewSelectSignInIdentityInternal builds a identity service
+// select_sign_in_identity endpoint internal error.
+func NewSelectSignInIdentityInternal(body *SelectSignInIdentityInternalResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRedeemSignInInvitationUnauthenticated builds a identity service
+// redeem_sign_in_invitation endpoint unauthenticated error.
+func NewRedeemSignInInvitationUnauthenticated(body *RedeemSignInInvitationUnauthenticatedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRedeemSignInInvitationForbidden builds a identity service
+// redeem_sign_in_invitation endpoint forbidden error.
+func NewRedeemSignInInvitationForbidden(body *RedeemSignInInvitationForbiddenResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRedeemSignInInvitationUnavailable builds a identity service
+// redeem_sign_in_invitation endpoint unavailable error.
+func NewRedeemSignInInvitationUnavailable(body *RedeemSignInInvitationUnavailableResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRedeemSignInInvitationInternal builds a identity service
+// redeem_sign_in_invitation endpoint internal error.
+func NewRedeemSignInInvitationInternal(body *RedeemSignInInvitationInternalResponseBody) *identity.IAMProblem {
 	v := &identity.IAMProblem{
 		Code: *body.Code,
 	}
@@ -1398,16 +2272,182 @@ func NewLoginInternal(body *LoginInternalResponseBody) *identity.IAMProblem {
 	return v
 }
 
+// NewRequestRegistrationInvalid builds a identity service request_registration
+// endpoint invalid error.
+func NewRequestRegistrationInvalid(body *RequestRegistrationInvalidResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRequestRegistrationRateLimited builds a identity service
+// request_registration endpoint rate_limited error.
+func NewRequestRegistrationRateLimited(body *RequestRegistrationRateLimitedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRequestRegistrationUnavailable builds a identity service
+// request_registration endpoint unavailable error.
+func NewRequestRegistrationUnavailable(body *RequestRegistrationUnavailableResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRequestRegistrationInternal builds a identity service
+// request_registration endpoint internal error.
+func NewRequestRegistrationInternal(body *RequestRegistrationInternalResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompleteRegistrationForbidden builds a identity service
+// complete_registration endpoint forbidden error.
+func NewCompleteRegistrationForbidden(body *CompleteRegistrationForbiddenResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompleteRegistrationRateLimited builds a identity service
+// complete_registration endpoint rate_limited error.
+func NewCompleteRegistrationRateLimited(body *CompleteRegistrationRateLimitedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompleteRegistrationUnavailable builds a identity service
+// complete_registration endpoint unavailable error.
+func NewCompleteRegistrationUnavailable(body *CompleteRegistrationUnavailableResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompleteRegistrationInternal builds a identity service
+// complete_registration endpoint internal error.
+func NewCompleteRegistrationInternal(body *CompleteRegistrationInternalResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRequestPasswordResetRateLimited builds a identity service
+// request_password_reset endpoint rate_limited error.
+func NewRequestPasswordResetRateLimited(body *RequestPasswordResetRateLimitedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRequestPasswordResetUnavailable builds a identity service
+// request_password_reset endpoint unavailable error.
+func NewRequestPasswordResetUnavailable(body *RequestPasswordResetUnavailableResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRequestPasswordResetInternal builds a identity service
+// request_password_reset endpoint internal error.
+func NewRequestPasswordResetInternal(body *RequestPasswordResetInternalResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompletePasswordResetInvalid builds a identity service
+// complete_password_reset endpoint invalid error.
+func NewCompletePasswordResetInvalid(body *CompletePasswordResetInvalidResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompletePasswordResetForbidden builds a identity service
+// complete_password_reset endpoint forbidden error.
+func NewCompletePasswordResetForbidden(body *CompletePasswordResetForbiddenResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompletePasswordResetRateLimited builds a identity service
+// complete_password_reset endpoint rate_limited error.
+func NewCompletePasswordResetRateLimited(body *CompletePasswordResetRateLimitedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompletePasswordResetUnavailable builds a identity service
+// complete_password_reset endpoint unavailable error.
+func NewCompletePasswordResetUnavailable(body *CompletePasswordResetUnavailableResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewCompletePasswordResetInternal builds a identity service
+// complete_password_reset endpoint internal error.
+func NewCompletePasswordResetInternal(body *CompletePasswordResetInternalResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
 // NewMeSessionProfileOK builds a "identity" service "me" endpoint result from
 // a HTTP "OK" response.
 func NewMeSessionProfileOK(body *MeResponseBody) *identity.SessionProfile {
 	v := &identity.SessionProfile{
-		AuthorizationVersion: body.AuthorizationVersion,
-		CsrfToken:            *body.CsrfToken,
-		TenantID:             *body.TenantID,
-		ActiveDepartmentID:   *body.ActiveDepartmentID,
+		AuthorizationVersion:   body.AuthorizationVersion,
+		PlatformOperator:       body.PlatformOperator,
+		CsrfToken:              *body.CsrfToken,
+		TenantID:               *body.TenantID,
+		IdentityBindingID:      body.IdentityBindingID,
+		ActingOrganizationID:   body.ActingOrganizationID,
+		ActingOrganizationName: body.ActingOrganizationName,
+		Portal:                 body.Portal,
 	}
-	v.Account = unmarshalAccountRecordResponseBodyToIdentityAccountRecord(body.Account)
+	if body.Account != nil {
+		v.Account = unmarshalSessionAccountResponseBodyToIdentitySessionAccount(body.Account)
+	}
 	v.Permissions = make([]string, len(body.Permissions))
 	for i, val := range body.Permissions {
 		v.Permissions[i] = val
@@ -1482,6 +2522,66 @@ func NewLogoutInternal(body *LogoutInternalResponseBody) *identity.IAMProblem {
 	return v
 }
 
+// NewRefreshSessionLoginResultOK builds a "identity" service "refresh_session"
+// endpoint result from a HTTP "OK" response.
+func NewRefreshSessionLoginResultOK(body *RefreshSessionResponseBody, cookie string) *identity.LoginResult {
+	v := &identity.LoginResult{}
+	v.Profile = unmarshalSessionProfileResponseBodyToIdentitySessionProfile(body.Profile)
+	v.Cookie = cookie
+
+	return v
+}
+
+// NewRefreshSessionInvalid builds a identity service refresh_session endpoint
+// invalid error.
+func NewRefreshSessionInvalid(body *RefreshSessionInvalidResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRefreshSessionUnauthenticated builds a identity service refresh_session
+// endpoint unauthenticated error.
+func NewRefreshSessionUnauthenticated(body *RefreshSessionUnauthenticatedResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRefreshSessionForbidden builds a identity service refresh_session
+// endpoint forbidden error.
+func NewRefreshSessionForbidden(body *RefreshSessionForbiddenResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRefreshSessionUnavailable builds a identity service refresh_session
+// endpoint unavailable error.
+func NewRefreshSessionUnavailable(body *RefreshSessionUnavailableResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
+// NewRefreshSessionInternal builds a identity service refresh_session endpoint
+// internal error.
+func NewRefreshSessionInternal(body *RefreshSessionInternalResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
 // NewSnapshotAdminSnapshotOK builds a "identity" service "snapshot" endpoint
 // result from a HTTP "OK" response.
 func NewSnapshotAdminSnapshotOK(body *SnapshotResponseBody) *identity.AdminSnapshot {
@@ -1544,6 +2644,16 @@ func NewSnapshotUnauthenticated(body *SnapshotUnauthenticatedResponseBody) *iden
 	return v
 }
 
+// NewSnapshotForbidden builds a identity service snapshot endpoint forbidden
+// error.
+func NewSnapshotForbidden(body *SnapshotForbiddenResponseBody) *identity.IAMProblem {
+	v := &identity.IAMProblem{
+		Code: *body.Code,
+	}
+
+	return v
+}
+
 // NewSnapshotUnavailable builds a identity service snapshot endpoint
 // unavailable error.
 func NewSnapshotUnavailable(body *SnapshotUnavailableResponseBody) *identity.IAMProblem {
@@ -1564,6 +2674,37 @@ func NewSnapshotInternal(body *SnapshotInternalResponseBody) *identity.IAMProble
 	return v
 }
 
+// ValidateCompleteSamlResponseBody runs the validations defined on
+// CompleteSamlResponseBody
+func ValidateCompleteSamlResponseBody(body *CompleteSamlResponseBody) (err error) {
+	if body.Profile != nil {
+		if err2 := validateSessionProfileResponseBody(body.Profile, "body.profile"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateStartFederationResponseBody runs the validations defined on
+// StartFederationResponseBody
+func ValidateStartFederationResponseBody(body *StartFederationResponseBody) (err error) {
+	if body.AuthorizationURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorizationUrl", "body"))
+	}
+	return
+}
+
+// ValidateCompleteFederationResponseBody runs the validations defined on
+// CompleteFederationResponseBody
+func ValidateCompleteFederationResponseBody(body *CompleteFederationResponseBody) (err error) {
+	if body.Profile != nil {
+		if err2 := validateSessionProfileResponseBody(body.Profile, "body.profile"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateTemporaryAccessResponseBody runs the validations defined on
 // TemporaryAccessResponseBody
 func ValidateTemporaryAccessResponseBody(body *TemporaryAccessResponseBody) (err error) {
@@ -1572,9 +2713,6 @@ func ValidateTemporaryAccessResponseBody(body *TemporaryAccessResponseBody) (err
 	}
 	if body.Catalog == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("catalog", "body"))
-	}
-	if body.Departments == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departments", "body"))
 	}
 	if body.EffectiveGrants == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("effectiveGrants", "body"))
@@ -1596,13 +2734,6 @@ func ValidateTemporaryAccessResponseBody(body *TemporaryAccessResponseBody) (err
 			}
 		}
 	}
-	for _, e := range body.Departments {
-		if e != nil {
-			if err2 := validateScopeDepartmentChoiceResponseBody(e, "body.departments[*]"); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	for _, e := range body.EffectiveGrants {
 		if e != nil {
 			if err2 := validatePermissionGrantResponseBody(e, "body.effectiveGrants[*]"); err2 != nil {
@@ -1616,12 +2747,6 @@ func ValidateTemporaryAccessResponseBody(body *TemporaryAccessResponseBody) (err
 // ValidateRequestTemporaryAccessResponseBody runs the validations defined on
 // RequestTemporaryAccessResponseBody
 func ValidateRequestTemporaryAccessResponseBody(body *RequestTemporaryAccessResponseBody) (err error) {
-	if body.DepartmentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentId", "body"))
-	}
-	if body.DepartmentName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentName", "body"))
-	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -1687,12 +2812,6 @@ func ValidateRequestTemporaryAccessResponseBody(body *RequestTemporaryAccessResp
 // ValidateReviewTemporaryAccessResponseBody runs the validations defined on
 // ReviewTemporaryAccessResponseBody
 func ValidateReviewTemporaryAccessResponseBody(body *ReviewTemporaryAccessResponseBody) (err error) {
-	if body.DepartmentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentId", "body"))
-	}
-	if body.DepartmentName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentName", "body"))
-	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -1758,12 +2877,6 @@ func ValidateReviewTemporaryAccessResponseBody(body *ReviewTemporaryAccessRespon
 // ValidateCancelTemporaryAccessResponseBody runs the validations defined on
 // CancelTemporaryAccessResponseBody
 func ValidateCancelTemporaryAccessResponseBody(body *CancelTemporaryAccessResponseBody) (err error) {
-	if body.DepartmentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentId", "body"))
-	}
-	if body.DepartmentName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentName", "body"))
-	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -1829,12 +2942,6 @@ func ValidateCancelTemporaryAccessResponseBody(body *CancelTemporaryAccessRespon
 // ValidateRevokeTemporaryAccessResponseBody runs the validations defined on
 // RevokeTemporaryAccessResponseBody
 func ValidateRevokeTemporaryAccessResponseBody(body *RevokeTemporaryAccessResponseBody) (err error) {
-	if body.DepartmentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentId", "body"))
-	}
-	if body.DepartmentName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentName", "body"))
-	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -1897,12 +3004,9 @@ func ValidateRevokeTemporaryAccessResponseBody(body *RevokeTemporaryAccessRespon
 	return
 }
 
-// ValidateSwitchDepartmentResponseBody runs the validations defined on
-// SwitchDepartmentResponseBody
-func ValidateSwitchDepartmentResponseBody(body *SwitchDepartmentResponseBody) (err error) {
-	if body.Account == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("account", "body"))
-	}
+// ValidateSelectSignInIdentityResponseBody runs the validations defined on
+// SelectSignInIdentityResponseBody
+func ValidateSelectSignInIdentityResponseBody(body *SelectSignInIdentityResponseBody) (err error) {
 	if body.CsrfToken == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("csrfToken", "body"))
 	}
@@ -1912,15 +3016,20 @@ func ValidateSwitchDepartmentResponseBody(body *SwitchDepartmentResponseBody) (e
 	if body.TenantID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tenantId", "body"))
 	}
-	if body.ActiveDepartmentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("activeDepartmentId", "body"))
-	}
 	if body.AuthorizationVersion != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.authorizationVersion", *body.AuthorizationVersion, "^[a-f0-9]{64}$"))
 	}
 	if body.Account != nil {
-		if err2 := validateAccountRecordResponseBody(body.Account, "body.account"); err2 != nil {
+		if err2 := validateSessionAccountResponseBody(body.Account, "body.account"); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.IdentityBindingID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identityBindingId", *body.IdentityBindingID, goa.FormatUUID))
+	}
+	if body.ActingOrganizationID != nil {
+		if *body.ActingOrganizationID < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.actingOrganizationId", *body.ActingOrganizationID, 1, true))
 		}
 	}
 	return
@@ -1941,9 +3050,6 @@ func ValidateLoginResponseBody(body *LoginResponseBody) (err error) {
 
 // ValidateMeResponseBody runs the validations defined on MeResponseBody
 func ValidateMeResponseBody(body *MeResponseBody) (err error) {
-	if body.Account == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("account", "body"))
-	}
 	if body.CsrfToken == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("csrfToken", "body"))
 	}
@@ -1953,14 +3059,33 @@ func ValidateMeResponseBody(body *MeResponseBody) (err error) {
 	if body.TenantID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tenantId", "body"))
 	}
-	if body.ActiveDepartmentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("activeDepartmentId", "body"))
-	}
 	if body.AuthorizationVersion != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.authorizationVersion", *body.AuthorizationVersion, "^[a-f0-9]{64}$"))
 	}
 	if body.Account != nil {
-		if err2 := validateAccountRecordResponseBody(body.Account, "body.account"); err2 != nil {
+		if err2 := validateSessionAccountResponseBody(body.Account, "body.account"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.IdentityBindingID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identityBindingId", *body.IdentityBindingID, goa.FormatUUID))
+	}
+	if body.ActingOrganizationID != nil {
+		if *body.ActingOrganizationID < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.actingOrganizationId", *body.ActingOrganizationID, 1, true))
+		}
+	}
+	return
+}
+
+// ValidateRefreshSessionResponseBody runs the validations defined on
+// RefreshSessionResponseBody
+func ValidateRefreshSessionResponseBody(body *RefreshSessionResponseBody) (err error) {
+	if body.Profile == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("profile", "body"))
+	}
+	if body.Profile != nil {
+		if err2 := validateSessionProfileResponseBody(body.Profile, "body.profile"); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -2022,6 +3147,168 @@ func ValidateSnapshotResponseBody(body *SnapshotResponseBody) (err error) {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateSamlCallbackUnauthenticatedResponseBody runs the validations defined
+// on SamlCallbackUnauthenticatedResponseBody
+func ValidateSamlCallbackUnauthenticatedResponseBody(body *SamlCallbackUnauthenticatedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateSamlCallbackRateLimitedResponseBody runs the validations defined on
+// SamlCallbackRateLimitedResponseBody
+func ValidateSamlCallbackRateLimitedResponseBody(body *SamlCallbackRateLimitedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateSamlCallbackUnavailableResponseBody runs the validations defined on
+// SamlCallbackUnavailableResponseBody
+func ValidateSamlCallbackUnavailableResponseBody(body *SamlCallbackUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateSamlCallbackInternalResponseBody runs the validations defined on
+// SamlCallbackInternalResponseBody
+func ValidateSamlCallbackInternalResponseBody(body *SamlCallbackInternalResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompleteSamlUnauthenticatedResponseBody runs the validations defined
+// on CompleteSamlUnauthenticatedResponseBody
+func ValidateCompleteSamlUnauthenticatedResponseBody(body *CompleteSamlUnauthenticatedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompleteSamlRateLimitedResponseBody runs the validations defined on
+// CompleteSamlRateLimitedResponseBody
+func ValidateCompleteSamlRateLimitedResponseBody(body *CompleteSamlRateLimitedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompleteSamlUnavailableResponseBody runs the validations defined on
+// CompleteSamlUnavailableResponseBody
+func ValidateCompleteSamlUnavailableResponseBody(body *CompleteSamlUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompleteSamlInternalResponseBody runs the validations defined on
+// CompleteSamlInternalResponseBody
+func ValidateCompleteSamlInternalResponseBody(body *CompleteSamlInternalResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateFederationProvidersUnavailableResponseBody runs the validations
+// defined on FederationProvidersUnavailableResponseBody
+func ValidateFederationProvidersUnavailableResponseBody(body *FederationProvidersUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateFederationProvidersInternalResponseBody runs the validations defined
+// on FederationProvidersInternalResponseBody
+func ValidateFederationProvidersInternalResponseBody(body *FederationProvidersInternalResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateStartFederationInvalidResponseBody runs the validations defined on
+// StartFederationInvalidResponseBody
+func ValidateStartFederationInvalidResponseBody(body *StartFederationInvalidResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateStartFederationRateLimitedResponseBody runs the validations defined
+// on StartFederationRateLimitedResponseBody
+func ValidateStartFederationRateLimitedResponseBody(body *StartFederationRateLimitedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateStartFederationUnavailableResponseBody runs the validations defined
+// on StartFederationUnavailableResponseBody
+func ValidateStartFederationUnavailableResponseBody(body *StartFederationUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateStartFederationInternalResponseBody runs the validations defined on
+// StartFederationInternalResponseBody
+func ValidateStartFederationInternalResponseBody(body *StartFederationInternalResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompleteFederationUnauthenticatedResponseBody runs the validations
+// defined on CompleteFederationUnauthenticatedResponseBody
+func ValidateCompleteFederationUnauthenticatedResponseBody(body *CompleteFederationUnauthenticatedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompleteFederationRateLimitedResponseBody runs the validations
+// defined on CompleteFederationRateLimitedResponseBody
+func ValidateCompleteFederationRateLimitedResponseBody(body *CompleteFederationRateLimitedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompleteFederationUnavailableResponseBody runs the validations
+// defined on CompleteFederationUnavailableResponseBody
+func ValidateCompleteFederationUnavailableResponseBody(body *CompleteFederationUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompleteFederationInternalResponseBody runs the validations defined
+// on CompleteFederationInternalResponseBody
+func ValidateCompleteFederationInternalResponseBody(body *CompleteFederationInternalResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
 	}
 	return
 }
@@ -2341,36 +3628,99 @@ func ValidateRevokeTemporaryAccessInternalResponseBody(body *RevokeTemporaryAcce
 	return
 }
 
-// ValidateSwitchDepartmentUnauthenticatedResponseBody runs the validations
-// defined on SwitchDepartmentUnauthenticatedResponseBody
-func ValidateSwitchDepartmentUnauthenticatedResponseBody(body *SwitchDepartmentUnauthenticatedResponseBody) (err error) {
+// ValidateListSignInIdentitiesUnauthenticatedResponseBody runs the validations
+// defined on ListSignInIdentitiesUnauthenticatedResponseBody
+func ValidateListSignInIdentitiesUnauthenticatedResponseBody(body *ListSignInIdentitiesUnauthenticatedResponseBody) (err error) {
 	if body.Code == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
 	}
 	return
 }
 
-// ValidateSwitchDepartmentForbiddenResponseBody runs the validations defined
-// on SwitchDepartmentForbiddenResponseBody
-func ValidateSwitchDepartmentForbiddenResponseBody(body *SwitchDepartmentForbiddenResponseBody) (err error) {
+// ValidateListSignInIdentitiesUnavailableResponseBody runs the validations
+// defined on ListSignInIdentitiesUnavailableResponseBody
+func ValidateListSignInIdentitiesUnavailableResponseBody(body *ListSignInIdentitiesUnavailableResponseBody) (err error) {
 	if body.Code == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
 	}
 	return
 }
 
-// ValidateSwitchDepartmentUnavailableResponseBody runs the validations defined
-// on SwitchDepartmentUnavailableResponseBody
-func ValidateSwitchDepartmentUnavailableResponseBody(body *SwitchDepartmentUnavailableResponseBody) (err error) {
+// ValidateListSignInIdentitiesInternalResponseBody runs the validations
+// defined on ListSignInIdentitiesInternalResponseBody
+func ValidateListSignInIdentitiesInternalResponseBody(body *ListSignInIdentitiesInternalResponseBody) (err error) {
 	if body.Code == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
 	}
 	return
 }
 
-// ValidateSwitchDepartmentInternalResponseBody runs the validations defined on
-// SwitchDepartmentInternalResponseBody
-func ValidateSwitchDepartmentInternalResponseBody(body *SwitchDepartmentInternalResponseBody) (err error) {
+// ValidateSelectSignInIdentityUnauthenticatedResponseBody runs the validations
+// defined on SelectSignInIdentityUnauthenticatedResponseBody
+func ValidateSelectSignInIdentityUnauthenticatedResponseBody(body *SelectSignInIdentityUnauthenticatedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateSelectSignInIdentityForbiddenResponseBody runs the validations
+// defined on SelectSignInIdentityForbiddenResponseBody
+func ValidateSelectSignInIdentityForbiddenResponseBody(body *SelectSignInIdentityForbiddenResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateSelectSignInIdentityUnavailableResponseBody runs the validations
+// defined on SelectSignInIdentityUnavailableResponseBody
+func ValidateSelectSignInIdentityUnavailableResponseBody(body *SelectSignInIdentityUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateSelectSignInIdentityInternalResponseBody runs the validations
+// defined on SelectSignInIdentityInternalResponseBody
+func ValidateSelectSignInIdentityInternalResponseBody(body *SelectSignInIdentityInternalResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRedeemSignInInvitationUnauthenticatedResponseBody runs the
+// validations defined on RedeemSignInInvitationUnauthenticatedResponseBody
+func ValidateRedeemSignInInvitationUnauthenticatedResponseBody(body *RedeemSignInInvitationUnauthenticatedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRedeemSignInInvitationForbiddenResponseBody runs the validations
+// defined on RedeemSignInInvitationForbiddenResponseBody
+func ValidateRedeemSignInInvitationForbiddenResponseBody(body *RedeemSignInInvitationForbiddenResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRedeemSignInInvitationUnavailableResponseBody runs the validations
+// defined on RedeemSignInInvitationUnavailableResponseBody
+func ValidateRedeemSignInInvitationUnavailableResponseBody(body *RedeemSignInInvitationUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRedeemSignInInvitationInternalResponseBody runs the validations
+// defined on RedeemSignInInvitationInternalResponseBody
+func ValidateRedeemSignInInvitationInternalResponseBody(body *RedeemSignInInvitationInternalResponseBody) (err error) {
 	if body.Code == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
 	}
@@ -2416,6 +3766,150 @@ func ValidateLoginUnavailableResponseBody(body *LoginUnavailableResponseBody) (e
 // ValidateLoginInternalResponseBody runs the validations defined on
 // LoginInternalResponseBody
 func ValidateLoginInternalResponseBody(body *LoginInternalResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRequestRegistrationInvalidResponseBody runs the validations defined
+// on RequestRegistrationInvalidResponseBody
+func ValidateRequestRegistrationInvalidResponseBody(body *RequestRegistrationInvalidResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRequestRegistrationRateLimitedResponseBody runs the validations
+// defined on RequestRegistrationRateLimitedResponseBody
+func ValidateRequestRegistrationRateLimitedResponseBody(body *RequestRegistrationRateLimitedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRequestRegistrationUnavailableResponseBody runs the validations
+// defined on RequestRegistrationUnavailableResponseBody
+func ValidateRequestRegistrationUnavailableResponseBody(body *RequestRegistrationUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRequestRegistrationInternalResponseBody runs the validations defined
+// on RequestRegistrationInternalResponseBody
+func ValidateRequestRegistrationInternalResponseBody(body *RequestRegistrationInternalResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompleteRegistrationForbiddenResponseBody runs the validations
+// defined on CompleteRegistrationForbiddenResponseBody
+func ValidateCompleteRegistrationForbiddenResponseBody(body *CompleteRegistrationForbiddenResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompleteRegistrationRateLimitedResponseBody runs the validations
+// defined on CompleteRegistrationRateLimitedResponseBody
+func ValidateCompleteRegistrationRateLimitedResponseBody(body *CompleteRegistrationRateLimitedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompleteRegistrationUnavailableResponseBody runs the validations
+// defined on CompleteRegistrationUnavailableResponseBody
+func ValidateCompleteRegistrationUnavailableResponseBody(body *CompleteRegistrationUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompleteRegistrationInternalResponseBody runs the validations
+// defined on CompleteRegistrationInternalResponseBody
+func ValidateCompleteRegistrationInternalResponseBody(body *CompleteRegistrationInternalResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRequestPasswordResetRateLimitedResponseBody runs the validations
+// defined on RequestPasswordResetRateLimitedResponseBody
+func ValidateRequestPasswordResetRateLimitedResponseBody(body *RequestPasswordResetRateLimitedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRequestPasswordResetUnavailableResponseBody runs the validations
+// defined on RequestPasswordResetUnavailableResponseBody
+func ValidateRequestPasswordResetUnavailableResponseBody(body *RequestPasswordResetUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRequestPasswordResetInternalResponseBody runs the validations
+// defined on RequestPasswordResetInternalResponseBody
+func ValidateRequestPasswordResetInternalResponseBody(body *RequestPasswordResetInternalResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompletePasswordResetInvalidResponseBody runs the validations
+// defined on CompletePasswordResetInvalidResponseBody
+func ValidateCompletePasswordResetInvalidResponseBody(body *CompletePasswordResetInvalidResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompletePasswordResetForbiddenResponseBody runs the validations
+// defined on CompletePasswordResetForbiddenResponseBody
+func ValidateCompletePasswordResetForbiddenResponseBody(body *CompletePasswordResetForbiddenResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompletePasswordResetRateLimitedResponseBody runs the validations
+// defined on CompletePasswordResetRateLimitedResponseBody
+func ValidateCompletePasswordResetRateLimitedResponseBody(body *CompletePasswordResetRateLimitedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompletePasswordResetUnavailableResponseBody runs the validations
+// defined on CompletePasswordResetUnavailableResponseBody
+func ValidateCompletePasswordResetUnavailableResponseBody(body *CompletePasswordResetUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateCompletePasswordResetInternalResponseBody runs the validations
+// defined on CompletePasswordResetInternalResponseBody
+func ValidateCompletePasswordResetInternalResponseBody(body *CompletePasswordResetInternalResponseBody) (err error) {
 	if body.Code == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
 	}
@@ -2476,9 +3970,63 @@ func ValidateLogoutInternalResponseBody(body *LogoutInternalResponseBody) (err e
 	return
 }
 
+// ValidateRefreshSessionInvalidResponseBody runs the validations defined on
+// RefreshSessionInvalidResponseBody
+func ValidateRefreshSessionInvalidResponseBody(body *RefreshSessionInvalidResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionUnauthenticatedResponseBody runs the validations
+// defined on RefreshSessionUnauthenticatedResponseBody
+func ValidateRefreshSessionUnauthenticatedResponseBody(body *RefreshSessionUnauthenticatedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionForbiddenResponseBody runs the validations defined on
+// RefreshSessionForbiddenResponseBody
+func ValidateRefreshSessionForbiddenResponseBody(body *RefreshSessionForbiddenResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionUnavailableResponseBody runs the validations defined
+// on RefreshSessionUnavailableResponseBody
+func ValidateRefreshSessionUnavailableResponseBody(body *RefreshSessionUnavailableResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionInternalResponseBody runs the validations defined on
+// RefreshSessionInternalResponseBody
+func ValidateRefreshSessionInternalResponseBody(body *RefreshSessionInternalResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
 // ValidateSnapshotUnauthenticatedResponseBody runs the validations defined on
 // SnapshotUnauthenticatedResponseBody
 func ValidateSnapshotUnauthenticatedResponseBody(body *SnapshotUnauthenticatedResponseBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	return
+}
+
+// ValidateSnapshotForbiddenResponseBody runs the validations defined on
+// SnapshotForbiddenResponseBody
+func ValidateSnapshotForbiddenResponseBody(body *SnapshotForbiddenResponseBody) (err error) {
 	if body.Code == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
 	}
@@ -2503,15 +4051,131 @@ func ValidateSnapshotInternalResponseBody(body *SnapshotInternalResponseBody) (e
 	return
 }
 
+// ValidateSessionProfileResponseBody runs the validations defined on
+// SessionProfile
+func ValidateSessionProfileResponseBody(body *SessionProfileResponseBody) (err error) {
+	if body.CsrfToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("csrfToken", "body"))
+	}
+	if body.Permissions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("permissions", "body"))
+	}
+	if body.TenantID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tenantId", "body"))
+	}
+	if body.AuthorizationVersion != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.authorizationVersion", *body.AuthorizationVersion, "^[a-f0-9]{64}$"))
+	}
+	if body.Account != nil {
+		if err2 := validateSessionAccountResponseBody(body.Account, "body.account"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.IdentityBindingID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identityBindingId", *body.IdentityBindingID, goa.FormatUUID))
+	}
+	if body.ActingOrganizationID != nil {
+		if *body.ActingOrganizationID < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.actingOrganizationId", *body.ActingOrganizationID, 1, true))
+		}
+	}
+	return
+}
+
+// validateSessionProfileResponseBody checks SessionProfile and reports errors
+// using the path supplied by its caller
+func validateSessionProfileResponseBody(body *SessionProfileResponseBody, path string) (err error) {
+	if body.CsrfToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("csrfToken", path))
+	}
+	if body.Permissions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("permissions", path))
+	}
+	if body.TenantID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tenantId", path))
+	}
+	if body.AuthorizationVersion != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern(path+".authorizationVersion", *body.AuthorizationVersion, "^[a-f0-9]{64}$"))
+	}
+	if body.Account != nil {
+		if err2 := validateSessionAccountResponseBody(body.Account, path+".account"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.IdentityBindingID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat(path+".identityBindingId", *body.IdentityBindingID, goa.FormatUUID))
+	}
+	if body.ActingOrganizationID != nil {
+		if *body.ActingOrganizationID < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".actingOrganizationId", *body.ActingOrganizationID, 1, true))
+		}
+	}
+	return
+}
+
+// ValidateSessionAccountResponseBody runs the validations defined on
+// SessionAccount
+func ValidateSessionAccountResponseBody(body *SessionAccountResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Username == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("username", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.IsAdmin == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("isAdmin", "body"))
+	}
+	return
+}
+
+// validateSessionAccountResponseBody checks SessionAccount and reports errors
+// using the path supplied by its caller
+func validateSessionAccountResponseBody(body *SessionAccountResponseBody, path string) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", path))
+	}
+	if body.Username == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("username", path))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", path))
+	}
+	if body.IsAdmin == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("isAdmin", path))
+	}
+	return
+}
+
+// ValidateFederationProviderResponse runs the validations defined on
+// FederationProvider
+func ValidateFederationProviderResponse(body *FederationProviderResponse) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// validateFederationProviderResponse checks FederationProvider and reports
+// errors using the path supplied by its caller
+func validateFederationProviderResponse(body *FederationProviderResponse, path string) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", path))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", path))
+	}
+	return
+}
+
 // ValidateTemporaryAccessRecordResponseBody runs the validations defined on
 // TemporaryAccessRecord
 func ValidateTemporaryAccessRecordResponseBody(body *TemporaryAccessRecordResponseBody) (err error) {
-	if body.DepartmentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentId", "body"))
-	}
-	if body.DepartmentName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentName", "body"))
-	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -2577,12 +4241,6 @@ func ValidateTemporaryAccessRecordResponseBody(body *TemporaryAccessRecordRespon
 // validateTemporaryAccessRecordResponseBody checks TemporaryAccessRecord and
 // reports errors using the path supplied by its caller
 func validateTemporaryAccessRecordResponseBody(body *TemporaryAccessRecordResponseBody, path string) (err error) {
-	if body.DepartmentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentId", path))
-	}
-	if body.DepartmentName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentName", path))
-	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", path))
 	}
@@ -2657,9 +4315,6 @@ func ValidatePermissionGrantResponseBody(body *PermissionGrantResponseBody) (err
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
-	if body.DepartmentIds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentIds", "body"))
-	}
 	if body.Permission != nil {
 		if utf8.RuneCountInString(*body.Permission) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.permission", *body.Permission, utf8.RuneCountInString(*body.Permission), 1, true))
@@ -2674,12 +4329,9 @@ func ValidatePermissionGrantResponseBody(body *PermissionGrantResponseBody) (err
 		}
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "ALL" || *body.Scope == "ORGANIZATION" || *body.Scope == "DEPARTMENT" || *body.Scope == "DEPARTMENT_TREE" || *body.Scope == "OWN" || *body.Scope == "CUSTOM") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"ALL", "ORGANIZATION", "DEPARTMENT", "DEPARTMENT_TREE", "OWN", "CUSTOM"}))
+		if !(*body.Scope == "ALL" || *body.Scope == "OWN") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"ALL", "OWN"}))
 		}
-	}
-	if len(body.DepartmentIds) > 200 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.departmentIds", body.DepartmentIds, len(body.DepartmentIds), 200, false))
 	}
 	return
 }
@@ -2696,9 +4348,6 @@ func validatePermissionGrantResponseBody(body *PermissionGrantResponseBody, path
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", path))
 	}
-	if body.DepartmentIds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentIds", path))
-	}
 	if body.Permission != nil {
 		if utf8.RuneCountInString(*body.Permission) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".permission", *body.Permission, utf8.RuneCountInString(*body.Permission), 1, true))
@@ -2713,12 +4362,9 @@ func validatePermissionGrantResponseBody(body *PermissionGrantResponseBody, path
 		}
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "ALL" || *body.Scope == "ORGANIZATION" || *body.Scope == "DEPARTMENT" || *body.Scope == "DEPARTMENT_TREE" || *body.Scope == "OWN" || *body.Scope == "CUSTOM") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".scope", *body.Scope, []any{"ALL", "ORGANIZATION", "DEPARTMENT", "DEPARTMENT_TREE", "OWN", "CUSTOM"}))
+		if !(*body.Scope == "ALL" || *body.Scope == "OWN") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".scope", *body.Scope, []any{"ALL", "OWN"}))
 		}
-	}
-	if len(body.DepartmentIds) > 200 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".departmentIds", body.DepartmentIds, len(body.DepartmentIds), 200, false))
 	}
 	return
 }
@@ -2771,38 +4417,19 @@ func validatePermissionDefinitionResponseBody(body *PermissionDefinitionResponse
 	return
 }
 
-// ValidateScopeDepartmentChoiceResponseBody runs the validations defined on
-// ScopeDepartmentChoice
-func ValidateScopeDepartmentChoiceResponseBody(body *ScopeDepartmentChoiceResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organizationId", "body"))
-	}
-	if body.OrganizationName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organizationName", "body"))
+// ValidateSignInIdentityResponse runs the validations defined on SignInIdentity
+func ValidateSignInIdentityResponse(body *SignInIdentityResponse) (err error) {
+	if body.IdentityBindingID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identityBindingId", *body.IdentityBindingID, goa.FormatUUID))
 	}
 	return
 }
 
-// validateScopeDepartmentChoiceResponseBody checks ScopeDepartmentChoice and
-// reports errors using the path supplied by its caller
-func validateScopeDepartmentChoiceResponseBody(body *ScopeDepartmentChoiceResponseBody, path string) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", path))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", path))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organizationId", path))
-	}
-	if body.OrganizationName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organizationName", path))
+// validateSignInIdentityResponse checks SignInIdentity and reports errors
+// using the path supplied by its caller
+func validateSignInIdentityResponse(body *SignInIdentityResponse, path string) (err error) {
+	if body.IdentityBindingID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat(path+".identityBindingId", *body.IdentityBindingID, goa.FormatUUID))
 	}
 	return
 }
@@ -3002,64 +4629,6 @@ func validateDepartmentMembershipResponseBody(body *DepartmentMembershipResponse
 			if err2 := validatePermissionGrantResponseBody(e, path+".overrides[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	return
-}
-
-// ValidateSessionProfileResponseBody runs the validations defined on
-// SessionProfile
-func ValidateSessionProfileResponseBody(body *SessionProfileResponseBody) (err error) {
-	if body.Account == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("account", "body"))
-	}
-	if body.CsrfToken == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("csrfToken", "body"))
-	}
-	if body.Permissions == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("permissions", "body"))
-	}
-	if body.TenantID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tenantId", "body"))
-	}
-	if body.ActiveDepartmentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("activeDepartmentId", "body"))
-	}
-	if body.AuthorizationVersion != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.authorizationVersion", *body.AuthorizationVersion, "^[a-f0-9]{64}$"))
-	}
-	if body.Account != nil {
-		if err2 := validateAccountRecordResponseBody(body.Account, "body.account"); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	return
-}
-
-// validateSessionProfileResponseBody checks SessionProfile and reports errors
-// using the path supplied by its caller
-func validateSessionProfileResponseBody(body *SessionProfileResponseBody, path string) (err error) {
-	if body.Account == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("account", path))
-	}
-	if body.CsrfToken == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("csrfToken", path))
-	}
-	if body.Permissions == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("permissions", path))
-	}
-	if body.TenantID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tenantId", path))
-	}
-	if body.ActiveDepartmentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("activeDepartmentId", path))
-	}
-	if body.AuthorizationVersion != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern(path+".authorizationVersion", *body.AuthorizationVersion, "^[a-f0-9]{64}$"))
-	}
-	if body.Account != nil {
-		if err2 := validateAccountRecordResponseBody(body.Account, path+".account"); err2 != nil {
-			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -3267,9 +4836,6 @@ func validateRoleRecordResponseBody(body *RoleRecordResponseBody, path string) (
 // ValidatePermissionGrantRequestBody runs the validations defined on
 // PermissionGrant
 func ValidatePermissionGrantRequestBody(body *PermissionGrantRequestBody) (err error) {
-	if body.DepartmentIds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentIds", "body"))
-	}
 	if utf8.RuneCountInString(body.Permission) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.permission", body.Permission, utf8.RuneCountInString(body.Permission), 1, true))
 	}
@@ -3279,11 +4845,8 @@ func ValidatePermissionGrantRequestBody(body *PermissionGrantRequestBody) (err e
 	if !(body.Effect == "allow" || body.Effect == "deny") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", body.Effect, []any{"allow", "deny"}))
 	}
-	if !(body.Scope == "ALL" || body.Scope == "ORGANIZATION" || body.Scope == "DEPARTMENT" || body.Scope == "DEPARTMENT_TREE" || body.Scope == "OWN" || body.Scope == "CUSTOM") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"ALL", "ORGANIZATION", "DEPARTMENT", "DEPARTMENT_TREE", "OWN", "CUSTOM"}))
-	}
-	if len(body.DepartmentIds) > 200 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.departmentIds", body.DepartmentIds, len(body.DepartmentIds), 200, false))
+	if !(body.Scope == "ALL" || body.Scope == "OWN") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"ALL", "OWN"}))
 	}
 	return
 }
@@ -3291,9 +4854,6 @@ func ValidatePermissionGrantRequestBody(body *PermissionGrantRequestBody) (err e
 // validatePermissionGrantRequestBody checks PermissionGrant and reports errors
 // using the path supplied by its caller
 func validatePermissionGrantRequestBody(body *PermissionGrantRequestBody, path string) (err error) {
-	if body.DepartmentIds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentIds", path))
-	}
 	if utf8.RuneCountInString(body.Permission) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".permission", body.Permission, utf8.RuneCountInString(body.Permission), 1, true))
 	}
@@ -3303,11 +4863,8 @@ func validatePermissionGrantRequestBody(body *PermissionGrantRequestBody, path s
 	if !(body.Effect == "allow" || body.Effect == "deny") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".effect", body.Effect, []any{"allow", "deny"}))
 	}
-	if !(body.Scope == "ALL" || body.Scope == "ORGANIZATION" || body.Scope == "DEPARTMENT" || body.Scope == "DEPARTMENT_TREE" || body.Scope == "OWN" || body.Scope == "CUSTOM") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".scope", body.Scope, []any{"ALL", "ORGANIZATION", "DEPARTMENT", "DEPARTMENT_TREE", "OWN", "CUSTOM"}))
-	}
-	if len(body.DepartmentIds) > 200 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".departmentIds", body.DepartmentIds, len(body.DepartmentIds), 200, false))
+	if !(body.Scope == "ALL" || body.Scope == "OWN") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".scope", body.Scope, []any{"ALL", "OWN"}))
 	}
 	return
 }

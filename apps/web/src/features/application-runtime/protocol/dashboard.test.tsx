@@ -21,11 +21,11 @@ vi.mock("@/lib/capabilities", async (original) => ({
   runtimeRead: api.read,
 }));
 
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant",
     account: { id: 1, fullName: "Alice Chen" },
-    activeDepartmentId: 2,
+
     permissions: api.permissions,
   }),
 }));

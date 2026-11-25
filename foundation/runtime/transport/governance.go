@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	assistantservice "horizon/foundation/ai/assistant"
+	"horizon/foundation/ai/automation"
 	"horizon/foundation/ai/harness"
 	"horizon/foundation/ai/knowledge"
 	"horizon/foundation/ai/triggers"
@@ -77,7 +78,8 @@ func mountGovernance(mux goahttp.Muxer, core *governance.Core, registration app.
 		}
 	}
 	runtimeModule := &applicationruntime.Module{}
-	entries := (app.CapabilityModules{Runtime: runtimeModule, Registration: registration, Core: core, MCP: mcpService, Orchestration: orchestrator, Documents: documents, Knowledge: knowledgeService, Memory: memoryModule}).Entries()
+	automationModule := &automation.Module{Pool: core.Pool, Core: core}
+	entries := (app.CapabilityModules{Runtime: runtimeModule, Automation: automationModule, Registration: registration, Core: core, MCP: mcpService, Orchestration: orchestrator, Documents: documents, Knowledge: knowledgeService, Memory: memoryModule}).Entries()
 	catalog := registry.New(entries)
 	if err := catalog.Err(); err != nil {
 		panic("capability catalog is invalid: " + err.Error())
@@ -85,6 +87,12 @@ func mountGovernance(mux goahttp.Muxer, core *governance.Core, registration app.
 	catalog.RegisterEntities(app.EntitiesWithRegistration(registration))
 	if err := catalog.Err(); err != nil {
 		panic("invalid entity declarations: " + strings.Join(catalog.EntityProblems(), "; "))
+	}
+	core.Identity.BindAuthorizationCatalog(catalog)
+	for resource, provider := range registration.ResourceAttributes {
+		if err := core.Identity.RegisterResourceAttributeProvider(resource, provider); err != nil {
+			panic("invalid authorization resource attribute registration: " + resource)
+		}
 	}
 
 	for _, definition := range catalog.All() {
@@ -96,6 +104,7 @@ func mountGovernance(mux goahttp.Muxer, core *governance.Core, registration app.
 		Registry: catalog, Identity: core.Identity, Pool: core.Pool, RuntimeCheck: runtimeModule.ValidateInvocation,
 		Approvals: approvals, ApprovalCipher: core, Audit: auditStore, Events: events, Observations: observer,
 	})
+	automationModule.Gateway = dispatcher
 	for _, attach := range registration.AttachGateway {
 		attach(dispatcher)
 	}
@@ -144,6 +153,10 @@ func mountGovernance(mux goahttp.Muxer, core *governance.Core, registration app.
 	runtimeModule.Invoke = func(ctx context.Context, name, version string, input contracts.Input, key string) (*contracts.Result, error) {
 		return dispatcher.Invoke(ctx, gateway.Request{Name: name, Version: version, Input: input, IdempotencyKey: key})
 	}
+	if plugins != nil {
+		core.Identity.AttachBindingProviders(plugins.Catalog.IdentityTypes, runtimeModule.Invoke)
+		hub.Subscribe(core.Identity.RevokeBindingsForEvent)
+	}
 	if err := runtimeModule.Reconcile(context.Background(), dispatcher); err != nil {
 		panic(err)
 	}
@@ -188,6 +201,10 @@ func mountGovernance(mux goahttp.Muxer, core *governance.Core, registration app.
 			}
 			go orchestrator.Run(ctx)
 			go relay.Run(ctx)
+			go core.Identity.RunBindingReconciliation(ctx)
+			go core.Identity.RunAccessReviews(ctx, func(ctx context.Context, name, version string, input contracts.Input, key string) (*contracts.Result, error) {
+				return dispatcher.Invoke(ctx, gateway.Request{Name: name, Version: version, Input: input, IdempotencyKey: key, Origin: contracts.OriginEvent})
+			})
 			go memoryConsumer.Run(ctx)
 		})
 	}

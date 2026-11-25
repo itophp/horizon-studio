@@ -133,34 +133,6 @@ body {
   margin-left: auto;
   color: var(--app-muted);
 }
-.sidebar-workspace {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 10px;
-  background: var(--app-subtle);
-  border: 1px solid var(--app-line);
-  border-radius: 7px;
-  font-size: 10px;
-  color: var(--app-muted);
-  margin: 0 2px 20px;
-}
-.sidebar-workspace > span:nth-child(2) {
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
-}
-.sidebar-workspace > svg {
-  margin-left: auto;
-  flex-shrink: 0;
-}
-.workspace-indicator {
-  height: 6px;
-  width: 6px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--app-green);
-}
 .console-nav {
   display: flex;
   flex-direction: column;
@@ -242,7 +214,7 @@ body {
 .sidebar-guide > svg:last-child {
   margin-left: auto;
 }
-.workspace-security {
+.sidebar-security {
   display: flex;
   gap: 9px;
   border: 1px solid var(--app-line);
@@ -252,17 +224,17 @@ body {
   background: linear-gradient(135deg, var(--app-panel), var(--app-subtle));
   color: var(--app-muted);
 }
-.workspace-security > svg {
+.sidebar-security > svg {
   flex-shrink: 0;
   margin-top: 1px;
 }
-.workspace-security strong {
+.sidebar-security strong {
   display: block;
   font-size: 11px;
   color: var(--app-ink);
   font-weight: 500;
 }
-.workspace-security small {
+.sidebar-security small {
   font-size: 9px;
   line-height: 1.7;
   display: block;
@@ -475,6 +447,9 @@ body {
   overflow-y: auto;
   overscroll-behavior-y: contain;
 }
+:root:not(.dark) :is(.console-topbar, .console-content, .console-footer) {
+  background-color: var(--app-panel);
+}
 .admin-page-heading {
   display: flex;
   align-items: center;
@@ -670,12 +645,14 @@ body {
   color: var(--app-muted);
   cursor: pointer;
 }
+.overview-tabs.runtime-tabs-wrap,
 .ai-settings-page .overview-tabs {
   max-width: 100%;
   height: auto;
   flex-wrap: wrap;
   justify-content: flex-start;
 }
+.overview-tabs.runtime-tabs-wrap > button,
 .ai-settings-page .overview-tabs > button {
   flex: 0 0 auto;
 }
@@ -2186,11 +2163,10 @@ body {
 }
 .navigation-collapsed .console-brand > div,
 .navigation-collapsed .console-brand > svg:last-child,
-.navigation-collapsed .sidebar-workspace,
 .navigation-collapsed .console-nav a > span,
 .navigation-collapsed .console-nav a > small,
 .navigation-collapsed .console-nav a > svg:last-child:not(:first-child),
-.navigation-collapsed .workspace-security,
+.navigation-collapsed .sidebar-security,
 .navigation-collapsed .sidebar-guide > span,
 .navigation-collapsed .sidebar-guide > svg:last-child,
 .navigation-collapsed .sidebar-profile > span:nth-child(2),
@@ -2797,11 +2773,10 @@ body {
   }
   .console-sidebar .console-brand > div,
   .console-sidebar .console-brand > svg:last-child,
-  .sidebar-workspace,
   .console-nav a > span,
   .console-nav a > small,
   .console-nav a > svg:last-child:not(:first-child),
-  .workspace-security,
+  .sidebar-security,
   .sidebar-guide > span,
   .sidebar-guide > svg:last-child,
   .sidebar-profile > span:nth-child(2),
@@ -3319,20 +3294,6 @@ body {
   flex: 1;
   min-width: 180px;
 }
-.sidebar-workspace select {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  outline-offset: 4px;
-}
-.sidebar-workspace option {
-  background: var(--app-sidebar);
-  color: var(--app-ink);
-}
-
 /* Governance pages reuse the administration surface and form tokens. */
 .gov-toolbar,
 .gov-line,

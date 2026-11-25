@@ -38,7 +38,7 @@ func TestMemoryRetentionPolicyRequiresPermissionAndVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := h.iam.PrincipalForTask(context.Background(), "tenant-b", foreignAccount.ID, foreignAccount.DepartmentID)
+	p, err := h.iam.PrincipalForTask(context.Background(), "tenant-b", foreignAccount.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

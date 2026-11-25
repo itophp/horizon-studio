@@ -6,7 +6,7 @@ import { filesContent, notificationsAttachment } from "@/lib/capabilities";
 import type { NotificationAttachment } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { useGovKey, useGovTask, downloadContent } from "./shared";
-import { ErrorBanner } from "@/features/administration/shared";
+import { ErrorBanner } from "@/features/identity/shared";
 const fileID = (url: string) => /^file:([1-9]\d*)$/.exec(url)?.[1];
 function content(id: number, messageId?: number) {
   return messageId ? notificationsAttachment(messageId, id) : filesContent(id);

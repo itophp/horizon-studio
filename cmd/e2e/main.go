@@ -4,13 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"horizon/deployment"
-	"horizon/foundation/runtime/config"
-	"horizon/foundation/runtime/server"
-	"horizon/foundation/system/governance"
-	"horizon/foundation/system/identity"
 	"log"
 	"log/slog"
 	"net/url"
@@ -18,6 +11,15 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"horizon/deployment"
+	"horizon/deployment/database"
+	"horizon/foundation/runtime/config"
+	"horizon/foundation/runtime/server"
+	"horizon/foundation/system/governance"
+	"horizon/foundation/system/identity"
 )
 
 func run() error {
@@ -52,16 +54,14 @@ func run() error {
 	query.Set("search_path", schema+",public")
 	parsed.RawQuery = query.Encode()
 	dsn := parsed.String()
-	if err = identity.Migrate(ctx, dsn); err != nil {
-		return err
-	}
-	pool, err := pgxpool.New(ctx, dsn)
+	// These credentials exist only inside an isolated, disposable test schema.
+	passwordHash, err := identity.HashPassword("TestOnly!2026Secure")
 	if err != nil {
 		return err
 	}
-	defer pool.Close()
-	// These credentials exist only inside an isolated, disposable test schema.
-	if _, err = identity.Bootstrap(ctx, pool, "e2e-workspace", "admin", "TestOnly!2026Secure"); err != nil {
+	if _, err := database.Initialize(ctx, dsn, database.Options{
+		Tenant: "e2e-workspace", Username: "admin", PasswordHash: passwordHash,
+	}); err != nil {
 		return err
 	}
 	address := os.Getenv("API_ADDR")

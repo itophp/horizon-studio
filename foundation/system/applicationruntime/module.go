@@ -59,6 +59,7 @@ func (m *Module) Entries() []registry.Entry {
 			required = append(required, "pageId")
 		}
 		d := contracts.Definition{Name: name, Version: "1.0.0", Title: name, Description: "Authorized runtime definition projection; contains no business records.", Domain: "runtime", Entity: primary, Entities: entities, Layer: contracts.LayerAtomic, Risk: contracts.RiskLow, Approval: contracts.ApprovalAuto, ReadOnly: true, TransientResult: true, Executor: "go:" + name, Input: contracts.Object(props, required...), Output: ar.Schema(ar.ApplicationV2{})}
+		d.Tags = append(d.Tags, contracts.OrganizationScopedTag)
 		if name == "application.runtime.page.resolve" {
 			d.Output = ar.Schema(ar.PageV3{})
 		}
@@ -103,6 +104,9 @@ func (m *Module) Entries() []registry.Entry {
 					continue
 				}
 				app.Protocol = m.projectProtocol(*app.Protocol, p)
+				if p.ActingOrganization.OrganizationID != 0 && len(app.Protocol.Pages) == 0 {
+					continue
+				}
 				app.Navigation = app.Protocol.Navigation
 				app.Pages = []ar.PageV2{}
 				app.Providers = []ar.Provider{}

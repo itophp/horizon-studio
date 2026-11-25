@@ -26,6 +26,7 @@ import (
 	"horizon/foundation/kernel/eventhub"
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
+	"horizon/internal/repository/dbgen"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -67,7 +68,7 @@ func newProjectHarness(t *testing.T) *projectHarness {
 	plugins.AttachCapabilities(func(ctx context.Context, name, version string, input contracts.Input, key string) (*contracts.Result, error) {
 		return g.Invoke(ctx, gateway.Request{Name: name, Version: version, Input: input, IdempotencyKey: key})
 	})
-	root, err := iam.PrincipalForTask(context.Background(), "tenant-a", rootAccount.ID, rootAccount.DepartmentID)
+	root, err := iam.PrincipalForTask(context.Background(), "tenant-a", rootAccount.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,11 +105,11 @@ func (h *projectHarness) callWith(t *testing.T, actor projectActor, name string,
 // so the fixture writes the row directly instead of driving identity.account.create.
 func (h *projectHarness) account(t *testing.T, username string, permissions ...string) projectActor {
 	t.Helper()
-	var id int64
-	if err := h.pool.QueryRow(context.Background(),
-		`INSERT INTO iam_accounts(tenant_id,username,full_name,email,password_hash,status,organization_id,department_id,overrides)
-		 VALUES('tenant-a',$1,$1,'','not-a-real-hash','active',$2,$3,'[]') RETURNING id`,
-		username, h.rootAccount.OrganizationID, h.rootAccount.DepartmentID).Scan(&id); err != nil {
+	id, err := dbgen.New(h.pool).IAMCreateAccount(context.Background(), dbgen.IAMCreateAccountParams{
+		TenantID: "tenant-a", Username: username, PasswordHash: "not-a-real-hash",
+		Status: "active",
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	grants := make([]*genidentity.PermissionGrant, 0, len(permissions))
@@ -116,20 +117,8 @@ func (h *projectHarness) account(t *testing.T, username string, permissions ...s
 		grants = append(grants, &genidentity.PermissionGrant{Permission: permission, Effect: "allow", Scope: "ALL"})
 	}
 
-	// Invocation refreshes trusted authority; persist the fixture grants rather than
-	// depending on a synthetic in-memory principal that would bypass revocation.
-	encoded, err := json.Marshal(grants)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = h.pool.Exec(context.Background(), "UPDATE iam_accounts SET overrides=$2 WHERE id=$1", id, encoded); err != nil {
-		t.Fatal(err)
-	}
-	record := &genidentity.AccountRecord{
-		ID: id, Username: username, FullName: username,
-		Status: "active", OrganizationID: h.rootAccount.OrganizationID, DepartmentID: h.rootAccount.DepartmentID,
-	}
-	principal, err := h.iam.NewPrincipal(record, "tenant-a", grants)
+	seedTenantRole(t, h.pool, "tenant-a", username, h.rootAccount.ID, id, grants)
+	principal, err := h.iam.PrincipalForTask(t.Context(), "tenant-a", id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -544,7 +533,7 @@ func TestProjectImportIsAtomicAndIdempotent(t *testing.T) {
 
 func TestProjectImportRuntimeParsesSelectedWorkbookAndCommitsDraft(t *testing.T) {
 	handler, pool, _ := iamFixture(t)
-	client := loginIAM(t, handler, "root-admin")
+	client := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	const plugin = "com.horizon.projects"
 	invoke := func(name string, input map[string]any) map[string]any {
 		t.Helper()

@@ -12,15 +12,14 @@ import (
 )
 
 const driveAdminCandidates = `-- name: DriveAdminCandidates :many
-SELECT a.id AS account_id,a.department_id FROM iam_accounts a
-JOIN iam_departments d ON d.tenant_id=a.tenant_id AND d.id=a.department_id AND d.status='active'
-JOIN drive_members m ON m.tenant_id=a.tenant_id AND m.space_id=$1 AND m.role='admin'
- AND (m.account_id=a.id OR m.department_id=a.department_id)
-WHERE a.tenant_id=$2 AND a.status='active'
+SELECT a.id AS account_id, 0::bigint AS department_id FROM iam_accounts a
+JOIN drive_members m ON m.tenant_id = a.tenant_id AND m.space_id = $1
+    AND m.account_id = a.id AND m.role = 'admin'
+WHERE a.tenant_id = $2 AND a.status = 'active'
 UNION
 SELECT a.id AS account_id,dm.department_id FROM iam_accounts a
-JOIN iam_department_memberships dm ON dm.tenant_id=a.tenant_id AND dm.account_id=a.id
-JOIN iam_departments d ON d.tenant_id=dm.tenant_id AND d.id=dm.department_id AND d.status='active'
+JOIN identity_department_memberships dm ON dm.tenant_id=a.tenant_id AND dm.account_id=a.id
+JOIN identity_departments d ON d.tenant_id=dm.tenant_id AND d.id=dm.department_id AND d.status='active'
 JOIN drive_members m ON m.tenant_id=a.tenant_id AND m.space_id=$1 AND m.role='admin'
  AND (m.account_id=a.id OR m.department_id=dm.department_id)
 WHERE a.tenant_id=$2 AND a.status='active'
@@ -827,7 +826,7 @@ func (q *Queries) DriveMemberAddAccount(ctx context.Context, arg DriveMemberAddA
 const driveMemberAddDepartment = `-- name: DriveMemberAddDepartment :one
 INSERT INTO drive_members(tenant_id,space_id,department_id,role)
 SELECT $1,$2,d.id,$3
-FROM iam_departments d
+FROM identity_departments d
 WHERE d.tenant_id=$1 AND d.id=$4 AND d.status='active'
 RETURNING id
 `

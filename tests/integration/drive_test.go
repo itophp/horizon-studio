@@ -319,7 +319,7 @@ func TestDriveCrossTenantDirectIDs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	principal, err := h.iam.PrincipalForTask(context.Background(), "tenant-b", account.ID, account.DepartmentID)
+	principal, err := h.iam.PrincipalForTask(context.Background(), "tenant-b", account.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

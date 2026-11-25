@@ -48,7 +48,7 @@ func TestGroupMemoryUsesFormalReadAndWriteScopes(t *testing.T) {
 	}
 	actor := projectActor{name: base.name, id: base.id, ctx: identity.WithPrincipal(context.Background(), p)}
 	var otherDept int64
-	err = h.pool.QueryRow(context.Background(), `INSERT INTO iam_departments(tenant_id,organization_id,name,code,status) VALUES('tenant-a',$1,'Other','OTHER-MEM','active') RETURNING id`, account.OrganizationID).Scan(&otherDept)
+	err = h.pool.QueryRow(context.Background(), `INSERT INTO identity_departments(tenant_id,organization_id,name,code,status) VALUES('tenant-a',$1,'Other','OTHER-MEM','active') RETURNING id`, account.OrganizationID).Scan(&otherDept)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestGroupMemoryUsesFormalReadAndWriteScopes(t *testing.T) {
 	if _, err = contender.Exec(context.Background(), `SET LOCAL lock_timeout='200ms'`); err != nil {
 		t.Fatal(err)
 	}
-	_, err = contender.Exec(context.Background(), `UPDATE iam_departments SET name='Concurrent' WHERE tenant_id='tenant-a' AND id=$1`, account.DepartmentID)
+	_, err = contender.Exec(context.Background(), `UPDATE identity_departments SET name='Concurrent' WHERE tenant_id='tenant-a' AND id=$1`, account.DepartmentID)
 	var lockError *pgconn.PgError
 	if !errors.As(err, &lockError) || lockError.Code != "55P03" {
 		t.Fatalf("department mutation was not blocked: %v", err)
@@ -149,7 +149,7 @@ func TestGroupMemoryUsesFormalReadAndWriteScopes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	foreignPrincipal, err := h.iam.PrincipalForTask(context.Background(), "tenant-b", foreignAccount.ID, foreignAccount.DepartmentID)
+	foreignPrincipal, err := h.iam.PrincipalForTask(context.Background(), "tenant-b", foreignAccount.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

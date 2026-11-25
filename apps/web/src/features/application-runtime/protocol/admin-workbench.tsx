@@ -1,3 +1,5 @@
+import { RoleChangePreview } from "@/features/identity/role-change-preview";
+import type { IdentityRolePreviewOutput } from "@/api/generated/capability-identity";
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -43,17 +45,20 @@ import {
   SuccessNotice,
   ScopeLabel,
   type AdminColumn,
-} from "@/features/administration/shared";
-import { useSession } from "@/features/administration/auth";
+} from "@/features/identity/shared";
+import { useSession } from "@/features/identity/auth";
 import { useConfiguration } from "@/features/governance/runtime";
-import { PermissionMatrix } from "@/features/administration/permission-matrix";
+import { PermissionMatrix } from "@/features/identity/permission-matrix";
 import { Checkbox } from "@/components/ui/checkbox";
 import type {
-  DepartmentRecord,
   PermissionDefinition,
   PermissionGrant,
 } from "@/api/generated/models";
-import { runtimeExecute, runtimeRead } from "@/lib/capabilities";
+import {
+  previewIdentityRole,
+  runtimeExecute,
+  runtimeRead,
+} from "@/lib/capabilities";
 import { ApiError } from "@/api/client/request";
 import { RegisteredControl } from "../components";
 import { MarkdownDisplay } from "../markdown";
@@ -520,7 +525,7 @@ export function TablePanelComponent({
                         column.languageFields?.[i18n.resolvedLanguage ?? ""] ??
                           column.name
                       ] || row[column.name],
-                    )}
+                    ) || (column.emptyKey ? t(column.emptyKey) : "")}
                   </strong>
                   {column.subtitleField && (
                     <small>{text(row[column.subtitleField])}</small>
@@ -1472,7 +1477,7 @@ export function RecordFormPanelComponent({
 type WorkbenchAction = {
   labelKey: string;
   icon?: string;
-  mode: "view" | "edit" | "access" | "delete" | "event";
+  mode: "view" | "edit" | "access" | "delete" | "event" | "copy";
   event?: string;
   permission?: string;
   requirePermissions?: string[];
@@ -1960,7 +1965,7 @@ export function CardGridPanelComponent({
   const actionConfig = (props.rowActions as WorkbenchAction[]) ?? [];
   const dialog = params.get("dialog");
   const dialogMode =
-    dialog && ["create", "edit", "access", "view"].includes(dialog)
+    dialog && ["create", "edit", "access", "view", "copy"].includes(dialog)
       ? dialog
       : undefined;
   const dialogId = Number(params.get("id")) || 0;
@@ -2464,6 +2469,10 @@ function ProtocolRecordForm({
   );
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const [rolePreview, setRolePreview] = useState<{
+    input: string;
+    result: IdentityRolePreviewOutput;
+  }>();
   const [notice, setNotice] = useState("");
   const [appliedRevisions, setAppliedRevisions] = useState<
     Record<string, number>
@@ -2668,10 +2677,21 @@ function ProtocolRecordForm({
         selection: { ids: [] },
         context: { accountId: session.account.id },
       });
+      const submission = { ...input };
+      if (command.capability.name === "identity.role.update") {
+        const signature = JSON.stringify(input);
+        if (rolePreview?.input !== signature) {
+          setRolePreview(undefined);
+          const preview = await previewIdentityRole(input);
+          setRolePreview({ input: signature, result: preview.data });
+          return;
+        }
+        submission.revision = rolePreview.result.revision;
+      }
       const result = await runtimeExecute(
         command.capability.name,
         command.capability.version,
-        input,
+        submission,
         crypto.randomUUID(),
         runtime.correlationId,
         runtime.invocation,
@@ -2686,6 +2706,7 @@ function ProtocolRecordForm({
       onSaved?.();
       onClose?.();
     } catch (cause) {
+      setRolePreview(undefined);
       setError(cause);
     } finally {
       setBusy(false);
@@ -2825,14 +2846,6 @@ function ProtocolRecordForm({
                           ),
                         ) as unknown as PermissionDefinition[]
                       }
-                      departments={
-                        records(
-                          pathValue(
-                            optionsData,
-                            formPaths.departments ?? "departments",
-                          ),
-                        ) as unknown as DepartmentRecord[]
-                      }
                       grants={(controlled.value as PermissionGrant[]) ?? []}
                       disabled={isFieldDisabled(field)}
                       onChange={controlled.onChange}
@@ -2900,8 +2913,17 @@ function ProtocolRecordForm({
             {t("admin:actions.cancel")}
           </Button>
         )}
+        {rolePreview && <RoleChangePreview result={rolePreview.result} />}
         <Button type="submit" disabled={busy || readOnly || mode === "view"}>
-          {busy ? t("admin:actions.saving") : t("admin:actions.save")}
+          {busy
+            ? t("admin:actions.saving")
+            : command.capability.name === "identity.role.update"
+              ? t(
+                  rolePreview
+                    ? "admin:roleReview.apply"
+                    : "admin:roleReview.preview",
+                )
+              : t("admin:actions.save")}
         </Button>
       </div>
     </form>
@@ -2940,9 +2962,6 @@ function MembershipEditor({
   const catalog = records(
     snapshot?.catalog,
   ) as unknown as PermissionDefinition[];
-  const matrixDepartments = records(
-    snapshot?.departments,
-  ) as unknown as DepartmentRecord[];
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [additionalDepartment, setAdditionalDepartment] = useState(0);
   const primaryDepartment = Number(form.getValues("departmentId") ?? 0);
@@ -3143,9 +3162,7 @@ function MembershipEditor({
                       {t("admin:roles.permissions", { count: grants.length })}
                     </small>
                   </span>
-                  <ScopeLabel
-                    scope={String(grants[0]?.scope ?? "DEPARTMENT")}
-                  />
+                  <ScopeLabel scope={String(grants[0]?.scope ?? "OWN")} />
                 </label>
               );
             })}
@@ -3162,7 +3179,6 @@ function MembershipEditor({
           <PermissionMatrix
             key={String(selectedMembership?.departmentId ?? primaryDepartment)}
             catalog={catalog}
-            departments={matrixDepartments}
             grants={overrides}
             account
             disabled={!canGrant}

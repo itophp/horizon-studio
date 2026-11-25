@@ -18,7 +18,7 @@ import type { AssistantTool, AssistantReply } from "@/api/generated/models";
 import { getPageReference } from "@/features/application-runtime/semantic-store";
 import { ApiError } from "@/api/client/request";
 import { useWebMcp } from "@/features/webmcp/provider";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   readConversation,
   rememberConversation,
@@ -82,7 +82,7 @@ function toolText(result: { content?: unknown; isError?: boolean }) {
 
 export function AssistantProvider({ children }: PropsWithChildren) {
   const session = useSession();
-  const identityKey = `${session.tenantId}:${session.account?.id}:${session.activeDepartmentId}:${session.authorizationVersion ?? ""}`;
+  const identityKey = `${session.tenantId}:${session.account?.id}:${session.identityBindingId}:${session.authorizationVersion ?? ""}`;
   return (
     <ScopedAssistantProvider key={identityKey} identityKey={identityKey}>
       {children}

@@ -29,10 +29,10 @@ vi.mock("@/lib/capabilities", async (original) => ({
   knowledgeReindex: api.reindex,
 }));
 
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant-a",
-    activeDepartmentId: 1,
+
     permissions: api.permissions,
     account: { id: 4, fullName: "Ada", memberships: [] },
   }),

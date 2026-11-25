@@ -59,6 +59,7 @@ func Code(err error) string {
 type Options struct {
 	KnowledgeRedisURL                       string
 	EncryptionKey                           []byte
+	AuditSigningSeed                        []byte
 	StorageRoot, PublicWorkspace, PublicURL string
 	SMTPHosts                               []string
 	AllowTestSMTP                           bool
@@ -190,7 +191,7 @@ func (c *Core) ResolveWith(ctx context.Context, q *dbgen.Queries, tenant, kind s
 		}
 		t.OrgID = d.OrganizationID
 	case "account":
-		if _, err := q.IAMGetAccount(ctx, dbgen.IAMGetAccountParams{TenantID: tenant, ID: id, AllData: true}); err != nil {
+		if _, err := q.IAMGetAuthorityAccount(ctx, dbgen.IAMGetAuthorityAccountParams{TenantID: tenant, ID: id}); err != nil {
 			return t, err
 		}
 	default:
@@ -373,7 +374,7 @@ func (c *Core) Consume(ctx context.Context, q *dbgen.Queries, p *identity.Princi
 	if proof == "" {
 		return Problem("forbidden")
 	}
-	_, err := q.GovConsumeProof(ctx, dbgen.GovConsumeProofParams{TenantID: p.TenantID, TokenHash: Hash(proof), SessionHash: p.TokenHash, DepartmentID: p.Account.DepartmentID, Operation: operation, ResourceID: id, Revision: revision})
+	_, err := q.GovConsumeProof(ctx, dbgen.GovConsumeProofParams{TenantID: p.TenantID, TokenHash: Hash(proof), SessionHash: p.TokenHash, ExpectedCsrf: p.CSRF, Operation: operation, ResourceID: id, Revision: revision})
 	if err != nil {
 		return Problem("forbidden")
 	}

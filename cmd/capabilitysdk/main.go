@@ -157,4 +157,31 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	var identity strings.Builder
+	identity.WriteString("// Code generated from identity capability definitions. DO NOT EDIT.\n\n")
+	for _, entry := range entries {
+		d := entry.Definition
+		if strings.HasPrefix(d.Name, "identity.") {
+			fmt.Fprintf(&identity, "export type %sInput = %s;\n", nameOf(d.Name), tsType(d.Input))
+			fmt.Fprintf(&identity, "export type %sOutput = %s;\n\n", nameOf(d.Name), tsType(d.Output))
+		}
+	}
+	if err := os.WriteFile("../apps/web/src/api/generated/capability-identity.ts", []byte(identity.String()), 0644); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	var mail strings.Builder
+	mail.WriteString("// Code generated from Mail analysis capability definitions. DO NOT EDIT.\n\n")
+	for _, entry := range entries {
+		d := entry.Definition
+		if d.Name == "mail.inbox.recommend" || d.Name == "mail.message.analyze" || d.Name == "mail.message.translate" {
+			fmt.Fprintf(&mail, "export type %sInput = %s;\n", nameOf(d.Name), tsType(d.Input))
+			fmt.Fprintf(&mail, "export type %sOutput = %s;\n\n", nameOf(d.Name), tsType(d.Output))
+		}
+	}
+	if err := os.WriteFile("../apps/web/src/api/generated/capability-mail.ts", []byte(mail.String()), 0644); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }

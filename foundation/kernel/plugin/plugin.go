@@ -34,14 +34,23 @@ type Manifest struct {
 	Installation string `json:"installation,omitempty" yaml:"installation,omitempty"`
 	// Managed marks the contributed application as deployment-baseline
 	// managed: every tenant receives it and tenant lifecycle stays forbidden.
-	Managed      bool         `json:"managed,omitempty" yaml:"managed,omitempty"`
-	Dependencies []Dependency `json:"dependencies,omitempty" yaml:"dependencies,omitempty"`
-	Extensions   []string     `json:"extensions" yaml:"extensions"`
-	Permissions  []Permission `json:"permissions,omitempty" yaml:"permissions,omitempty"`
-	FilePurposes []string     `json:"filePurposes,omitempty" yaml:"filePurposes,omitempty"`
+	Managed       bool               `json:"managed,omitempty" yaml:"managed,omitempty"`
+	Dependencies  []Dependency       `json:"dependencies,omitempty" yaml:"dependencies,omitempty"`
+	Extensions    []string           `json:"extensions" yaml:"extensions"`
+	Permissions   []Permission       `json:"permissions,omitempty" yaml:"permissions,omitempty"`
+	FilePurposes  []string           `json:"filePurposes,omitempty" yaml:"filePurposes,omitempty"`
+	IdentityTypes []IdentityType     `json:"identityTypes,omitempty" yaml:"identityTypes,omitempty"`
+	SignIn        *ApplicationSignIn `json:"signIn,omitempty" yaml:"signIn,omitempty"`
 	// Settings declares configuration keys owned by the plugin's business
 	// domain. Keys must be prefixed by one of the declared permission modules.
 	Settings []Setting `json:"settings,omitempty" yaml:"settings,omitempty"`
+}
+
+// ApplicationSignIn declares an application's public credential entry.
+type ApplicationSignIn struct {
+	ID        string `json:"id" yaml:"id"`
+	Namespace string `json:"namespace" yaml:"namespace"`
+	Default   bool   `json:"default,omitempty" yaml:"default,omitempty"`
 }
 
 // Setting describes a configuration key contributed by a plugin. The value
@@ -101,6 +110,19 @@ type Permission struct {
 	TemporaryEligible bool   `json:"temporaryEligible" yaml:"temporaryEligible"`
 }
 
+type IdentityType struct {
+	Code                string `json:"code" yaml:"code"`
+	Version             string `json:"version" yaml:"version"`
+	Verify              string `json:"verify" yaml:"verify"`
+	VerifyVersion       string `json:"verifyVersion" yaml:"verifyVersion"`
+	RevocationEvent     string `json:"revocationEvent" yaml:"revocationEvent"`
+	DisplayName         string `json:"displayName,omitempty" yaml:"displayName,omitempty"`
+	SubjectScope        string `json:"subjectScope,omitempty" yaml:"subjectScope,omitempty"`
+	ReviewRequired      bool   `json:"reviewRequired,omitempty" yaml:"reviewRequired,omitempty"`
+	ValidForMinutes     int    `json:"validForMinutes,omitempty" yaml:"validForMinutes,omitempty"`
+	OrganizationContext bool   `json:"organizationContext,omitempty" yaml:"organizationContext,omitempty"`
+}
+
 type Extension struct{ PluginID, PluginVersion, Type, Name, Version string }
 type Registrar struct {
 	applications []ar.ApplicationV2
@@ -139,11 +161,12 @@ func (r *Registrar) references(kind string, names []string) {
 }
 
 type Catalog struct {
-	Applications []ar.ApplicationV2
-	Entries      []registry.Entry
-	Entities     []contracts.Entity
-	Permissions  []Permission
-	Extensions   []Extension
+	Applications  []ar.ApplicationV2
+	Entries       []registry.Entry
+	Entities      []contracts.Entity
+	Permissions   []Permission
+	IdentityTypes []IdentityType
+	Extensions    []Extension
 	// FilePurposes lists plugin-declared file purposes merged at startup.
 	FilePurposes []string
 	// Managed lists installation keys of deployment-baseline-managed packages.
@@ -250,7 +273,7 @@ func (m *Manager) Register(ctx context.Context) error {
 		r := &Registrar{manifest: p.Manifest()}
 		allowed := map[string]bool{}
 		for _, kind := range r.manifest.Extensions {
-			if kind != "capability" && kind != "entity" && kind != "permission" && kind != "event" && kind != "application" && kind != "file-purpose" && kind != "settings" {
+			if kind != "capability" && kind != "entity" && kind != "permission" && kind != "event" && kind != "application" && kind != "file-purpose" && kind != "settings" && kind != "identity-type" {
 				return fmt.Errorf("unknown extension type %q", kind)
 			}
 			if allowed[kind] {
@@ -270,6 +293,19 @@ func (m *Manager) Register(ctx context.Context) error {
 		}
 		if err := p.Register(ctx, r); err != nil {
 			return fmt.Errorf("register plugin %s: %w", p.Manifest().ID, err)
+		}
+		identityTypes, err := r.identityTypes()
+		if err != nil {
+			return err
+		}
+		for _, identityType := range identityTypes {
+			key := "identity-type:" + identityType.Code + "@" + identityType.Version
+			if seen[key] {
+				return fmt.Errorf("duplicate identity type %s", key)
+			}
+			seen[key] = true
+			staged.IdentityTypes = append(staged.IdentityTypes, identityType)
+			staged.Extensions = append(staged.Extensions, Extension{r.manifest.ID, r.manifest.Version, "identity-type", identityType.Code, identityType.Version})
 		}
 		for _, e := range r.extensions {
 			if !allowed[e.Type] {
@@ -294,7 +330,7 @@ func (m *Manager) Register(ctx context.Context) error {
 			if err := entry.Definition.Normalized().Validate(); err != nil {
 				return fmt.Errorf("plugin %s capability %s@%s: %w", r.manifest.ID, entry.Definition.Name, entry.Definition.Version, err)
 			}
-			if (entry.Handler.Execute == nil) == (entry.Handler.ExecuteTx == nil) {
+			if !entry.Handler.Matches(entry.Definition) {
 				return fmt.Errorf("plugin %s capability %s must have exactly one executor", r.manifest.ID, entry.Definition.Name)
 			}
 		}

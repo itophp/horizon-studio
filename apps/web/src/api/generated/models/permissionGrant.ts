@@ -9,8 +9,6 @@ import type { PermissionGrantEffect } from "./permissionGrantEffect";
 import type { PermissionGrantScope } from "./permissionGrantScope";
 
 export interface PermissionGrant {
-  /** @maxItems 200 */
-  departmentIds: number[];
   effect: PermissionGrantEffect;
   /**
    * @minLength 1

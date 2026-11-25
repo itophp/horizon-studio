@@ -1,11 +1,20 @@
 import { expect, it } from "vitest";
-import { defaultWorkspacePath } from "./router";
+import { defaultLandingPath } from "./router";
+import { sessionLandingPath } from "@/features/identity/session-navigation";
 
 it("lands on the AI workbench when the account holds the agent grant", () => {
-  expect(defaultWorkspacePath(["assistant:use", "accounts:read"])).toBe("/ai");
+  expect(defaultLandingPath(["assistant:use", "accounts:read"])).toBe("/ai");
 });
 
 it("falls back to statistics instead of a workbench it may not open", () => {
-  expect(defaultWorkspacePath([])).toBe("/analytics");
-  expect(defaultWorkspacePath(["accounts:read"])).toBe("/analytics");
+  expect(defaultLandingPath([])).toBe("/analytics");
+  expect(defaultLandingPath(["accounts:read"])).toBe("/analytics");
+});
+
+it("opens account security for sessions with the retired supplier portal", () => {
+  expect(sessionLandingPath("supplier-portal", "/analytics")).toBe(
+    "/account-security",
+  );
+  expect(sessionLandingPath("supplier", "/analytics")).toBe("/supplier");
+  expect(sessionLandingPath(undefined, "/analytics")).toBe("/analytics");
 });

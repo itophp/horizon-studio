@@ -23,9 +23,9 @@ func TestMCPNativeClients(t *testing.T) {
 	if os.Getenv("WORKBUDDY_CLI") == "" {
 		t.Fatal("WORKBUDDY_CLI must point to the installed WorkBuddy runtime CLI")
 	}
-	handler, _, root := iamFixture(t)
-	owner := loginIAM(t, handler, "root-admin")
-	response := owner.invoke(t, "mcp.token.create", map[string]interface{}{"name": "native acceptance", "password": "TestOnly!2026Secure", "days": 1, "departmentId": root.DepartmentID, "tools": []string{"context_get", "capabilities_list"}}, true)
+	handler, _, _ := iamFixture(t)
+	owner := loginTenantIAM(t, handler, "root-admin", "tenant-a")
+	response := owner.invoke(t, "mcp.token.create", map[string]interface{}{"name": "native acceptance", "password": "TestOnly!2026Secure", "days": 1}, true)
 	checkStatus(t, response, 200)
 	created := decodeBody[mcp.MCPTokenCreated](t, response)
 	server := httptest.NewServer(handler)

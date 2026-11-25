@@ -31,9 +31,9 @@ func UsageCommands() []string {
 		"system (health|echo)",
 		"ai (status|run|run-stream|runs|conversations|run-events|run-detail|update-conversation)",
 		"assistant (status|chat|agent|workflow|knowledge|ingest)",
-		"capability (definitions|invoke|invocations|invocation|approvals|decide|events)",
+		"capability (definitions|invoke|invoke-machine|invocations|invocation|approvals|decide|events)",
 		"branding (get|logo)",
-		"identity (temporary-access|request-temporary-access|review-temporary-access|cancel-temporary-access|revoke-temporary-access|switch-department|login|me|logout|snapshot)",
+		"identity (saml-callback|complete-saml|federation-providers|start-federation|complete-federation|temporary-access|request-temporary-access|review-temporary-access|cancel-temporary-access|revoke-temporary-access|list-sign-in-identities|select-sign-in-identity|redeem-sign-in-invitation|login|request-registration|complete-registration|request-password-reset|complete-password-reset|me|logout|refresh-session|snapshot)",
 	}
 }
 
@@ -154,6 +154,12 @@ func ParseEndpoint(
 		capabilityInvokeNameFlag   = new(cliStringFlag)
 		capabilityInvokeCookieFlag = new(cliStringFlag)
 
+		capabilityInvokeMachineFlags             = flag.NewFlagSet("invoke-machine", flag.ExitOnError)
+		capabilityInvokeMachineBodyFlag          = new(cliStringFlag)
+		capabilityInvokeMachineNameFlag          = new(cliStringFlag)
+		capabilityInvokeMachineAuthorizationFlag = new(cliStringFlag)
+		capabilityInvokeMachineDelegationIDFlag  = new(cliStringFlag)
+
 		capabilityInvocationsFlags      = flag.NewFlagSet("invocations", flag.ExitOnError)
 		capabilityInvocationsLimitFlag  = capabilityInvocationsFlags.String("limit", "30", "")
 		capabilityInvocationsCookieFlag = new(cliStringFlag)
@@ -182,6 +188,24 @@ func ParseEndpoint(
 
 		identityFlags = flag.NewFlagSet("identity", flag.ContinueOnError)
 
+		identitySamlCallbackFlags          = flag.NewFlagSet("saml-callback", flag.ExitOnError)
+		identitySamlCallbackBodyFlag       = new(cliStringFlag)
+		identitySamlCallbackProviderIDFlag = new(cliStringFlag)
+		identitySamlCallbackCookieFlag     = new(cliStringFlag)
+
+		identityCompleteSamlFlags      = flag.NewFlagSet("complete-saml", flag.ExitOnError)
+		identityCompleteSamlBodyFlag   = new(cliStringFlag)
+		identityCompleteSamlCookieFlag = new(cliStringFlag)
+
+		identityFederationProvidersFlags = flag.NewFlagSet("federation-providers", flag.ExitOnError)
+
+		identityStartFederationFlags    = flag.NewFlagSet("start-federation", flag.ExitOnError)
+		identityStartFederationBodyFlag = new(cliStringFlag)
+
+		identityCompleteFederationFlags      = flag.NewFlagSet("complete-federation", flag.ExitOnError)
+		identityCompleteFederationBodyFlag   = new(cliStringFlag)
+		identityCompleteFederationCookieFlag = new(cliStringFlag)
+
 		identityTemporaryAccessFlags      = flag.NewFlagSet("temporary-access", flag.ExitOnError)
 		identityTemporaryAccessCookieFlag = new(cliStringFlag)
 
@@ -202,18 +226,41 @@ func ParseEndpoint(
 		identityRevokeTemporaryAccessIDFlag     = new(cliStringFlag)
 		identityRevokeTemporaryAccessCookieFlag = new(cliStringFlag)
 
-		identitySwitchDepartmentFlags      = flag.NewFlagSet("switch-department", flag.ExitOnError)
-		identitySwitchDepartmentBodyFlag   = new(cliStringFlag)
-		identitySwitchDepartmentCookieFlag = new(cliStringFlag)
+		identityListSignInIdentitiesFlags      = flag.NewFlagSet("list-sign-in-identities", flag.ExitOnError)
+		identityListSignInIdentitiesCookieFlag = new(cliStringFlag)
+
+		identitySelectSignInIdentityFlags      = flag.NewFlagSet("select-sign-in-identity", flag.ExitOnError)
+		identitySelectSignInIdentityBodyFlag   = new(cliStringFlag)
+		identitySelectSignInIdentityCookieFlag = new(cliStringFlag)
+
+		identityRedeemSignInInvitationFlags      = flag.NewFlagSet("redeem-sign-in-invitation", flag.ExitOnError)
+		identityRedeemSignInInvitationBodyFlag   = new(cliStringFlag)
+		identityRedeemSignInInvitationCookieFlag = new(cliStringFlag)
 
 		identityLoginFlags    = flag.NewFlagSet("login", flag.ExitOnError)
 		identityLoginBodyFlag = new(cliStringFlag)
+
+		identityRequestRegistrationFlags    = flag.NewFlagSet("request-registration", flag.ExitOnError)
+		identityRequestRegistrationBodyFlag = new(cliStringFlag)
+
+		identityCompleteRegistrationFlags    = flag.NewFlagSet("complete-registration", flag.ExitOnError)
+		identityCompleteRegistrationBodyFlag = new(cliStringFlag)
+
+		identityRequestPasswordResetFlags    = flag.NewFlagSet("request-password-reset", flag.ExitOnError)
+		identityRequestPasswordResetBodyFlag = new(cliStringFlag)
+
+		identityCompletePasswordResetFlags    = flag.NewFlagSet("complete-password-reset", flag.ExitOnError)
+		identityCompletePasswordResetBodyFlag = new(cliStringFlag)
 
 		identityMeFlags      = flag.NewFlagSet("me", flag.ExitOnError)
 		identityMeCookieFlag = new(cliStringFlag)
 
 		identityLogoutFlags      = flag.NewFlagSet("logout", flag.ExitOnError)
 		identityLogoutCookieFlag = new(cliStringFlag)
+
+		identityRefreshSessionFlags      = flag.NewFlagSet("refresh-session", flag.ExitOnError)
+		identityRefreshSessionBodyFlag   = new(cliStringFlag)
+		identityRefreshSessionCookieFlag = new(cliStringFlag)
 
 		identitySnapshotFlags      = flag.NewFlagSet("snapshot", flag.ExitOnError)
 		identitySnapshotCookieFlag = new(cliStringFlag)
@@ -249,6 +296,10 @@ func ParseEndpoint(
 	capabilityInvokeFlags.Var(capabilityInvokeBodyFlag, "body", "")
 	capabilityInvokeFlags.Var(capabilityInvokeNameFlag, "name", "")
 	capabilityInvokeFlags.Var(capabilityInvokeCookieFlag, "cookie", "")
+	capabilityInvokeMachineFlags.Var(capabilityInvokeMachineBodyFlag, "body", "")
+	capabilityInvokeMachineFlags.Var(capabilityInvokeMachineNameFlag, "name", "")
+	capabilityInvokeMachineFlags.Var(capabilityInvokeMachineAuthorizationFlag, "authorization", "")
+	capabilityInvokeMachineFlags.Var(capabilityInvokeMachineDelegationIDFlag, "delegation-id", "")
 	capabilityInvocationsFlags.Var(capabilityInvocationsCookieFlag, "cookie", "")
 	capabilityInvocationFlags.Var(capabilityInvocationInvocationIDFlag, "invocation-id", "")
 	capabilityInvocationFlags.Var(capabilityInvocationCookieFlag, "cookie", "")
@@ -257,6 +308,14 @@ func ParseEndpoint(
 	capabilityDecideFlags.Var(capabilityDecideIDFlag, "id", "")
 	capabilityDecideFlags.Var(capabilityDecideCookieFlag, "cookie", "")
 	capabilityEventsFlags.Var(capabilityEventsCookieFlag, "cookie", "")
+	identitySamlCallbackFlags.Var(identitySamlCallbackBodyFlag, "body", "")
+	identitySamlCallbackFlags.Var(identitySamlCallbackProviderIDFlag, "provider-id", "")
+	identitySamlCallbackFlags.Var(identitySamlCallbackCookieFlag, "cookie", "")
+	identityCompleteSamlFlags.Var(identityCompleteSamlBodyFlag, "body", "")
+	identityCompleteSamlFlags.Var(identityCompleteSamlCookieFlag, "cookie", "")
+	identityStartFederationFlags.Var(identityStartFederationBodyFlag, "body", "")
+	identityCompleteFederationFlags.Var(identityCompleteFederationBodyFlag, "body", "")
+	identityCompleteFederationFlags.Var(identityCompleteFederationCookieFlag, "cookie", "")
 	identityTemporaryAccessFlags.Var(identityTemporaryAccessCookieFlag, "cookie", "")
 	identityRequestTemporaryAccessFlags.Var(identityRequestTemporaryAccessBodyFlag, "body", "")
 	identityRequestTemporaryAccessFlags.Var(identityRequestTemporaryAccessCookieFlag, "cookie", "")
@@ -267,11 +326,20 @@ func ParseEndpoint(
 	identityCancelTemporaryAccessFlags.Var(identityCancelTemporaryAccessCookieFlag, "cookie", "")
 	identityRevokeTemporaryAccessFlags.Var(identityRevokeTemporaryAccessIDFlag, "id", "")
 	identityRevokeTemporaryAccessFlags.Var(identityRevokeTemporaryAccessCookieFlag, "cookie", "")
-	identitySwitchDepartmentFlags.Var(identitySwitchDepartmentBodyFlag, "body", "")
-	identitySwitchDepartmentFlags.Var(identitySwitchDepartmentCookieFlag, "cookie", "")
+	identityListSignInIdentitiesFlags.Var(identityListSignInIdentitiesCookieFlag, "cookie", "")
+	identitySelectSignInIdentityFlags.Var(identitySelectSignInIdentityBodyFlag, "body", "")
+	identitySelectSignInIdentityFlags.Var(identitySelectSignInIdentityCookieFlag, "cookie", "")
+	identityRedeemSignInInvitationFlags.Var(identityRedeemSignInInvitationBodyFlag, "body", "")
+	identityRedeemSignInInvitationFlags.Var(identityRedeemSignInInvitationCookieFlag, "cookie", "")
 	identityLoginFlags.Var(identityLoginBodyFlag, "body", "")
+	identityRequestRegistrationFlags.Var(identityRequestRegistrationBodyFlag, "body", "")
+	identityCompleteRegistrationFlags.Var(identityCompleteRegistrationBodyFlag, "body", "")
+	identityRequestPasswordResetFlags.Var(identityRequestPasswordResetBodyFlag, "body", "")
+	identityCompletePasswordResetFlags.Var(identityCompletePasswordResetBodyFlag, "body", "")
 	identityMeFlags.Var(identityMeCookieFlag, "cookie", "")
 	identityLogoutFlags.Var(identityLogoutCookieFlag, "cookie", "")
+	identityRefreshSessionFlags.Var(identityRefreshSessionBodyFlag, "body", "")
+	identityRefreshSessionFlags.Var(identityRefreshSessionCookieFlag, "cookie", "")
 	identitySnapshotFlags.Var(identitySnapshotCookieFlag, "cookie", "")
 
 	systemFlags.Usage = systemUsage
@@ -299,6 +367,7 @@ func ParseEndpoint(
 	capabilityFlags.Usage = capabilityUsage
 	capabilityDefinitionsFlags.Usage = capabilityDefinitionsUsage
 	capabilityInvokeFlags.Usage = capabilityInvokeUsage
+	capabilityInvokeMachineFlags.Usage = capabilityInvokeMachineUsage
 	capabilityInvocationsFlags.Usage = capabilityInvocationsUsage
 	capabilityInvocationFlags.Usage = capabilityInvocationUsage
 	capabilityApprovalsFlags.Usage = capabilityApprovalsUsage
@@ -310,15 +379,27 @@ func ParseEndpoint(
 	brandingLogoFlags.Usage = brandingLogoUsage
 
 	identityFlags.Usage = identityUsage
+	identitySamlCallbackFlags.Usage = identitySamlCallbackUsage
+	identityCompleteSamlFlags.Usage = identityCompleteSamlUsage
+	identityFederationProvidersFlags.Usage = identityFederationProvidersUsage
+	identityStartFederationFlags.Usage = identityStartFederationUsage
+	identityCompleteFederationFlags.Usage = identityCompleteFederationUsage
 	identityTemporaryAccessFlags.Usage = identityTemporaryAccessUsage
 	identityRequestTemporaryAccessFlags.Usage = identityRequestTemporaryAccessUsage
 	identityReviewTemporaryAccessFlags.Usage = identityReviewTemporaryAccessUsage
 	identityCancelTemporaryAccessFlags.Usage = identityCancelTemporaryAccessUsage
 	identityRevokeTemporaryAccessFlags.Usage = identityRevokeTemporaryAccessUsage
-	identitySwitchDepartmentFlags.Usage = identitySwitchDepartmentUsage
+	identityListSignInIdentitiesFlags.Usage = identityListSignInIdentitiesUsage
+	identitySelectSignInIdentityFlags.Usage = identitySelectSignInIdentityUsage
+	identityRedeemSignInInvitationFlags.Usage = identityRedeemSignInInvitationUsage
 	identityLoginFlags.Usage = identityLoginUsage
+	identityRequestRegistrationFlags.Usage = identityRequestRegistrationUsage
+	identityCompleteRegistrationFlags.Usage = identityCompleteRegistrationUsage
+	identityRequestPasswordResetFlags.Usage = identityRequestPasswordResetUsage
+	identityCompletePasswordResetFlags.Usage = identityCompletePasswordResetUsage
 	identityMeFlags.Usage = identityMeUsage
 	identityLogoutFlags.Usage = identityLogoutUsage
+	identityRefreshSessionFlags.Usage = identityRefreshSessionUsage
 	identitySnapshotFlags.Usage = identitySnapshotUsage
 
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
@@ -431,6 +512,9 @@ func ParseEndpoint(
 			case "invoke":
 				epf = capabilityInvokeFlags
 
+			case "invoke-machine":
+				epf = capabilityInvokeMachineFlags
+
 			case "invocations":
 				epf = capabilityInvocationsFlags
 
@@ -460,6 +544,21 @@ func ParseEndpoint(
 
 		case "identity":
 			switch epn {
+			case "saml-callback":
+				epf = identitySamlCallbackFlags
+
+			case "complete-saml":
+				epf = identityCompleteSamlFlags
+
+			case "federation-providers":
+				epf = identityFederationProvidersFlags
+
+			case "start-federation":
+				epf = identityStartFederationFlags
+
+			case "complete-federation":
+				epf = identityCompleteFederationFlags
+
 			case "temporary-access":
 				epf = identityTemporaryAccessFlags
 
@@ -475,17 +574,38 @@ func ParseEndpoint(
 			case "revoke-temporary-access":
 				epf = identityRevokeTemporaryAccessFlags
 
-			case "switch-department":
-				epf = identitySwitchDepartmentFlags
+			case "list-sign-in-identities":
+				epf = identityListSignInIdentitiesFlags
+
+			case "select-sign-in-identity":
+				epf = identitySelectSignInIdentityFlags
+
+			case "redeem-sign-in-invitation":
+				epf = identityRedeemSignInInvitationFlags
 
 			case "login":
 				epf = identityLoginFlags
+
+			case "request-registration":
+				epf = identityRequestRegistrationFlags
+
+			case "complete-registration":
+				epf = identityCompleteRegistrationFlags
+
+			case "request-password-reset":
+				epf = identityRequestPasswordResetFlags
+
+			case "complete-password-reset":
+				epf = identityCompletePasswordResetFlags
 
 			case "me":
 				epf = identityMeFlags
 
 			case "logout":
 				epf = identityLogoutFlags
+
+			case "refresh-session":
+				epf = identityRefreshSessionFlags
 
 			case "snapshot":
 				epf = identitySnapshotFlags
@@ -580,6 +700,9 @@ func ParseEndpoint(
 			case "invoke":
 				endpoint = c.Invoke()
 				data, err = capabilityc.BuildInvokePayload(capabilityInvokeBodyFlag.value, capabilityInvokeNameFlag.value, capabilityInvokeCookieFlag.value)
+			case "invoke-machine":
+				endpoint = c.InvokeMachine()
+				data, err = capabilityc.BuildInvokeMachinePayload(capabilityInvokeMachineBodyFlag.value, capabilityInvokeMachineNameFlag.value, capabilityInvokeMachineAuthorizationFlag.value, capabilityInvokeMachineDelegationIDFlag.value)
 			case "invocations":
 				endpoint = c.Invocations()
 				data, err = capabilityc.BuildInvocationsPayload(*capabilityInvocationsLimitFlag, capabilityInvocationsCookieFlag.value)
@@ -607,6 +730,20 @@ func ParseEndpoint(
 		case "identity":
 			c := identityc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "saml-callback":
+				endpoint = c.SamlCallback()
+				data, err = identityc.BuildSamlCallbackPayload(identitySamlCallbackBodyFlag.value, identitySamlCallbackProviderIDFlag.value, identitySamlCallbackCookieFlag.value)
+			case "complete-saml":
+				endpoint = c.CompleteSaml()
+				data, err = identityc.BuildCompleteSamlPayload(identityCompleteSamlBodyFlag.value, identityCompleteSamlCookieFlag.value)
+			case "federation-providers":
+				endpoint = c.FederationProviders()
+			case "start-federation":
+				endpoint = c.StartFederation()
+				data, err = identityc.BuildStartFederationPayload(identityStartFederationBodyFlag.value)
+			case "complete-federation":
+				endpoint = c.CompleteFederation()
+				data, err = identityc.BuildCompleteFederationPayload(identityCompleteFederationBodyFlag.value, identityCompleteFederationCookieFlag.value)
 			case "temporary-access":
 				endpoint = c.TemporaryAccess()
 				data, err = identityc.BuildTemporaryAccessPayload(identityTemporaryAccessCookieFlag.value)
@@ -622,18 +759,39 @@ func ParseEndpoint(
 			case "revoke-temporary-access":
 				endpoint = c.RevokeTemporaryAccess()
 				data, err = identityc.BuildRevokeTemporaryAccessPayload(identityRevokeTemporaryAccessIDFlag.value, identityRevokeTemporaryAccessCookieFlag.value)
-			case "switch-department":
-				endpoint = c.SwitchDepartment()
-				data, err = identityc.BuildSwitchDepartmentPayload(identitySwitchDepartmentBodyFlag.value, identitySwitchDepartmentCookieFlag.value)
+			case "list-sign-in-identities":
+				endpoint = c.ListSignInIdentities()
+				data, err = identityc.BuildListSignInIdentitiesPayload(identityListSignInIdentitiesCookieFlag.value)
+			case "select-sign-in-identity":
+				endpoint = c.SelectSignInIdentity()
+				data, err = identityc.BuildSelectSignInIdentityPayload(identitySelectSignInIdentityBodyFlag.value, identitySelectSignInIdentityCookieFlag.value)
+			case "redeem-sign-in-invitation":
+				endpoint = c.RedeemSignInInvitation()
+				data, err = identityc.BuildRedeemSignInInvitationPayload(identityRedeemSignInInvitationBodyFlag.value, identityRedeemSignInInvitationCookieFlag.value)
 			case "login":
 				endpoint = c.Login()
 				data, err = identityc.BuildLoginPayload(identityLoginBodyFlag.value)
+			case "request-registration":
+				endpoint = c.RequestRegistration()
+				data, err = identityc.BuildRequestRegistrationPayload(identityRequestRegistrationBodyFlag.value)
+			case "complete-registration":
+				endpoint = c.CompleteRegistration()
+				data, err = identityc.BuildCompleteRegistrationPayload(identityCompleteRegistrationBodyFlag.value)
+			case "request-password-reset":
+				endpoint = c.RequestPasswordReset()
+				data, err = identityc.BuildRequestPasswordResetPayload(identityRequestPasswordResetBodyFlag.value)
+			case "complete-password-reset":
+				endpoint = c.CompletePasswordReset()
+				data, err = identityc.BuildCompletePasswordResetPayload(identityCompletePasswordResetBodyFlag.value)
 			case "me":
 				endpoint = c.Me()
 				data, err = identityc.BuildMePayload(identityMeCookieFlag.value)
 			case "logout":
 				endpoint = c.Logout()
 				data, err = identityc.BuildLogoutPayload(identityLogoutCookieFlag.value)
+			case "refresh-session":
+				endpoint = c.RefreshSession()
+				data, err = identityc.BuildRefreshSessionPayload(identityRefreshSessionBodyFlag.value, identityRefreshSessionCookieFlag.value)
 			case "snapshot":
 				endpoint = c.Snapshot()
 				data, err = identityc.BuildSnapshotPayload(identitySnapshotCookieFlag.value)
@@ -1015,6 +1173,7 @@ func capabilityUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    definitions: List the capabilities the caller may use, with their policy and contracts.`)
 	fmt.Fprintln(os.Stderr, `    invoke: Invoke one capability through the full gateway pipeline.`)
+	fmt.Fprintln(os.Stderr, `    invoke-machine: Invoke a pinned capability using an audience-bound machine credential.`)
 	fmt.Fprintln(os.Stderr, `    invocations: List the caller's own capability invocations, newest first.`)
 	fmt.Fprintln(os.Stderr, `    invocation: Read one invocation owned by the caller.`)
 	fmt.Fprintln(os.Stderr, `    approvals: List pending confirmations for the caller, or every pending card for a reviewer.`)
@@ -1062,6 +1221,30 @@ func capabilityInvokeUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "capability invoke --body '{\n      \"causationId\": \"6zz\",\n      \"correlationId\": \"ja4\",\n      \"idempotencyKey\": \"yqh\",\n      \"input\": \"Nam praesentium hic velit officia debitis enim.\",\n      \"runtime\": {\n         \"applicationId\": \"9\",\n         \"applicationVersion\": \"1.7.00.34\",\n         \"catalogRevision\": 1575874148522468624,\n         \"definitionDigest\": \"2e57bc2fba7db27a035a9e911fd569fe237ce41e8a7665888d062a680ca5b1e7\",\n         \"installationRevision\": 8502953085697194992,\n         \"metadataVersion\": \"d381b35ef1ee7401cbad64ca844d52605e16ea69bd0a758c0bc98e5bd0b29d14\",\n         \"pageId\": \"ka4\"\n      },\n      \"version\": \"a58\"\n   }' --name \"0k\" --cookie \"Voluptatum aut culpa.\"")
+}
+
+func capabilityInvokeMachineUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] capability invoke-machine", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -name STRING")
+	fmt.Fprint(os.Stderr, " -authorization STRING")
+	fmt.Fprint(os.Stderr, " -delegation-id STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Invoke a pinned capability using an audience-bound machine credential.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -authorization STRING: `)
+	fmt.Fprintln(os.Stderr, `    -delegation-id STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "capability invoke-machine --body '{\n      \"idempotencyKey\": \"94f\",\n      \"input\": \"Commodi voluptatum vel ut rerum.\",\n      \"version\": \"kwf\"\n   }' --name \"5p\" --authorization \"Autem totam cum quia et minima nemo.\" --delegation-id \"CC03326f80175BA8-DeDCF4BF42d8b56A9a0\"")
 }
 
 func capabilityInvocationsUsage() {
@@ -1212,20 +1395,128 @@ func identityUsage() {
 	fmt.Fprintln(os.Stderr, `Persistent account, organization, department and access administration`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] identity COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    saml-callback: Accept only a browser-bound SP-initiated signed SAML POST response, then redirect without assertion or credentials in the URL.`)
+	fmt.Fprintln(os.Stderr, `    complete-saml: CompleteSaml implements complete_saml.`)
+	fmt.Fprintln(os.Stderr, `    federation-providers: FederationProviders implements federation_providers.`)
+	fmt.Fprintln(os.Stderr, `    start-federation: StartFederation implements start_federation.`)
+	fmt.Fprintln(os.Stderr, `    complete-federation: CompleteFederation implements complete_federation.`)
 	fmt.Fprintln(os.Stderr, `    temporary-access: TemporaryAccess implements temporary_access.`)
 	fmt.Fprintln(os.Stderr, `    request-temporary-access: RequestTemporaryAccess implements request_temporary_access.`)
 	fmt.Fprintln(os.Stderr, `    review-temporary-access: ReviewTemporaryAccess implements review_temporary_access.`)
 	fmt.Fprintln(os.Stderr, `    cancel-temporary-access: CancelTemporaryAccess implements cancel_temporary_access.`)
 	fmt.Fprintln(os.Stderr, `    revoke-temporary-access: RevokeTemporaryAccess implements revoke_temporary_access.`)
-	fmt.Fprintln(os.Stderr, `    switch-department: SwitchDepartment implements switch_department.`)
+	fmt.Fprintln(os.Stderr, `    list-sign-in-identities: ListSignInIdentities implements list_sign_in_identities.`)
+	fmt.Fprintln(os.Stderr, `    select-sign-in-identity: SelectSignInIdentity implements select_sign_in_identity.`)
+	fmt.Fprintln(os.Stderr, `    redeem-sign-in-invitation: Redeem an invitation for the configured tenant from a verified login session.`)
 	fmt.Fprintln(os.Stderr, `    login: Login implements login.`)
+	fmt.Fprintln(os.Stderr, `    request-registration: RequestRegistration implements request_registration.`)
+	fmt.Fprintln(os.Stderr, `    complete-registration: CompleteRegistration implements complete_registration.`)
+	fmt.Fprintln(os.Stderr, `    request-password-reset: Queue a reset message for a verified contact, returning the same result for every account.`)
+	fmt.Fprintln(os.Stderr, `    complete-password-reset: Change a password with a one-use verified contact challenge and the account's active second factor.`)
 	fmt.Fprintln(os.Stderr, `    me: Me implements me.`)
 	fmt.Fprintln(os.Stderr, `    logout: Logout implements logout.`)
+	fmt.Fprintln(os.Stderr, `    refresh-session: Reauthenticate and rotate the current browser session.`)
 	fmt.Fprintln(os.Stderr, `    snapshot: Snapshot implements snapshot.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s identity COMMAND --help\n", os.Args[0])
 }
+func identitySamlCallbackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity saml-callback", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -provider-id STRING")
+	fmt.Fprint(os.Stderr, " -cookie STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Accept only a browser-bound SP-initiated signed SAML POST response, then redirect without assertion or credentials in the URL.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -provider-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cookie STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity saml-callback --body '{\n      \"RelayState\": \"b51debcb08092299ba36699b523d155d8d886d2abb052eea28879a32408f45ac\",\n      \"SAMLResponse\": \"6g\"\n   }' --provider-id \"E\" --cookie \"8dc\"")
+}
+
+func identityCompleteSamlUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity complete-saml", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -cookie STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `CompleteSaml implements complete_saml.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -cookie STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity complete-saml --body '{\n      \"mfaCode\": \"160151\",\n      \"recoveryCode\": \"c09304709c904d85cb22b8785efce610\"\n   }' --cookie \"o8r\"")
+}
+
+func identityFederationProvidersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity federation-providers", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `FederationProviders implements federation_providers.`)
+
+	// Flags list
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity federation-providers")
+}
+
+func identityStartFederationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity start-federation", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `StartFederation implements start_federation.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity start-federation --body '{\n      \"providerId\": \"O\",\n      \"purpose\": \"link\"\n   }'")
+}
+
+func identityCompleteFederationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity complete-federation", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -cookie STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `CompleteFederation implements complete_federation.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -cookie STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity complete-federation --body '{\n      \"code\": \"ik\",\n      \"mfaCode\": \"330363\",\n      \"recoveryCode\": \"399a8616639682f848fb83d5c1fa0491\",\n      \"state\": \"f4d1cc33abad120dccba47ebcf14136e9ed7c915fd8579d6ddaa5ace4780786e\"\n   }' --cookie \"2cs\"")
+}
+
 func identityTemporaryAccessUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] identity temporary-access", os.Args[0])
@@ -1261,7 +1552,7 @@ func identityRequestTemporaryAccessUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity request-temporary-access --body '{\n      \"grants\": [\n         {\n            \"departmentIds\": [\n               639469963930456437,\n               1095004963388317522,\n               478438477003430476\n            ],\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"ORGANIZATION\"\n         },\n         {\n            \"departmentIds\": [\n               639469963930456437,\n               1095004963388317522,\n               478438477003430476\n            ],\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"ORGANIZATION\"\n         },\n         {\n            \"departmentIds\": [\n               639469963930456437,\n               1095004963388317522,\n               478438477003430476\n            ],\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"ORGANIZATION\"\n         }\n      ],\n      \"minutes\": 30,\n      \"reason\": \"v6q\"\n   }' --cookie \"Inventore excepturi cumque totam.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity request-temporary-access --body '{\n      \"grants\": [\n         {\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"OWN\"\n         },\n         {\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"OWN\"\n         },\n         {\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"OWN\"\n         }\n      ],\n      \"minutes\": 30,\n      \"reason\": \"v6q\"\n   }' --cookie \"Inventore excepturi cumque totam.\"")
 }
 
 func identityReviewTemporaryAccessUsage() {
@@ -1283,7 +1574,7 @@ func identityReviewTemporaryAccessUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity review-temporary-access --body '{\n      \"decision\": \"approve\",\n      \"grants\": [\n         {\n            \"departmentIds\": [\n               639469963930456437,\n               1095004963388317522,\n               478438477003430476\n            ],\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"ORGANIZATION\"\n         },\n         {\n            \"departmentIds\": [\n               639469963930456437,\n               1095004963388317522,\n               478438477003430476\n            ],\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"ORGANIZATION\"\n         },\n         {\n            \"departmentIds\": [\n               639469963930456437,\n               1095004963388317522,\n               478438477003430476\n            ],\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"ORGANIZATION\"\n         }\n      ],\n      \"minutes\": 30,\n      \"note\": \"1cj\"\n   }' --id 1542113726735703776 --cookie \"Atque nemo sit vero rerum nulla.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity review-temporary-access --body '{\n      \"decision\": \"approve\",\n      \"grants\": [\n         {\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"OWN\"\n         },\n         {\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"OWN\"\n         },\n         {\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"OWN\"\n         }\n      ],\n      \"minutes\": 30,\n      \"note\": \"1cj\"\n   }' --id 1542113726735703776 --cookie \"Atque nemo sit vero rerum nulla.\"")
 }
 
 func identityCancelTemporaryAccessUsage() {
@@ -1326,16 +1617,34 @@ func identityRevokeTemporaryAccessUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity revoke-temporary-access --id 3151073455343291628 --cookie \"Excepturi fugiat.\"")
 }
 
-func identitySwitchDepartmentUsage() {
+func identityListSignInIdentitiesUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] identity switch-department", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] identity list-sign-in-identities", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cookie STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ListSignInIdentities implements list_sign_in_identities.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cookie STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity list-sign-in-identities --cookie \"Nihil ea architecto consequuntur suscipit et aliquid.\"")
+}
+
+func identitySelectSignInIdentityUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity select-sign-in-identity", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -cookie STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `SwitchDepartment implements switch_department.`)
+	fmt.Fprintln(os.Stderr, `SelectSignInIdentity implements select_sign_in_identity.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -1343,7 +1652,27 @@ func identitySwitchDepartmentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity switch-department --body '{\n      \"departmentId\": 4478646292217405233\n   }' --cookie \"Ratione hic nesciunt neque.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity select-sign-in-identity --body '{\n      \"actingOrganizationId\": 2308679677763197001,\n      \"identityBindingId\": \"bc1e5b83-5cf9-42dd-9499-edd0aac9f514\",\n      \"portal\": \"gc\"\n   }' --cookie \"Officiis nostrum optio magnam.\"")
+}
+
+func identityRedeemSignInInvitationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity redeem-sign-in-invitation", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -cookie STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Redeem an invitation for the configured tenant from a verified login session.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -cookie STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity redeem-sign-in-invitation --body '{\n      \"code\": \"6bf722f3677dcc7bd2c0ce2d5fc9e1c3f97bebd0612a3390ecf98e5b852623fb\"\n   }' --cookie \"Voluptatibus aliquid repellat placeat autem ea quis.\"")
 }
 
 func identityLoginUsage() {
@@ -1361,7 +1690,79 @@ func identityLoginUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity login --body '{\n      \"password\": \"i6\",\n      \"username\": \"gh9\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity login --body '{\n      \"mfaCode\": \"n11\",\n      \"password\": \"i6\",\n      \"recoveryCode\": \"96s\",\n      \"username\": \"gh9\"\n   }'")
+}
+
+func identityRequestRegistrationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity request-registration", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `RequestRegistration implements request_registration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity request-registration --body '{\n      \"destination\": \"eqa\",\n      \"displayName\": \"b\",\n      \"password\": \"l11\",\n      \"username\": \"yRS7\"\n   }'")
+}
+
+func identityCompleteRegistrationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity complete-registration", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `CompleteRegistration implements complete_registration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity complete-registration --body '{\n      \"password\": \"ced\",\n      \"token\": \"b8b2d1d778ee682537a049abc1f72d2b9d471b12d56f75e9646e6053fd7927e7\"\n   }'")
+}
+
+func identityRequestPasswordResetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity request-password-reset", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Queue a reset message for a verified contact, returning the same result for every account.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity request-password-reset --body '{\n      \"channel\": \"email\",\n      \"username\": \"yzh\"\n   }'")
+}
+
+func identityCompletePasswordResetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity complete-password-reset", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Change a password with a one-use verified contact challenge and the account's active second factor.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity complete-password-reset --body '{\n      \"mfaCode\": \"0co\",\n      \"newPassword\": \"3ir\",\n      \"recoveryCode\": \"rjz\",\n      \"token\": \"72d4723d6fa59b10c82c6c31c2a8f1f4509f9086bf4669e03a339ec691610bb3\"\n   }'")
 }
 
 func identityMeUsage() {
@@ -1398,6 +1799,26 @@ func identityLogoutUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity logout --cookie \"Consequatur optio quas aut recusandae.\"")
+}
+
+func identityRefreshSessionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity refresh-session", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -cookie STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Reauthenticate and rotate the current browser session.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -cookie STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity refresh-session --body '{\n      \"factor\": \"kqz\",\n      \"password\": \"ge\"\n   }' --cookie \"Delectus fugit.\"")
 }
 
 func identitySnapshotUsage() {

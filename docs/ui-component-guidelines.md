@@ -147,7 +147,7 @@ Field/FieldGroup/FieldLabel/FieldDescription/FieldError 组织标签、说明和
 | Popover | 日期选择、小型筛选等局部交互 | 不承担复杂表单与多层业务流程 |
 | Tooltip | 图标含义和短辅助提示 | 关键内容、错误与必读说明必须直接可见；触屏有等价入口 |
 | HoverCard | 对象的补充预览 | 不把必要操作只藏在 hover 内 |
-| Resizable / ScrollArea | 可调工作区 / 确需定制的局部滚动 | 默认用正常布局与 overflow；不要层层包 ScrollArea |
+| Resizable / ScrollArea | 可调租户 / 确需定制的局部滚动 | 默认用正常布局与 overflow；不要层层包 ScrollArea |
 | ContextMenu / Menubar | 画布/编辑器的辅助命令 | 右键与快捷键必须有可见菜单替代，普通管理页不滥用 |
 
 浮层须保留标题/描述、焦点约束与返回、Escape/关闭策略、表单错误和未保存提示；嵌套选择器优先在当前弹层完成，不堆多层 Dialog。不能在 Router Link 内再嵌套 Button。

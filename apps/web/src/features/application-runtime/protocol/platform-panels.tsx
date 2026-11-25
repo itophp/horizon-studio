@@ -1,6 +1,6 @@
 import "@/features/mcp/hub.css";
 import { useTranslation } from "react-i18next";
-import { Loading } from "@/features/administration/shared";
+import { Loading } from "@/features/identity/shared";
 import { DictionarySection } from "@/features/governance/dictionaries";
 import { SettingsConfigPanel } from "@/features/governance/settings";
 import { RemoteMcpSection } from "@/features/mcp/remote";

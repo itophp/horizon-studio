@@ -495,7 +495,7 @@ P2 与 P3 可并行，但 P3 依赖 P0 的能力契约。
 
 - **浏览器验收（E2E）**：按根规则暂停，未启动。`/projects` 已加入 `lib/webmcp/routes.ts`（`connected: false`，暂不暴露页面工具），路由清单比对的单测通过。
 - **真实 AI 运行**：`project-task-brief` 策略、事件与写回路径均已用集成测试证明；模型本身需要已配置的 provider 凭据，本地未配置，因此没有跑「真实模型产出简报」这一段。这不算通过，只算入口与出口已验证。
-- **format 门禁**：`pnpm format:check` 与 `scripts/check-gofmt.sh` 在本机会对 138 个前端文件与 6 个既有 Go 测试文件报警，原因是工作区为 CRLF、索引为 LF（`git ls-files --eol` 已确认），与本次改动无关；本次新增/修改的文件均已格式化并通过。
+- **format 门禁**：`pnpm format:check` 与 `scripts/check-gofmt.sh` 在本机会对 138 个前端文件与 6 个既有 Go 测试文件报警，原因是租户为 CRLF、索引为 LF（`git ls-files --eol` 已确认），与本次改动无关；本次新增/修改的文件均已格式化并通过。
 - **已知 hint**：`check-entities` 新增一条 E6 hint —— `project_member.account` 的 `account_id` 只守卫 `gov_identity_refs` 的键，与 `file.organization` 同类，保持并说明原因。
 
 ### 页面形态返工（同日）

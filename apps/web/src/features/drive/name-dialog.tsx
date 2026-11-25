@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { EditorDialog, ErrorBanner } from "@/features/administration/shared";
+import { EditorDialog, ErrorBanner } from "@/features/identity/shared";
 
 const schema = z.object({ name: z.string().trim().min(1).max(200) });
 type Values = z.infer<typeof schema>;

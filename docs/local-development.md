@@ -10,11 +10,7 @@ cp .env.example .env
 ./horizon-cli install
 ./horizon-cli tools
 ./horizon-cli db-up
-./horizon-cli migrate
-# 在终端安全输入一个 12–128 字符的初始密码（不使用预设默认密码）
-read -s BOOTSTRAP_PASSWORD; export BOOTSTRAP_PASSWORD
-BOOTSTRAP_USERNAME=admin ./horizon-cli bootstrap
-unset BOOTSTRAP_PASSWORD
+./horizon-cli bootstrap
 ./horizon-cli dev-api
 # 另一个终端
 ./horizon-cli dev
@@ -59,12 +55,12 @@ horizon-cli init --repo git@github.com:itophp/horizon.git my-project
 ./horizon-cli application
 ./horizon-cli page
 ./horizon-cli capability --full
-./horizon-cli search article
-./horizon-cli capability get article.get@1.0.0
-./horizon-cli workflow get article-publish
-./horizon-cli page get articles/article.detail
+./horizon-cli search project
+./horizon-cli capability get project.get@1.0.0
+./horizon-cli workflow get project-analysis
+./horizon-cli page get projects/project.detail
 ./horizon-cli refs capability:orchestration.workflow.run@1.0.0
-./horizon-cli validate workflow docs/generated/workflows/article-publish.workflow.json
+./horizon-cli validate workflow docs/generated/workflows/project-analysis.workflow.json
 ```
 
 直接运行类型命令可列出该类型的所有注册条目。默认返回摘要，加 `--full` 可返回每个条目的完整定义。
@@ -72,11 +68,11 @@ horizon-cli init --repo git@github.com:itophp/horizon.git my-project
 分析某类 Schema 时，从对应的命令开始。省略标识可读取类型说明、字段说明和结构 JSON Schema。传入标识可在同一次响应中取得完整注册定义及其声明的输入输出、流程节点或页面绑定。
 
 ```sh
-./horizon-cli capability schema article.get@1.0.0
-./horizon-cli workflow schema article-publish
+./horizon-cli capability schema project.get@1.0.0
+./horizon-cli workflow schema project-analysis
 ./horizon-cli graph schema
-./horizon-cli application schema articles@2.0.0
-./horizon-cli page schema articles/article.detail@2.0.0
+./horizon-cli application schema projects@2.0.3
+./horizon-cli page schema projects/project.detail@2.0.3
 ```
 
 返回的 `schema` 描述类型结构，`entry.definition` 是指定对象的注册定义。Workflow 结构来自现有 Workflow 规格，其余类型从注册使用的 Go 类型推导。运行时会额外检查引用、权限和业务语义。业务字段的描述沿用源定义里的文案，源定义缺少说明时以所属模块源码为准。
@@ -136,9 +132,9 @@ Horizon CLI 读取仓库根的 `.env` 并传给子进程，终端环境变量优
 
 ## 账号与权限
 
-初始账号由 `./horizon-cli bootstrap` 创建，不提供通用默认密码；已存在工作区不会被重复初始化覆盖。BOOTSTRAP_TENANT 可显式指定工作区，默认为 workspace-default。工作区内为“企业 → 公司 → 部门树 → 账号”，角色可重复分配。
+`./horizon-cli bootstrap` 和 `./horizon-cli migrate` 共用空库初始化入口。默认账号为 `admin`，初始密码为 `111111`。首次执行可使用 `BOOTSTRAP_USERNAME` 和 `BOOTSTRAP_PASSWORD` 覆盖。部署如使用自定义 IAM 租户标识，设置相同的 `BOOTSTRAP_TENANT` 和 `PUBLIC_TENANT_ID`。登录后直接进入管理界面。
 
-活跃角色权限合并；账号独立允许替换同一操作的继承范围，独立拒绝优先。范围包括工作区全部、本人公司、本人部门、部门及下级、本人账号、自定义部门。操作授权由 Casbin 决策，SQL 强制数据范围与工作区隔离；页面隐藏不能替代后端校验。详见 [身份与权限决策](decisions/002-identity-access.md)。
+IAM 根据部署租户中的有效成员关系和角色授权建立会话。业务查询使用可信租户及账号限制数据范围。详见 [身份与权限决策](decisions/002-identity-access.md)。
 
 会话为 8 小时 HttpOnly cookie，写请求校验 Origin + CSRF。密码使用 Argon2id，停用账号、重置密码会撤销会话；角色变更在下一个请求生效。公网部署要求 HTTPS 和 COOKIE_SECURE=true。
 

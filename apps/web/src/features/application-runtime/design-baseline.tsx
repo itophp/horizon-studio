@@ -6,10 +6,10 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { runtimeRead, runtimeExecute } from "@/lib/capabilities";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import { AlertTriangle, GitMerge } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/features/administration/shared";
+import { ErrorBanner } from "@/features/identity/shared";
 export function DesignBaseline({
   applicationId,
   identity,

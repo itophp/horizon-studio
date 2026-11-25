@@ -20,7 +20,7 @@ import {
   MousePointerClick,
 } from "lucide-react";
 import { i18n, changeLanguage } from "@/i18n";
-import { PageHeading } from "@/features/administration/shared";
+import { PageHeading } from "@/features/identity/shared";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {

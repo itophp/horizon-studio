@@ -1,5 +1,23 @@
 # 版本及官方依据
 
+## 2026-11-24 邮件 HTML 编辑器
+
+将已由 MDXEditor 锁定的 `lexical`、`@lexical/react`、`@lexical/html`、`@lexical/list` 和 `@lexical/rich-text` 提升为 Web 直接依赖，版本统一为 `0.48.0`，沿用 React 19。使用 `RichTextPlugin`、`ListPlugin`、`HistoryPlugin` 和 `$generateHtmlFromNodes`，由服务端白名单清理发送内容。[Lexical 插件文档](https://lexical.dev/docs/react/plugins) · [版本记录](https://github.com/meta/lexical/releases/tag/v0.48.0) · [MIT 许可](https://github.com/meta/lexical/blob/main/LICENSE)
+
+## 2026-11-24 IMAP 收件
+
+锁定 `github.com/emersion/go-imap/v2 v2.0.0-beta.8`（MIT，Go ≥ 1.18），与仓库 Go 1.27.3 和已使用的 `go-message v0.18.2` 兼容。使用版本化客户端的 `NewStartTLS`、只读 `Select`、`UIDSearch` 和 `Fetch`。传递依赖 `github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6`（MIT）由 go.mod/go.sum 锁定。[版本源码](https://github.com/emersion/go-imap/tree/v2.0.0-beta.8) · [客户端文档](https://pkg.go.dev/github.com/emersion/go-imap/v2@v2.0.0-beta.8/imapclient)
+
+## 2026-11-20 IAM SAML
+
+采用 `github.com/crewjam/saml v0.6.3`（BSD-2-Clause，Go >=1.25），与仓库 Go 1.27.3 兼容。已核对 [版本化官方源码](https://github.com/crewjam/saml/tree/v0.6.3) 的 go.mod、LICENSE、`samlsp.ParseMetadata`、`ServiceProvider.MakeAuthenticationRequest`、`AuthnRequest.Redirect`、`ParseXMLResponse` 和 `AssertionReplayCache`。签名使用 SHA-256，启用未知条件拒绝、过期元数据拒绝、SHA-1 拒绝和 CBC 响应签名要求；重放缓存接入 PostgreSQL。没有启用 IdP 主动登录或证书有效期豁免。
+
+XML 签名依赖 `github.com/russellhaering/goxmldsig v1.6.1`（Apache-2.0）、XML 解析 `github.com/beevik/etree v1.8.1`（BSD-2-Clause）；samlsp 传递引入 `github.com/golang-jwt/jwt/v5 v5.3.1`（MIT），均由 go.mod/go.sum 锁定。已核对各模块许可证和选定版本的源码；不另造 XML 签名验证器。部署元数据中的签名证书启动时校验解析、密钥强度及至少一张当前有效，运行时继续校验证书和元数据有效期。
+
+## 2026-11-20 IAM OIDC
+
+采用 `github.com/coreos/go-oidc/v3 v3.21.0`（Apache-2.0，Go >=1.25），与本仓库 Go 1.27.3 兼容。已核对 [官方源码](https://github.com/coreos/go-oidc/tree/v3.21.0)、模块 go.mod、LICENSE、`NewProvider`、`Verifier`、`IDToken.Nonce` 和 `VerifyAccessToken`。其依赖 `github.com/go-jose/go-jose/v4 v4.1.4`（Apache-2.0）及 `golang.org/x/oauth2 v0.36.0`（BSD-3-Clause），由 go.sum 锁定。OAuth2 使用官方 `GenerateVerifier`、`S256ChallengeOption` 和 `VerifierOption`；校验 issuer、audience、签名、过期时间、nonce，身份键使用提供方、issuer 和稳定 sub。
+
 ## 2026-11-19 个人邮箱应用
 
 新增固定 Go 依赖并核对本地模块源码与许可证：
@@ -82,7 +100,6 @@
 | goa.design/goa/v3 | v3.35.0 | [来源](https://proxy.golang.org/goa.design/goa/v3/@latest) |
 | github.com/jackc/pgx/v5 | v5.11.0 | [来源](https://proxy.golang.org/github.com/jackc/pgx/v5/@latest) |
 | github.com/sqlc-dev/sqlc | v1.31.1 | [来源](https://proxy.golang.org/github.com/sqlc-dev/sqlc/@latest) |
-| github.com/pressly/goose/v3 | v3.29.0 | [来源](https://proxy.golang.org/github.com/pressly/goose/v3/@latest) |
 | github.com/casbin/casbin/v2 | v2.135.0 | [来源](https://proxy.golang.org/github.com/casbin/casbin/v2/@latest) |
 | go | go1.27.3 | [来源](https://go.dev/dl/?mode=json) |
 | @base-ui/react | 1.9.0 | [来源](https://registry.npmjs.org/@base-ui/react/1.9.0) |
@@ -110,7 +127,6 @@ PostgreSQL 18.6，官方 release notes 确认为稳定主线 18；容器实际�
 - [Goa](https://goa.design/docs/1-goa/quickstart/)
 - [pgx](https://github.com/jackc/pgx)
 - [sqlc](https://docs.sqlc.dev/en/stable/overview/install.html)
-- [Goose](https://pressly.github.io/goose/installation/)
 - [Casbin](https://casbin.org/docs/rbac-with-domains/)
 - [Orval](https://orval.dev/docs/reference/configuration/output/)
 - [Vitest](https://vitest.dev/guide/)

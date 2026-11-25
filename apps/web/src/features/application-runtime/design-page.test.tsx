@@ -17,11 +17,11 @@ vi.mock("@/lib/capabilities", async (original) => ({
   runtimeRead: api.read,
   runtimeExecute: api.execute,
 }));
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant",
     account: { id: 1 },
-    activeDepartmentId: 1,
+
     authorizationVersion: 1,
     permissions: [
       "applications:read",

@@ -37,7 +37,8 @@ func (s *Store) Start(ctx context.Context, run Run) (*Run, error) {
 	}
 	row, err := dbgen.New(s.pool).AICreateRun(ctx, dbgen.AICreateRunParams{
 		TenantID: run.TenantID, AccountID: run.AccountID, DepartmentID: run.DepartmentID,
-		SessionID: run.SessionID, ConversationTitle: run.ConversationTitle, Agent: run.Agent, Model: run.Model,
+		IdentityBindingID: run.IdentityBindingID,
+		SessionID:         run.SessionID, ConversationTitle: run.ConversationTitle, Agent: run.Agent, Model: run.Model,
 		InstructionVersion: run.InstructionVersion, Question: run.Question,
 		TraceID: run.TraceID, Context: contextDocument, Origin: run.Origin,
 		CorrelationID: run.CorrelationID, CausationID: run.CausationID,
@@ -272,7 +273,8 @@ func runFromSessionRow(row dbgen.AIListSessionRunsRow) Run {
 func runFromGetRow(row dbgen.AIGetRunRow) Run {
 	return Run{
 		ID: row.ID, AccountID: row.AccountID, DepartmentID: row.DepartmentID, SessionID: row.SessionID,
-		Agent: row.Agent, Model: row.Model, InstructionVersion: row.InstructionVersion,
+		IdentityBindingID: row.IdentityBindingID,
+		Agent:             row.Agent, Model: row.Model, InstructionVersion: row.InstructionVersion,
 		Question: row.Question, Answer: row.Answer, Status: row.Status, ErrorCode: row.ErrorCode,
 		ToolCalls: int(row.ToolCalls), PromptTokens: int(row.PromptTokens), CompletionTokens: int(row.CompletionTokens),
 		Duration: time.Duration(row.DurationMs) * time.Millisecond, TraceID: row.TraceID,

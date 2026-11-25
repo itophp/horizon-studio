@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { ApiError } from "@/api/client/request";
 import type { KnowledgeReadOutput } from "@/api/generated/capability-knowledge";
 import { Button } from "@/components/ui/button";
-import { EditorDialog } from "@/features/administration/shared";
+import { EditorDialog } from "@/features/identity/shared";
 import { knowledgeUpdate } from "@/lib/capabilities";
 import { KnowledgeDocumentFields } from "./document-fields";
 import { knowledgeEmbeddingError } from "./errors";

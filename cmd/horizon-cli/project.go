@@ -25,12 +25,12 @@ var projectTasks = map[string]projectTask{
 	"install":   fixed(rootTool("pnpm", "install", "--frozen-lockfile")),
 	"tools":     fixed(project.installTools),
 	"build-cli": fixed(project.buildCLI),
-	"bootstrap": fixed(goTool("run", "./cmd/bootstrap")),
+	"bootstrap": fixed(goTool("run", "../cmd/bootstrap")),
 	"dev":       fixed(rootTool("pnpm", "dev")),
 	"dev-api":   fixed(goTool("run", "../cmd/api")),
 	"db-up":     fixed(rootTool("docker", "compose", "up", "-d", "--wait")),
 	"db-down":   fixed(rootTool("docker", "compose", "stop")),
-	"migrate":   fixed(goTool("run", "./cmd/migrate")),
+	"migrate":   fixed(goTool("run", "../cmd/bootstrap")),
 	"generate": fixed(
 		goTool("run", "../cmd/workflowspec", "-out", "../docs/generated/workflows"),
 		goTool("run", "goa.design/goa/v3/cmd/goa", "gen", "horizon/foundation/design"),
@@ -48,6 +48,7 @@ var projectTasks = map[string]projectTask{
 	"check-generated":            fixed(project.checkGenerated),
 	"check-entities":             fixed(goTool("run", "../cmd/entitycheck")),
 	"test-orchestration-example": fixed(goTool("test", "-tags=integration", "-count=1", "-run", "TestExampleLifecycle", "-v", "../tests/integration")),
+	"test-iam-migration-drill":   fixed(goTool("test", "-tags=integration,iamdrill", "-count=1", "-timeout=5m", "-run", "^TestIAMBackupRestoreDrill$", "-v", "../tests/integration")),
 	"format":                     fixed(rootTool("pnpm", "format"), project.formatGo),
 	"format-check":               fixed(rootTool("pnpm", "format:check"), project.checkGoFormat),
 	"lint":                       fixed(rootTool("pnpm", "lint"), goTool("vet", "./...", "../applications/...", "../cmd/...", "../deployment/...")),
@@ -58,7 +59,7 @@ var projectTasks = map[string]projectTask{
 		rootTool("pnpm", "i18n:check"),
 	),
 	"build":             fixed(rootTool("pnpm", "build"), goTool("build", "./...", "../applications/...", "../cmd/...", "../deployment/...")),
-	"test-integration":  fixed(goTool("test", "-tags=integration", "-count=1", "-v", "../tests/integration/...")),
+	"test-integration":  fixed(goTool("test", "-tags=integration", "-count=1", "-timeout=20m", "-v", "../tests/integration/...")),
 	"test-e2e":          {run: project.testE2E, acceptArgs: true},
 	"test-e2e-changed":  {run: project.testChangedE2E, acceptArgs: true},
 	"test-e2e-smoke":    fixed(rootTool("pnpm", "test:e2e", "--grep", "@smoke")),
@@ -188,7 +189,19 @@ func (p project) buildCLI() error {
 
 func (p project) generateSQL() error {
 	sqlc := filepath.Join(p.root, ".tools", "bin", executableName("sqlc"))
-	return runChild(p.command("foundation", sqlc, "generate"))
+	if err := runChild(p.command("foundation", sqlc, "generate")); err != nil {
+		return err
+	}
+	configs, err := filepath.Glob(filepath.Join(p.root, "applications", "*", "sqlc.yaml"))
+	if err != nil {
+		return err
+	}
+	for _, config := range configs {
+		if err := runChild(p.command("", sqlc, "generate", "-f", config)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (p project) cliChildEnv(cmd *exec.Cmd) error {

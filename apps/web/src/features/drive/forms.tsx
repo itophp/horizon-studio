@@ -5,7 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { EditorDialog, ErrorBanner } from "@/features/administration/shared";
+import { EditorDialog, ErrorBanner } from "@/features/identity/shared";
 import { driveMemberAdd } from "@/lib/capabilities";
 import { DriveSelect } from "./select";
 const memberSchema = z.object({

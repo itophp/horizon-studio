@@ -13,7 +13,7 @@ vi.mock("@/lib/capabilities", () => ({
   runtimeExecute: api.execute,
 }));
 const auth = vi.hoisted(() => ({ permissions: [] as string[] }));
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant",
     account: { id: 1 },

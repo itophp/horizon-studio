@@ -13,6 +13,7 @@ import (
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/kernel/eventhub"
 	"horizon/foundation/kernel/outbox"
+	"horizon/foundation/runtime/app"
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
 	"strconv"
@@ -36,7 +37,7 @@ func invokeCapability(t *testing.T, client iamClient, name string, body map[stri
 
 func TestCapabilityGatewayClosedLoop(t *testing.T) {
 	handler, pool, _ := iamFixture(t)
-	owner := loginIAM(t, handler, "root-admin")
+	owner := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	ctx := context.Background()
 
 	definitions := decodeBody[[]*gencapability.CapabilityContract](t, owner.request(t, "GET", "/api/capabilities", nil, false))
@@ -155,15 +156,11 @@ func TestCapabilityGatewayClosedLoop(t *testing.T) {
 
 func TestCapabilityPermissionsAndTenantIsolation(t *testing.T) {
 	handler, pool, root := iamFixture(t)
-	owner := loginIAM(t, handler, "root-admin")
+	owner := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	ctx := context.Background()
 
-	company := root.OrganizationID
 	createReader := owner.invoke(t, "identity.account.create", map[string]any{
-		"username": "example-reader", "fullName": "example-reader", "organizationId": company,
-		"departmentId": root.DepartmentID, "status": "active", "roleIds": []int64{},
-		"overrides": []map[string]any{{"permission": "example:read", "effect": "allow", "scope": "ALL"}},
-		"password":  "TestOnly!2026Secure",
+		"username": "example-reader", "fullName": "Example reader", "initialStatus": "active", "password": "TestOnly!2026Secure",
 	}, true)
 	checkStatus(t, createReader, 200)
 	createdResult := decodeBody[gencapability.CapabilityResult](t, createReader)
@@ -180,7 +177,10 @@ func TestCapabilityPermissionsAndTenantIsolation(t *testing.T) {
 	if reader == nil {
 		t.Fatal("created account missing from the snapshot")
 	}
-	readerClient := loginIAM(t, handler, reader.Username)
+	seedTenantRole(t, pool, "tenant-a", "example-reader", root.ID, reader.ID, []*genidentity.PermissionGrant{
+		{Permission: "example:read", Effect: "allow", Scope: "ALL"},
+	})
+	readerClient := loginTenantIAM(t, handler, reader.Username, "tenant-a")
 
 	definitions := decodeBody[[]*gencapability.CapabilityContract](t, readerClient.request(t, "GET", "/api/capabilities", nil, false))
 	for _, definition := range definitions {
@@ -203,7 +203,9 @@ func TestCapabilityPermissionsAndTenantIsolation(t *testing.T) {
 	if _, err := identity.Bootstrap(ctx, pool, "tenant-b", "tenant-b-admin", "TestOnly!2026Secure"); err != nil {
 		t.Fatal(err)
 	}
-	other := loginIAM(t, handler, "tenant-b-admin")
+	iam := identity.New(pool, false)
+	handler = deploymentHandler(app.System{}, governance.New(pool, iam, governance.Options{PublicWorkspace: "tenant-b"}), iam)
+	other := loginTenantIAM(t, handler, "tenant-b-admin", "tenant-b")
 	events := decodeBody[[]*gencapability.CapabilityEvent](t, other.request(t, "GET", "/api/capabilities/events", nil, false))
 	for _, event := range events {
 		if event.Type == "example.record.created" {
@@ -220,7 +222,7 @@ func TestCapabilityPermissionsAndTenantIsolation(t *testing.T) {
 
 func TestCapabilityApprovalResume(t *testing.T) {
 	handler, pool, root := iamFixture(t)
-	owner := loginIAM(t, handler, "root-admin")
+	owner := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	ctx := context.Background()
 
 	seed := func(title string) (int64, int64, string) {
@@ -231,9 +233,9 @@ func TestCapabilityApprovalResume(t *testing.T) {
 		invocationID := fmt.Sprintf("inv_%d", time.Now().UnixNano())
 		digest := fmt.Sprintf("digest-%d", time.Now().UnixNano())
 		if _, err := pool.Exec(ctx, `
-INSERT INTO cap_invocations (tenant_id, account_id, department_id, invocation_id, capability, capability_version, origin, status, input, input_digest, correlation_id, trace_id)
-VALUES ('tenant-a', $1, $2, $3, 'example.record.archive', '1.0.0', 'agent', 'awaiting_approval', $4::jsonb, $5, 'trace-approval', 'trace-approval')`,
-			root.ID, root.DepartmentID, invocationID,
+INSERT INTO cap_invocations (tenant_id, account_id, invocation_id, capability, capability_version, origin, status, input, input_digest, correlation_id, trace_id)
+VALUES ('tenant-a', $1, $2, 'example.record.archive', '1.0.0', 'agent', 'awaiting_approval', $3::jsonb, $4, 'trace-approval', 'trace-approval')`,
+			root.ID, invocationID,
 			fmt.Sprintf(`{"id":%d}`, recordID), digest); err != nil {
 			t.Fatal(err)
 		}
@@ -248,9 +250,9 @@ VALUES ('tenant-a', $1, $2, $3, 'example.record.archive', '1.0.0', 'agent', 'awa
 		}
 		var approvalID int64
 		if err := pool.QueryRow(ctx, `
-INSERT INTO cap_approvals (tenant_id, account_id, department_id, capability, capability_version, invocation_id, risk, approval, status, arguments, arguments_digest, expires_at)
-VALUES ('tenant-a', $1, $2, 'example.record.archive', '1.0.0', $3, 'high', 'confirm', 'pending', $4::jsonb, $5, now() + interval '10 minutes')
-RETURNING id`, root.ID, root.DepartmentID, invocationID, fmt.Sprintf(`{"id":%d}`, recordID), digest).Scan(&approvalID); err != nil {
+INSERT INTO cap_approvals (tenant_id, account_id, capability, capability_version, invocation_id, risk, approval, status, arguments, arguments_digest, expires_at)
+VALUES ('tenant-a', $1, 'example.record.archive', '1.0.0', $2, 'high', 'confirm', 'pending', $3::jsonb, $4, now() + interval '10 minutes')
+RETURNING id`, root.ID, invocationID, fmt.Sprintf(`{"id":%d}`, recordID), digest).Scan(&approvalID); err != nil {
 			t.Fatal(err)
 		}
 		return recordID, approvalID, invocationID
@@ -299,7 +301,7 @@ RETURNING id`, root.ID, root.DepartmentID, invocationID, fmt.Sprintf(`{"id":%d}`
 		if _, err := identity.Bootstrap(ctx, pool, "tenant-d", "tenant-d-admin", "TestOnly!2026Secure"); err != nil {
 			t.Fatal(err)
 		}
-		other := loginIAM(t, handler, "tenant-d-admin")
+		other := loginTenantIAM(t, handler, "tenant-d-admin", "tenant-d")
 		checkStatus(t, other.request(t, "POST", "/api/capabilities/approvals/"+itoa(approvalID)+"/decisions", map[string]any{"approve": true}, true), 404)
 	})
 }

@@ -7,6 +7,7 @@ func execution_recordEntity() contracts.Entity {
 		{Name: "runId", Kind: contracts.AttributeReference, Type: contracts.TypeInteger, Required: false},
 		{Name: "invocationId", Kind: contracts.AttributeSystem, Type: contracts.TypeString, Required: true},
 		{Name: "accountId", Kind: contracts.AttributeSystem, Type: contracts.TypeInteger, Required: true},
+		{Name: "actorContext", Kind: contracts.AttributeSystem, Type: contracts.TypeJSON, Required: true, Shape: "object"},
 		{Name: "binding", Kind: contracts.AttributeSystem, Type: contracts.TypeJSON, Required: true, Shape: "object"},
 	}}
 }

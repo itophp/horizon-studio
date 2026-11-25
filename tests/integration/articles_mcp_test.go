@@ -15,9 +15,9 @@ import (
 )
 
 func TestArticlesMCPSubmission(t *testing.T) {
-	handler, pool, root := iamFixture(t)
-	owner := loginIAM(t, handler, "root-admin")
-	token := decodeData[businessmcp.MCPTokenCreated](t, owner.invoke(t, "mcp.token.create", map[string]any{"name": "article client", "password": "TestOnly!2026Secure", "days": 1, "departmentId": root.DepartmentID, "tools": []string{"articles_list", "articles_get", "articles_create", "articles_submit"}}, true))
+	handler, pool, _ := articleFixture(t)
+	owner := loginTenantIAM(t, handler, "root-admin", "tenant-a")
+	token := decodeData[businessmcp.MCPTokenCreated](t, owner.invoke(t, "mcp.token.create", map[string]any{"name": "article client", "password": "TestOnly!2026Secure", "days": 1}, true))
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -115,20 +115,20 @@ func TestArticlesMCPSubmission(t *testing.T) {
 	}
 }
 
-// Discovery and invocation must reflect current department grants on every request.
+// Discovery and invocation must reflect current tenant grants on every request.
 func TestMCPDiscoveryTracksPermissionChanges(t *testing.T) {
-	handler, pool, root := iamFixture(t)
-	admin := loginIAM(t, handler, "root-admin")
+	handler, pool, root := articleFixture(t)
+	admin := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	created := admin.invoke(t, "identity.account.create", map[string]any{
-		"username": "mcp-dynamic", "fullName": "MCP dynamic", "email": "", "status": "active",
-		"organizationId": root.OrganizationID, "departmentId": root.DepartmentID,
-		"roleIds": []int64{}, "overrides": []map[string]any{{"permission": "articles:read", "effect": "allow", "scope": "OWN"}},
+		"username": "mcp-dynamic", "fullName": "MCP dynamic", "email": "", "initialStatus": "active",
 		"password": "TestOnly!2026Secure",
 	}, true)
 	account := decodeData[genidentity.AccountRecord](t, created)
-	user := loginIAM(t, handler, "mcp-dynamic")
+	seedTenantRole(t, pool, "tenant-a", "mcp-base", root.ID, account.ID, []*genidentity.PermissionGrant{{Permission: "example:read", Effect: "allow", Scope: "ALL"}})
+	seedTenantRole(t, pool, "tenant-a", "mcp-articles", root.ID, account.ID, []*genidentity.PermissionGrant{{Permission: "articles:read", Effect: "allow", Scope: "OWN"}})
+	user := loginTenantIAM(t, handler, "mcp-dynamic", "tenant-a")
 	token := decodeData[businessmcp.MCPTokenCreated](t, user.invoke(t, "mcp.token.create", map[string]any{
-		"name": "dynamic", "password": "TestOnly!2026Secure", "days": 1, "departmentId": root.DepartmentID,
+		"name": "dynamic", "password": "TestOnly!2026Secure", "days": 1,
 	}, true))
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -158,7 +158,10 @@ func TestMCPDiscoveryTracksPermissionChanges(t *testing.T) {
 	if res, e := client.CallTool(ctx, &sdk.CallToolParams{Name: "article_create", Arguments: map[string]any{"title": "denied", "body": "denied"}}); e == nil && !res.IsError {
 		t.Fatal("unauthorized direct invocation accepted")
 	}
-	if _, err = pool.Exec(ctx, `UPDATE iam_accounts SET overrides='[]' WHERE tenant_id=$1 AND id=$2`, "tenant-a", account.ID); err != nil {
+	if _, err = pool.Exec(ctx, `UPDATE iam_context_role_grants assignment SET revoked_at=now()
+		FROM iam_roles role JOIN iam_active_account_subjects subject ON subject.tenant_id=role.tenant_id
+		WHERE role.tenant_id=$1 AND role.code='mcp-articles' AND subject.account_id=$2
+		  AND assignment.tenant_id=role.tenant_id AND assignment.principal_id=subject.principal_id AND assignment.role_id=role.id`, "tenant-a", account.ID); err != nil {
 		t.Fatal(err)
 	}
 	if contains("article_list") {

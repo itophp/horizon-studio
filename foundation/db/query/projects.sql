@@ -13,7 +13,7 @@ SELECT p.id, p.code, p.name, p.status, p.priority, p.due_date, p.owner_id,
  (SELECT count(*) FROM project_tasks t WHERE t.tenant_id=p.tenant_id AND t.project_id=p.id
     AND t.status IN ('todo','in_progress') AND t.due_date < current_date) AS task_overdue_count
 FROM projects p
-LEFT JOIN iam_accounts a ON a.tenant_id=p.tenant_id AND a.id=p.owner_id
+LEFT JOIN account_profile_directory a ON a.tenant_id=p.tenant_id AND a.id=p.owner_id
 WHERE p.tenant_id=sqlc.arg(tenant_id)
  AND EXISTS (SELECT 1 FROM project_members m WHERE m.tenant_id=p.tenant_id AND m.project_id=p.id AND m.account_id=sqlc.arg(account_id))
  AND (sqlc.arg(status_filter)::text = '' OR p.status = sqlc.arg(status_filter))
@@ -39,7 +39,7 @@ SELECT p.id, p.code, p.name, p.status, p.priority, p.due_date, p.owner_id,
  (SELECT count(*) FROM project_tasks t WHERE t.tenant_id=p.tenant_id AND t.project_id=p.id
     AND t.status IN ('todo','in_progress') AND t.due_date < current_date) AS task_overdue_count
 FROM projects p
-LEFT JOIN iam_accounts a ON a.tenant_id=p.tenant_id AND a.id=p.owner_id
+LEFT JOIN account_profile_directory a ON a.tenant_id=p.tenant_id AND a.id=p.owner_id
 WHERE p.tenant_id=sqlc.arg(tenant_id) AND p.id=sqlc.arg(id)
  AND EXISTS (SELECT 1 FROM project_members m WHERE m.tenant_id=p.tenant_id AND m.project_id=p.id AND m.account_id=sqlc.arg(account_id));
 
@@ -72,7 +72,7 @@ WHERE p.tenant_id=sqlc.arg(tenant_id) AND p.id=sqlc.arg(id) AND p.status<>'archi
 SELECT m.account_id, a.full_name AS name, a.email, m.joined_at, (p.owner_id = m.account_id) AS is_owner
 FROM project_members m
 JOIN projects p ON p.tenant_id=m.tenant_id AND p.id=m.project_id
-JOIN iam_accounts a ON a.tenant_id=m.tenant_id AND a.id=m.account_id
+JOIN account_profile_directory a ON a.tenant_id=m.tenant_id AND a.id=m.account_id
 WHERE m.tenant_id=sqlc.arg(tenant_id) AND m.project_id=sqlc.arg(project_id)
  AND EXISTS (SELECT 1 FROM project_members v WHERE v.tenant_id=m.tenant_id AND v.project_id=m.project_id AND v.account_id=sqlc.arg(account_id))
  AND (sqlc.arg(keyword)::text='' OR a.full_name ILIKE '%'||sqlc.arg(keyword)::text||'%')
@@ -106,7 +106,7 @@ SELECT count(*) FROM project_members WHERE tenant_id=sqlc.arg(tenant_id) AND pro
 -- name: AccountSearch :many
 -- Member management needs to find people without granting accounts:read. Only
 -- the minimal projection is returned.
-SELECT id, full_name AS name, email FROM iam_accounts
+SELECT id, full_name AS name, email FROM account_profile_directory
 WHERE tenant_id=sqlc.arg(tenant_id)
  AND (full_name ILIKE '%'||sqlc.arg(keyword)||'%' OR email ILIKE '%'||sqlc.arg(keyword)||'%')
 ORDER BY full_name LIMIT sqlc.arg(max_rows);
@@ -115,7 +115,7 @@ ORDER BY full_name LIMIT sqlc.arg(max_rows);
 SELECT pl.id, pl.project_id, pl.plan_type, pl.title, pl.status, pl.priority, pl.due_date, pl.owner_id,
  o.full_name AS owner_name, pl.created_at, pl.updated_at
 FROM project_plans pl
-LEFT JOIN iam_accounts o ON o.tenant_id=pl.tenant_id AND o.id=pl.owner_id
+LEFT JOIN account_profile_directory o ON o.tenant_id=pl.tenant_id AND o.id=pl.owner_id
 WHERE pl.tenant_id=sqlc.arg(tenant_id) AND pl.project_id=sqlc.arg(project_id)
  AND EXISTS (SELECT 1 FROM project_members m WHERE m.tenant_id=pl.tenant_id AND m.project_id=pl.project_id AND m.account_id=sqlc.arg(account_id))
 ORDER BY pl.id DESC LIMIT sqlc.arg(max_rows);
@@ -124,7 +124,7 @@ ORDER BY pl.id DESC LIMIT sqlc.arg(max_rows);
 SELECT pl.id, pl.project_id, pl.plan_type, pl.title, pl.content, pl.status, pl.priority, pl.due_date, pl.owner_id,
  o.full_name AS owner_name, pl.created_by, pl.created_at, pl.updated_at
 FROM project_plans pl
-LEFT JOIN iam_accounts o ON o.tenant_id=pl.tenant_id AND o.id=pl.owner_id
+LEFT JOIN account_profile_directory o ON o.tenant_id=pl.tenant_id AND o.id=pl.owner_id
 WHERE pl.tenant_id=sqlc.arg(tenant_id) AND pl.id=sqlc.arg(id)
  AND EXISTS (SELECT 1 FROM project_members m WHERE m.tenant_id=pl.tenant_id AND m.project_id=pl.project_id AND m.account_id=sqlc.arg(account_id));
 
@@ -164,7 +164,7 @@ SELECT t.id, t.project_id, t.plan_id, t.title, t.status, t.priority, t.assignee_
  pl.title AS plan_title, s.full_name AS assignee_name
 FROM project_tasks t
 LEFT JOIN project_plans pl ON pl.tenant_id=t.tenant_id AND pl.id=t.plan_id
-LEFT JOIN iam_accounts s ON s.tenant_id=t.tenant_id AND s.id=t.assignee_id
+LEFT JOIN account_profile_directory s ON s.tenant_id=t.tenant_id AND s.id=t.assignee_id
 WHERE t.tenant_id=sqlc.arg(tenant_id) AND t.project_id=sqlc.arg(project_id)
  AND EXISTS (SELECT 1 FROM project_members m WHERE m.tenant_id=t.tenant_id AND m.project_id=t.project_id AND m.account_id=sqlc.arg(account_id))
  AND (sqlc.arg(plan_filter)::bigint = 0 OR t.plan_id = sqlc.arg(plan_filter))
@@ -189,7 +189,7 @@ SELECT t.id, t.project_id, t.plan_id, t.title, t.description, t.status, t.priori
  s.full_name AS assignee_name
 FROM project_tasks t
 LEFT JOIN project_plans pl ON pl.tenant_id=t.tenant_id AND pl.id=t.plan_id
-LEFT JOIN iam_accounts s ON s.tenant_id=t.tenant_id AND s.id=t.assignee_id
+LEFT JOIN account_profile_directory s ON s.tenant_id=t.tenant_id AND s.id=t.assignee_id
 WHERE t.tenant_id=sqlc.arg(tenant_id) AND t.id=sqlc.arg(id)
  AND EXISTS (SELECT 1 FROM project_members m WHERE m.tenant_id=t.tenant_id AND m.project_id=t.project_id AND m.account_id=sqlc.arg(account_id));
 

@@ -1,9 +1,9 @@
 // Package metadata owns the business entity model: the derived catalog, the
-// physical schema read from the embedded Goose migrations, and the checks that
+// physical schema read from the embedded initialization SQL, and the checks that
 // keep the two aligned.
 //
 // It exists so the business entity model can be validated against the database
-// instead of being maintained by hand: migrations stay the only source of truth
+// instead of being maintained by hand: initialization SQL is the source of truth
 // for columns, constraints and foreign keys, and everything declared in
 // internal/modules/*/entities.go is checked against what this package reads.
 //
@@ -20,10 +20,10 @@ import (
 	"sort"
 	"strings"
 
-	migrations "horizon/foundation/db/migrations"
+	"horizon/deployment/database"
 )
 
-// Column is one physical column as declared by the migrations.
+// Column is one physical column declared by the schema.
 type Column struct {
 	Name       string
 	SQLType    string   // normalized base type, e.g. "text", "bigint", "timestamptz"
@@ -143,26 +143,30 @@ func (t *Table) Names() []string {
 	return out
 }
 
-// Load parses the migrations embedded in the binary.
-func Load() ([]*Table, error) { return Parse(migrations.Files) }
+// Load parses the deployment baseline and any additional schema sources.
+func Load(additional ...fs.FS) ([]*Table, error) {
+	return Parse(append([]fs.FS{database.Files}, additional...)...)
+}
 
-// Parse applies the migrations in file order and returns the forward schema.
-func Parse(fsys fs.FS) ([]*Table, error) {
-	names, err := fs.Glob(fsys, "*.sql")
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(names)
+// Parse reads SQL sources in file order and returns the resulting schema.
+func Parse(sources ...fs.FS) ([]*Table, error) {
 	byName := map[string]*Table{}
 	var order []string
-	for _, name := range names {
-		raw, err := fs.ReadFile(fsys, name)
+	for _, source := range sources {
+		names, err := fs.Glob(source, "*.sql")
 		if err != nil {
 			return nil, err
 		}
-		for _, statement := range splitStatements(stripComments(upSection(string(raw)))) {
-			if err := apply(byName, &order, statement); err != nil {
-				return nil, fmt.Errorf("%s: %w", name, err)
+		sort.Strings(names)
+		for _, name := range names {
+			raw, err := fs.ReadFile(source, name)
+			if err != nil {
+				return nil, err
+			}
+			for _, statement := range splitStatements(stripComments(upSection(string(raw)))) {
+				if err := apply(byName, &order, statement); err != nil {
+					return nil, fmt.Errorf("%s: %w", name, err)
+				}
 			}
 		}
 	}
@@ -358,7 +362,7 @@ func apply(byName map[string]*Table, order *[]string, statement string) error {
 	case strings.HasPrefix(head, "CREATE TABLE"):
 		return applyCreate(byName, order, statement)
 	case strings.HasPrefix(head, "ALTER TABLE"):
-		return applyAlter(byName, statement)
+		return applyAlter(byName, order, statement)
 	case strings.HasPrefix(head, "DROP TABLE"):
 		applyDrop(byName, order, statement)
 	}
@@ -392,20 +396,23 @@ func applyCreate(byName map[string]*Table, order *[]string, statement string) er
 		}
 		column := parseColumn(trimmed)
 		table.Columns = append(table.Columns, column)
-		// An inline REFERENCES declares an implicit single column key.
-		if match := inlineFKRe.FindStringSubmatch(trimmed); match != nil {
-			columns := []string{column.Name}
-			table.ForeignKeys = append(table.ForeignKeys, ForeignKey{
-				Name: table.fkName(columns), Columns: columns,
-				TargetTable: match[1], TargetColumns: []string{match[2]},
-			})
-		}
+		applyInlineForeignKey(table, column.Name, trimmed)
 	}
 	if _, exists := byName[name]; !exists {
 		*order = append(*order, name)
 	}
 	byName[name] = table
 	return nil
+}
+
+func applyInlineForeignKey(table *Table, column, definition string) {
+	if match := inlineFKRe.FindStringSubmatch(definition); match != nil {
+		columns := []string{column}
+		table.ForeignKeys = append(table.ForeignKeys, ForeignKey{
+			Name: table.fkName(columns), Columns: columns,
+			TargetTable: match[1], TargetColumns: []string{match[2]},
+		})
+	}
 }
 
 // isConstraint reports whether a table body entry declares a constraint rather
@@ -611,7 +618,7 @@ func checkExpressions(source string) []string {
 	return out
 }
 
-func applyAlter(byName map[string]*Table, statement string) error {
+func applyAlter(byName map[string]*Table, order *[]string, statement string) error {
 	rest := strings.TrimSpace(statement[len("ALTER TABLE"):])
 	rest = trimKeyword(rest, "IF EXISTS")
 	name, rest := leadingIdentifier(rest)
@@ -621,6 +628,41 @@ func applyAlter(byName map[string]*Table, statement string) error {
 		// migration bug; surface it instead of silently dropping the change.
 		return fmt.Errorf("alter table %s before create", name)
 	}
+	if suffix := trimKeyword(strings.TrimSpace(rest), "RENAME TO"); suffix != strings.TrimSpace(rest) {
+		newName, trailing := leadingIdentifier(suffix)
+		if newName == "" || strings.TrimSpace(trailing) != "" || byName[newName] != nil {
+			return fmt.Errorf("invalid table rename %s to %s", name, newName)
+		}
+		delete(byName, name)
+		table.Name = newName
+		byName[newName] = table
+		for i, existing := range *order {
+			if existing == name {
+				(*order)[i] = newName
+				break
+			}
+		}
+		for _, candidate := range byName {
+			for i, column := range candidate.Columns {
+				if target, field, ok := strings.Cut(column.References, "."); ok && target == name {
+					candidate.Columns[i].References = newName + "." + field
+				}
+			}
+			for i, key := range candidate.ForeignKeys {
+				if key.TargetTable == name {
+					candidate.ForeignKeys[i].TargetTable = newName
+				}
+			}
+		}
+		return nil
+	}
+	for _, action := range splitTopLevel(rest) {
+		applyAlterAction(table, action)
+	}
+	return nil
+}
+
+func applyAlterAction(table *Table, rest string) {
 	upper := strings.ToUpper(rest)
 	switch {
 	case strings.Contains(upper, "ADD COLUMN"):
@@ -632,9 +674,10 @@ func applyAlter(byName map[string]*Table, statement string) error {
 			if column.NotNull {
 				existing.NotNull = true
 			}
-			return nil
+			return
 		}
 		table.Columns = append(table.Columns, column)
+		applyInlineForeignKey(table, column.Name, definition)
 	case strings.Contains(upper, "DROP COLUMN"):
 		index := strings.Index(upper, "DROP COLUMN")
 		tail := strings.TrimSpace(rest[index+len("DROP COLUMN"):])
@@ -648,12 +691,16 @@ func applyAlter(byName map[string]*Table, statement string) error {
 		columnName, remainder := leadingIdentifier(tail)
 		column, ok := table.Column(columnName)
 		if !ok {
-			return nil
+			return
 		}
-		if strings.Contains(strings.ToUpper(remainder), "SET NOT NULL") {
+		action := strings.ToUpper(strings.TrimSpace(remainder))
+		switch {
+		case strings.HasPrefix(action, "ADD GENERATED ALWAYS AS IDENTITY"):
+			column.Identity = true
 			column.NotNull = true
-		}
-		if strings.Contains(strings.ToUpper(remainder), "DROP NOT NULL") {
+		case strings.HasPrefix(action, "SET NOT NULL"):
+			column.NotNull = true
+		case strings.HasPrefix(action, "DROP NOT NULL"):
 			column.NotNull = false
 		}
 	case strings.Contains(upper, "DROP CONSTRAINT"):
@@ -674,7 +721,7 @@ func applyAlter(byName map[string]*Table, statement string) error {
 		index := strings.Index(upper, "ADD ")
 		applyConstraintPart(table, strings.TrimSpace(rest[index+len("ADD "):]))
 	}
-	return nil
+	return
 }
 
 func applyDrop(byName map[string]*Table, order *[]string, statement string) {

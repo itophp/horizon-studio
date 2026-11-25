@@ -61,17 +61,7 @@ func (s *Service) issue(ctx context.Context, in *CreatePayload, rotateID int64, 
 	if err = s.identity.VerifyCurrentPassword(ctx, p, password); err != nil {
 		return nil, err
 	}
-	departmentID := int64(0)
-	if rotateID != 0 {
-		departmentID, err = dbgen.New(s.pool).MCPRotationDepartment(ctx, dbgen.MCPRotationDepartmentParams{TenantID: p.TenantID, AccountID: p.Account.ID, ID: rotateID})
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		departmentID = in.DepartmentID
-	}
-	_, err = s.identity.PrincipalForTask(ctx, p.TenantID, p.Account.ID, departmentID)
-	if err != nil {
+	if _, err = s.identity.PrincipalForBoundTask(ctx, p.TenantID, p.Account.ID, p.IdentityBindingID); err != nil {
 		return nil, problem("forbidden")
 	}
 	tx, err := s.pool.Begin(ctx)
@@ -96,14 +86,14 @@ func (s *Service) issue(ctx context.Context, in *CreatePayload, rotateID int64, 
 	}
 	var expiry pgtype.Timestamptz
 	if rotateID != 0 {
-		old, e := q.MCPTokenForRotation(ctx, dbgen.MCPTokenForRotationParams{TenantID: p.TenantID, AccountID: p.Account.ID, ID: rotateID})
+		old, e := q.MCPTokenForRotation(ctx, dbgen.MCPTokenForRotationParams{TenantID: p.TenantID, AccountID: p.Account.ID, ID: rotateID, IdentityBindingID: p.IdentityBindingID})
 		if e != nil {
 			return nil, e
 		}
-		in = &CreatePayload{Name: old.Name, DepartmentID: old.DepartmentID, Days: 30}
+		in = &CreatePayload{Name: old.Name, Days: 30}
 
 		expiry = old.ExpiresAt
-		if _, e = q.MCPRevokeToken(ctx, dbgen.MCPRevokeTokenParams{TenantID: p.TenantID, AccountID: p.Account.ID, ID: rotateID}); e != nil {
+		if _, e = q.MCPRevokeToken(ctx, dbgen.MCPRevokeTokenParams{TenantID: p.TenantID, AccountID: p.Account.ID, ID: rotateID, IdentityBindingID: p.IdentityBindingID}); e != nil {
 			return nil, e
 		}
 	}
@@ -117,14 +107,17 @@ func (s *Service) issue(ctx context.Context, in *CreatePayload, rotateID int64, 
 	}
 	secret := "bmcp_" + hex.EncodeToString(raw[:])
 
-	row, err := q.MCPCreateToken(ctx, dbgen.MCPCreateTokenParams{TenantID: p.TenantID, AccountID: p.Account.ID, DepartmentID: in.DepartmentID, Name: in.Name, TokenHash: hash(secret), TokenPrefix: secret[:13], PreservedExpiry: expiry, ValidDays: int32(in.Days)})
+	row, err := q.MCPCreateToken(ctx, dbgen.MCPCreateTokenParams{
+		TenantID: p.TenantID, AccountID: p.Account.ID, IdentityBindingID: p.IdentityBindingID,
+		Name: in.Name, TokenHash: hash(secret), TokenPrefix: secret[:13], PreservedExpiry: expiry, ValidDays: int32(in.Days),
+	})
 	if err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err
 	}
-	return &MCPTokenCreated{Secret: secret, Token: &MCPToken{ID: row.ID, DepartmentID: row.DepartmentID, Name: row.Name, Prefix: row.TokenPrefix, Tools: []string{}, CreatedAt: governance.Time(row.CreatedAt), ExpiresAt: governance.Time(row.ExpiresAt)}}, nil
+	return &MCPTokenCreated{Secret: secret, Token: &MCPToken{ID: row.ID, Name: row.Name, Prefix: row.TokenPrefix, CreatedAt: governance.Time(row.CreatedAt), ExpiresAt: governance.Time(row.ExpiresAt)}}, nil
 }
 func (s *Service) List(ctx context.Context, _ *ListPayload) (out []*MCPToken, err error) {
 	defer mapped(&err)
@@ -136,14 +129,14 @@ func (s *Service) List(ctx context.Context, _ *ListPayload) (out []*MCPToken, er
 		return nil, problem("unavailable")
 	}
 	q := dbgen.New(s.pool)
-	rows, err := q.MCPListTokens(ctx, dbgen.MCPListTokensParams{TenantID: p.TenantID, AccountID: p.Account.ID})
+	rows, err := q.MCPListTokens(ctx, dbgen.MCPListTokensParams{TenantID: p.TenantID, AccountID: p.Account.ID, IdentityBindingID: p.IdentityBindingID})
 	if err != nil {
 		return nil, err
 	}
 	out = []*MCPToken{}
 	for _, r := range rows {
 
-		out = append(out, &MCPToken{ID: r.ID, DepartmentID: r.DepartmentID, Name: r.Name, Prefix: r.TokenPrefix, Tools: []string{}, CreatedAt: governance.Time(r.CreatedAt), ExpiresAt: governance.Time(r.ExpiresAt), RevokedAt: governance.Time(r.RevokedAt), LastUsedAt: governance.Time(r.LastUsedAt), RevokedBy: r.RevokedBy})
+		out = append(out, &MCPToken{ID: r.ID, Name: r.Name, Prefix: r.TokenPrefix, CreatedAt: governance.Time(r.CreatedAt), ExpiresAt: governance.Time(r.ExpiresAt), RevokedAt: governance.Time(r.RevokedAt), LastUsedAt: governance.Time(r.LastUsedAt), RevokedBy: r.RevokedBy})
 	}
 	return out, nil
 }
@@ -159,7 +152,7 @@ func (s *Service) Revoke(ctx context.Context, in *RevokePayload) (err error) {
 	if err = s.identity.VerifyCurrentPassword(ctx, p, in.Password); err != nil {
 		return err
 	}
-	_, err = dbgen.New(s.pool).MCPRevokeToken(ctx, dbgen.MCPRevokeTokenParams{TenantID: p.TenantID, AccountID: p.Account.ID, ID: in.ID})
+	_, err = dbgen.New(s.pool).MCPRevokeToken(ctx, dbgen.MCPRevokeTokenParams{TenantID: p.TenantID, AccountID: p.Account.ID, ID: in.ID, IdentityBindingID: p.IdentityBindingID})
 	return err
 }
 func (s *Service) Audit(ctx context.Context, _ *AuditPayload) (out []*MCPAudit, err error) {
@@ -171,13 +164,13 @@ func (s *Service) Audit(ctx context.Context, _ *AuditPayload) (out []*MCPAudit, 
 	if s.pool == nil {
 		return nil, problem("unavailable")
 	}
-	rows, err := dbgen.New(s.pool).MCPListAudits(ctx, dbgen.MCPListAuditsParams{TenantID: p.TenantID, AccountID: p.Account.ID})
+	rows, err := dbgen.New(s.pool).MCPListAudits(ctx, dbgen.MCPListAuditsParams{TenantID: p.TenantID, AccountID: p.Account.ID, IdentityBindingID: p.IdentityBindingID})
 	if err != nil {
 		return nil, err
 	}
 	out = []*MCPAudit{}
 	for _, r := range rows {
-		out = append(out, &MCPAudit{ID: r.ID, TokenID: r.TokenID, DepartmentID: r.DepartmentID, Tool: r.Tool, ResultCode: r.ResultCode, DurationMs: r.DurationMs, RequestID: r.RequestID, CreatedAt: governance.Time(r.CreatedAt)})
+		out = append(out, &MCPAudit{ID: r.ID, TokenID: r.TokenID, Tool: r.Tool, ResultCode: r.ResultCode, DurationMs: r.DurationMs, RequestID: r.RequestID, CreatedAt: governance.Time(r.CreatedAt)})
 	}
 	return out, nil
 }
@@ -185,17 +178,13 @@ func (s *Service) Audit(ctx context.Context, _ *AuditPayload) (out []*MCPAudit, 
 func (s *Service) Rotate(ctx context.Context, in *RotatePayload) (*MCPTokenCreated, error) {
 	return s.issue(ctx, nil, in.ID, in.Password)
 }
-func (s *Service) Capabilities(ctx context.Context, in *CapabilitiesPayload) (out []string, err error) {
+func (s *Service) Capabilities(ctx context.Context, _ *CapabilitiesPayload) (out []string, err error) {
 	defer mapped(&err)
 	p, e := identity.Current(ctx)
 	if e != nil {
 		return nil, e
 	}
-	departmentID := p.Account.DepartmentID
-	if in.DepartmentID != nil {
-		departmentID = *in.DepartmentID
-	}
-	p, e = s.identity.PrincipalForTask(ctx, p.TenantID, p.Account.ID, departmentID)
+	p, e = s.identity.PrincipalForBoundTask(ctx, p.TenantID, p.Account.ID, p.IdentityBindingID)
 	if e != nil {
 		return nil, e
 	}
@@ -228,7 +217,7 @@ func (s *Service) AdminRevoke(ctx context.Context, in *AdminRevokePayload) (err 
 	if err != nil {
 		return err
 	}
-	if !scope.All {
+	if !scope.All || p.IdentityBindingID != "" {
 		return problem("forbidden")
 	}
 	if err = s.identity.VerifyCurrentPassword(ctx, p, in.Password); err != nil {

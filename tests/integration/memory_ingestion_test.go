@@ -279,7 +279,7 @@ func TestHTTPObservationCorrelatesCapabilityWithoutRequestContent(t *testing.T) 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	start(ctx)
-	client := loginIAM(t, handler, "root-admin")
+	client := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	w := client.request(t, "POST", "/api/capabilities/example.record.list/invocations?secret=private", map[string]any{"input": map[string]any{"limit": 1}}, true)
 	checkStatus(t, w, 200)
 	requestID := w.Header().Get("X-Request-ID")
@@ -346,8 +346,8 @@ func TestMemoryConsumerProjectsExecutionMetadataWithoutContent(t *testing.T) {
 	_, pool, root := iamFixture(t)
 	ctx := context.Background()
 	_, err := pool.Exec(ctx, `INSERT INTO cap_invocations
-	 (tenant_id,account_id,department_id,invocation_id,capability,capability_version,origin,status,input,input_digest,result,trace_id,correlation_id,finished_at)
-	 VALUES ('tenant-a',$1,$2,'test-inv','example.record.create','1.0.0','agent','succeeded','{"secret":"private"}','digest','{"body":"private"}','trace','corr',now())`, root.ID, root.DepartmentID)
+	 (tenant_id,account_id,invocation_id,capability,capability_version,origin,status,input,input_digest,result,trace_id,correlation_id,finished_at)
+	 VALUES ('tenant-a',$1,'test-inv','example.record.create','1.0.0','agent','succeeded','{"secret":"private"}','digest','{"body":"private"}','trace','corr',now())`, root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

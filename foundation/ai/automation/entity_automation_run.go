@@ -30,6 +30,7 @@ func automationRunEntity() contracts.Entity {
 			{Name: "createdAt", Kind: contracts.AttributeSystem, Type: contracts.TypeTimestamp, Required: true},
 			{Name: "startedAt", Kind: contracts.AttributeSystem, Type: contracts.TypeTimestamp, Nullable: true},
 			{Name: "finishedAt", Kind: contracts.AttributeSystem, Type: contracts.TypeTimestamp, Nullable: true},
+			{Name: "serviceExecution", Kind: contracts.AttributeSystem, Type: contracts.TypeString, Nullable: true, Sensitive: true},
 		},
 		Relations: []contracts.Relation{
 			{Name: "task", Target: "automation_task", Kind: "one", Via: "task_id", Required: true},
@@ -47,6 +48,7 @@ func automationRunEntity() contracts.Entity {
 			{To: "queued", Capability: "automation.run.now"},
 			{From: []string{"queued"}, To: "running"},
 			{From: []string{"queued"}, To: "skipped"},
+			{From: []string{"queued"}, To: "cancelled"},
 			{From: []string{"running"}, To: "awaiting_approval"},
 			{From: []string{"running"}, To: "completed"},
 			{From: []string{"running"}, To: "failed"},

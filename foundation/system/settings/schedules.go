@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/system/files"
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
@@ -97,7 +98,7 @@ func (s *Service) Schedule(ctx context.Context, payload *SchedulePayload) (res *
 				return e
 			}
 		}
-		id, e = q.GovCreateSettingsSchedule(ctx, dbgen.GovCreateSettingsScheduleParams{TenantID: p.TenantID, DraftID: row.ID, ActorID: p.Account.ID, DepartmentID: p.Account.DepartmentID, BaseRevision: payload.BaseRevision, DraftHash: governance.Hash(string(row.Payload)), SensitiveConfirmed: confirmed, ScheduledAt: pgtype.Timestamptz{Time: at.UTC(), Valid: true}})
+		id, e = q.GovCreateSettingsSchedule(ctx, dbgen.GovCreateSettingsScheduleParams{TenantID: p.TenantID, DraftID: row.ID, ActorID: p.Account.ID, DepartmentID: p.Account.DepartmentID, BindingID: p.IdentityBindingID, BaseRevision: payload.BaseRevision, DraftHash: governance.Hash(string(row.Payload)), SensitiveConfirmed: confirmed, ScheduledAt: pgtype.Timestamptz{Time: at.UTC(), Valid: true}})
 		if errors.Is(e, pgx.ErrNoRows) {
 			return governance.Problem("invalid")
 		}
@@ -171,9 +172,24 @@ func (s *Service) publishWithin(ctx context.Context, q *dbgen.Queries, p *identi
 }
 func (s *Service) executeScheduled(ctx context.Context, q *dbgen.Queries, job dbgen.GovClaimSettingsScheduleRow) (int64, error) {
 	b := s.bound(q)
-	p, e := b.Identity.PrincipalForTask(ctx, job.TenantID, job.ActorID, job.DepartmentID)
+	p, e := b.Identity.PrincipalForBoundTask(ctx, job.TenantID, job.ActorID, job.IdentityBindingID.String())
 	if e != nil {
 		return 0, e
+	}
+	if e = q.IAMPolicyReadLock(ctx, job.TenantID); e != nil {
+		return 0, e
+	}
+	for _, check := range []identity.AuthorizationInput{
+		{Principal: p, Action: "settings.schedule.create", Permission: "settings:publish", Resource: "settings_schedule", Environment: contracts.OriginAutomation},
+		{Principal: p, Action: "settings.draft.publish", Permission: "settings:publish", Resource: "settings_draft", Environment: contracts.OriginAutomation},
+	} {
+		decision, err := b.Identity.AuthorizeAction(ctx, q, check)
+		if err != nil {
+			return 0, err
+		}
+		if !decision.Allowed {
+			return 0, governance.Problem("forbidden")
+		}
 	}
 	ctx = identity.WithPrincipal(ctx, p)
 	if _, _, e = b.Check(ctx, "settings:publish", "workspace", 0, true); e != nil {

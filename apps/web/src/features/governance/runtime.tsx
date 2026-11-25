@@ -9,9 +9,9 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { settingsEffective, settingsPreferences } from "@/lib/capabilities";
 import type { ConfigEntry } from "@/api/generated/models";
-import { useAuth } from "@/features/administration/auth";
+import { useAuth } from "@/features/identity/auth";
 import { changeLanguage } from "@/i18n";
-import { ErrorBanner } from "@/features/administration/shared";
+import { ErrorBanner } from "@/features/identity/shared";
 import { useTheme } from "@/app/providers/theme";
 export const governanceKey = "governance";
 const RuntimeContext = createContext<ConfigEntry[]>([]);
@@ -49,7 +49,7 @@ export function RuntimeProvider({ children }: PropsWithChildren) {
       "runtime",
       profile?.tenantId,
       profile?.account.id,
-      profile?.activeDepartmentId,
+      profile?.identityBindingId,
     ],
     queryFn: () => settingsEffective(),
     meta: {

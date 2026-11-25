@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	genidentity "horizon/foundation/gen/identity"
 	"horizon/internal/repository/dbgen"
@@ -65,8 +66,19 @@ func (s *Service) ScopeForInTx(ctx context.Context, tx pgx.Tx, p *Principal, per
 	bound.repo = &Repository{q: dbgen.New(tx)}
 	return bound.ScopeFor(ctx, p, permission, permanent)
 }
-func (s *Service) PrincipalForTask(ctx context.Context, tenant string, id, dept int64) (*Principal, error) {
-	account, err := s.repo.account(ctx, Scope{TenantID: tenant, All: true}, id)
+func (s *Service) PrincipalForTask(ctx context.Context, tenant string, id int64) (*Principal, error) {
+	return s.PrincipalForBoundTask(ctx, tenant, id, "")
+}
+
+func (s *Service) PrincipalForBoundTask(ctx context.Context, tenant string, accountID int64, bindingID string) (*Principal, error) {
+	subject, err := s.repo.q.IAMActiveAccountSubject(ctx, dbgen.IAMActiveAccountSubjectParams{TenantID: tenant, AccountID: accountID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, problem("forbidden")
+	}
+	if err != nil {
+		return nil, safe(err)
+	}
+	account, err := s.repo.authorityAccount(ctx, tenant, accountID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, problem("forbidden")
@@ -76,27 +88,32 @@ func (s *Service) PrincipalForTask(ctx context.Context, tenant string, id, dept 
 	if account.Status != "active" {
 		return nil, problem("forbidden")
 	}
-	account, err = s.departmentAccount(ctx, tenant, account, dept)
-	if err != nil {
-		return nil, err
+	account = accountForTenantContext(account)
+	var binding pgtype.UUID
+	if bindingID != "" && (binding.Scan(bindingID) != nil || !binding.Valid) {
+		return nil, problem("forbidden")
 	}
-	grants, err := s.departmentGrants(ctx, tenant, account)
-	if err != nil {
-		return nil, err
+	return s.newWorkPrincipal(ctx, account, tenant, subject.PrincipalID, subject.LoginAccountID, subject.MembershipID, binding)
+}
+
+func (s *Service) RefreshTaskPrincipal(ctx context.Context, current *Principal) (*Principal, error) {
+	principal, err := s.PrincipalForBoundTask(ctx, current.TenantID, current.Account.ID, current.IdentityBindingID)
+	if err != nil || (current.SubjectID != "" && principal.SubjectID != current.SubjectID) {
+		return nil, problem("forbidden")
 	}
-	return s.NewPrincipal(account, tenant, MergeGrants(grants, account.Overrides))
+	return principal, nil
 }
 
 // PrincipalForTaskInTx reconstructs an identity using the caller's transaction.
 // It is intended for authorization invariants that must observe the same
 // snapshot as a business write, without opening a second pool connection.
-func (s *Service) PrincipalForTaskInTx(ctx context.Context, tx pgx.Tx, tenant string, id, dept int64) (*Principal, error) {
+func (s *Service) PrincipalForTaskInTx(ctx context.Context, tx pgx.Tx, tenant string, id int64) (*Principal, error) {
 	if tx == nil {
 		return nil, problem("unavailable")
 	}
 	bound := *s
 	bound.repo = &Repository{q: dbgen.New(tx)}
-	return bound.PrincipalForTask(ctx, tenant, id, dept)
+	return bound.PrincipalForTask(ctx, tenant, id)
 }
 func (s *Service) VerifyCurrentPassword(ctx context.Context, p *Principal, password string) error {
 	key := tokenHash("reauth:" + p.TenantID + ":" + p.TokenHash)
@@ -108,7 +125,7 @@ func (s *Service) VerifyCurrentPassword(ctx context.Context, p *Principal, passw
 		dummyPasswordWork(password)
 		return problem("forbidden")
 	}
-	row, err := s.repo.q.GovAccountPassword(ctx, dbgen.GovAccountPasswordParams{TenantID: p.TenantID, ID: p.Account.ID})
+	row, err := s.repo.q.GovAccountPassword(ctx, dbgen.GovAccountPasswordParams{TenantID: p.TenantID, AccountID: p.Account.ID})
 	if err != nil {
 		return problem("forbidden")
 	}
@@ -125,6 +142,10 @@ func (s *Service) validatePolicyPassword(ctx context.Context, p *Principal, raw 
 	if err != nil {
 		return safe(err)
 	}
+	return validatePasswordPolicy(policy, raw)
+}
+
+func validatePasswordPolicy(policy SecurityPolicy, raw string) error {
 	if utf8.RuneCountInString(raw) < policy.PasswordMin {
 		return problem("invalid")
 	}

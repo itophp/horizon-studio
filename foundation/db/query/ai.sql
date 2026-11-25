@@ -1,7 +1,7 @@
 -- name: AICreateRun :one
 WITH run AS (
-INSERT INTO ai_runs (tenant_id, account_id, department_id, session_id, agent, model, instruction_version, question, trace_id, context, origin, correlation_id, causation_id, trigger_depth, trigger_policy, event_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+INSERT INTO ai_runs (tenant_id, account_id, department_id, session_id, agent, model, instruction_version, question, trace_id, context, origin, correlation_id, causation_id, trigger_depth, trigger_policy, event_id, identity_binding_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NULLIF(sqlc.arg(identity_binding_id)::text, '')::uuid)
 RETURNING id, created_at, tenant_id, account_id, session_id
 ), conversation AS (
     INSERT INTO ai_conversations (tenant_id, account_id, session_id, title)
@@ -18,16 +18,16 @@ SET status = sqlc.arg(status), answer = sqlc.arg(answer), error_code = sqlc.arg(
     tool_calls = sqlc.arg(tool_calls), prompt_tokens = sqlc.arg(prompt_tokens),
     completion_tokens = sqlc.arg(completion_tokens), duration_ms = sqlc.arg(duration_ms),
     finished_at = now()
-WHERE tenant_id = $1 AND id = $2;
+WHERE tenant_id = $1 AND id = $2 AND status IN ('running', 'awaiting_approval');
 
 -- name: AISetRunStatus :exec
-UPDATE ai_runs SET status = sqlc.arg(status) WHERE tenant_id = $1 AND id = $2;
+UPDATE ai_runs SET status = sqlc.arg(status) WHERE tenant_id = $1 AND id = $2 AND status IN ('running', 'awaiting_approval');
 
 -- name: AIGetRun :one
 SELECT id, account_id, department_id, session_id, agent, model, instruction_version, question,
        answer, status, error_code, tool_calls, prompt_tokens, completion_tokens, duration_ms,
        trace_id, context, origin, correlation_id, causation_id, trigger_depth, trigger_policy, event_id,
-       created_at, finished_at
+       created_at, finished_at, COALESCE(identity_binding_id::text, '')::text AS identity_binding_id
 FROM ai_runs
 WHERE tenant_id = $1 AND account_id = $2 AND id = $3;
 

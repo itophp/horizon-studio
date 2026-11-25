@@ -340,6 +340,188 @@ func EncodeInvokeError(encoder func(context.Context, http.ResponseWriter) goahtt
 	}
 }
 
+// EncodeInvokeMachineResponse returns an encoder for responses returned by the
+// capability invoke_machine endpoint.
+func EncodeInvokeMachineResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*capability.CapabilityResult)
+		enc := encoder(ctx, w)
+		body := NewInvokeMachineResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeInvokeMachineRequest returns a decoder for requests sent to the
+// capability invoke_machine endpoint.
+func DecodeInvokeMachineRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*capability.InvokeMachinePayload, error) {
+	return func(r *http.Request) (*capability.InvokeMachinePayload, error) {
+		var payload *capability.InvokeMachinePayload
+		var (
+			body InvokeMachineRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateInvokeMachineRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			name          string
+			authorization string
+			delegationID  *string
+
+			params = mux.Vars(r)
+		)
+		name = params["name"]
+		if utf8.RuneCountInString(name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("name", name, utf8.RuneCountInString(name), 1, true))
+		}
+		if utf8.RuneCountInString(name) > 80 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("name", name, utf8.RuneCountInString(name), 80, false))
+		}
+		authorization = r.Header.Get("Authorization")
+		if authorization == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("authorization", "header"))
+		}
+		delegationIDRaw := r.Header.Get("X-Horizon-Delegation")
+		if delegationIDRaw != "" {
+			delegationID = &delegationIDRaw
+		}
+		if delegationID != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("delegationId", *delegationID, "^[0-9a-fA-F-]{36}$"))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewInvokeMachinePayload(&body, name, authorization, delegationID)
+		if index := strings.IndexByte(string(payload.Authorization), ' '); index >= 0 {
+			// Remove authorization scheme prefix (e.g. "Bearer")
+			payload.Authorization = payload.Authorization[index+1:]
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeInvokeMachineError returns an encoder for errors returned by the
+// invoke_machine capability endpoint.
+func EncodeInvokeMachineError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthenticated":
+			var res *capability.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewInvokeMachineUnauthenticatedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *capability.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewInvokeMachineForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "invalid":
+			var res *capability.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewInvokeMachineInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *capability.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewInvokeMachineNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *capability.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewInvokeMachineConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *capability.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewInvokeMachineUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *capability.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewInvokeMachineInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeInvocationsResponse returns an encoder for responses returned by the
 // capability invocations endpoint.
 func EncodeInvocationsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {

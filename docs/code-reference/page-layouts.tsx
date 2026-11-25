@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { PageHeading } from "@/features/administration/shared";
+import { PageHeading } from "@/features/identity/shared";
 
 export function TemplatePage({
   title,

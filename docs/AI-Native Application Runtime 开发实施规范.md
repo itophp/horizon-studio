@@ -365,7 +365,7 @@ export interface RuntimeComponentDefinition<TProps = unknown> {
 - Sidebar / Navigation
 - Header
 - Breadcrumb
-- Tab Workspace
+- 应用标签容器
 - Page Container
 - Notification
 - Command Palette

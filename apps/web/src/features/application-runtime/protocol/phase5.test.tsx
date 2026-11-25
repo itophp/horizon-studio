@@ -22,19 +22,12 @@ vi.mock("@/lib/capabilities", async (original) => ({
   runtimeExecute: api.execute,
 }));
 
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant",
     account: { id: 1 },
-    activeDepartmentId: 2,
-    permissions: [
-      "articles:read",
-      "articles:write",
-      "articles:review",
-      "orchestration:run",
-      "projects:read",
-      "projects:write",
-    ],
+
+    permissions: ["orchestration:run", "projects:read", "projects:write"],
   }),
 }));
 
@@ -52,24 +45,7 @@ type DeploymentApplication = {
 const applications = JSON.parse(
   readFileSync("../../docs/generated/runtime/applications.json", "utf8"),
 ) as DeploymentApplication[];
-const articleApp = applications.find((item) => item.id === "articles")!;
 const projectApp = applications.find((item) => item.id === "projects")!;
-
-const articleRow = {
-  id: 8,
-  title: "Protocol migration",
-  status: "pending_review",
-  revision: 3,
-  reviewCode: "human_review",
-};
-const articleDetail = {
-  id: 8,
-  title: "Protocol migration",
-  body: "**Approved body**",
-  status: "pending_review",
-  revision: 3,
-  reviewCode: "human_review",
-};
 
 function mount(path: string) {
   return render(
@@ -91,21 +67,11 @@ beforeEach(async () => {
   vi.clearAllMocks();
   await changeLanguage("en", false);
   api.execute.mockResolvedValue({ status: "succeeded" });
-  api.application.mockImplementation(
-    async (id: string) =>
-      applications.find((item) => item.id === id) ?? articleApp,
+  api.application.mockImplementation(async (id: string) =>
+    applications.find((item) => item.id === id),
   );
   api.read.mockImplementation(async (name: string) => {
-    if (name === "application.runtime.list")
-      return { items: [articleApp, projectApp] };
-    if (name === "article.list")
-      return {
-        items: [articleRow],
-        total: 21,
-        page: 1,
-        pageSize: 20,
-      };
-    if (name === "article.get") return articleDetail;
+    if (name === "application.runtime.list") return { items: [projectApp] };
     if (name === "project.get")
       return {
         id: 3,
@@ -137,7 +103,7 @@ beforeEach(async () => {
             taskCount: 4,
           },
         ],
-        total: 1,
+        total: 21,
         page: 1,
         pageSize: 20,
       };
@@ -196,23 +162,17 @@ beforeEach(async () => {
   });
 });
 
-it("renders the V3 article list with server pagination", async () => {
+it("paginates the project's V3 list through its registered provider", async () => {
   const user = userEvent.setup();
-  mount("/articles");
-  expect(await screen.findByText("Protocol migration")).toBeInTheDocument();
+  mount("/projects");
+  expect(await screen.findByText("Operations")).toBeInTheDocument();
   expect(document.querySelector(".table-pagination")?.textContent).toContain(
     "21",
-  );
-  const draft = screen.getByRole("button", { name: /Draft/i });
-  await user.click(draft);
-  expect(screen.getByRole("button", { name: /Draft/i })).toHaveAttribute(
-    "aria-pressed",
-    "true",
   );
   await user.click(screen.getByRole("button", { name: "Next" }));
   await waitFor(() =>
     expect(api.read).toHaveBeenLastCalledWith(
-      "article.list",
+      "project.list",
       expect.objectContaining({ page: 2, pageSize: 20 }),
       expect.any(AbortSignal),
       "1.0.0",
@@ -220,24 +180,15 @@ it("renders the V3 article list with server pagination", async () => {
   );
 });
 
-it("invokes a schema-declared article decision from the generic detail panel", async () => {
-  const user = userEvent.setup();
-  mount("/articles/8");
-  expect(await screen.findByText("Protocol migration")).toBeInTheDocument();
-  expect(screen.getByText("Approved body")).toBeInTheDocument();
-  await user.click(
-    screen.getByRole("button", { name: /Approve and publish/i }),
-  );
-  await waitFor(() => expect(api.execute).toHaveBeenCalled());
-  expect(api.execute).toHaveBeenCalledWith(
-    "article.decide",
-    "1.0.0",
-    { id: 8, revision: 3, approve: true },
-    expect.any(String),
-    expect.any(String),
-    expect.anything(),
-  );
-});
+it.each(["/articles", "/articles/8"])(
+  "does not mount a retired article route at %s",
+  async (route) => {
+    expect(applications.some((item) => item.id === "articles")).toBe(false);
+    mount(route);
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(api.application).not.toHaveBeenCalled();
+  },
+);
 
 it("creates a project through the schema-declared V3 form command", async () => {
   const user = userEvent.setup();

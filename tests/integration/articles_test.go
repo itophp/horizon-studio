@@ -19,7 +19,6 @@ import (
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
 	orchmodule "horizon/foundation/system/orchestration"
-	"os"
 	"testing"
 	"time"
 
@@ -117,7 +116,7 @@ func TestArticlePublishFlow(t *testing.T) {
 	handler, pool, root := iamFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	iam := pluginIAM(t, pool)
+	iam := pluginIAM(t, pool, (articles.Plugin{}).Manifest().Permissions...)
 	core := governance.New(pool, iam, governance.Options{EncryptionKey: []byte("01234567890123456789012345678901")})
 
 	blocked, configured := false, true
@@ -126,14 +125,7 @@ func TestArticlePublishFlow(t *testing.T) {
 		return blocked, configured, nil
 	}
 
-	raw, err := os.ReadFile("../../docs/generated/workflows/article-publish.workflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	definition, err := runtime.DecodeDefinition(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	definition := articles.ArticlePublish()
 	engine := runtime.New(core, []runtime.Definition{definition})
 	entries := append(module.Entries(), (&orchmodule.Module{Engine: engine}).Entries()...)
 	catalog := registry.New(entries)
@@ -141,14 +133,14 @@ func TestArticlePublishFlow(t *testing.T) {
 		t.Fatal(catalog.Err())
 	}
 	g := gateway.New(gateway.Options{Registry: catalog, Identity: iam, Pool: pool, Approvals: approval.NewStore(pool), Audit: audit.NewStore(pool), Events: eventhub.NewStore(pool)})
-	if err = engine.Attach(g, catalog); err != nil {
+	if err := engine.Attach(g, catalog); err != nil {
 		t.Fatal(err)
 	}
 	decision := "approve"
 	engine.AgentModel = func(context.Context) (model.ToolCallingChatModel, error) {
 		return &articleModel{decision: decision}, nil
 	}
-	principal, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	principal, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,17 +148,17 @@ func TestArticlePublishFlow(t *testing.T) {
 
 	// A second account holds capability:approve and is not the applicant, which is
 	// what makes the publishing gate a real four-eyes check.
-	owner := loginIAM(t, handler, "root-admin")
+	owner := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	response := owner.invoke(t, "identity.account.create", map[string]any{
 		"username": "article-approver", "fullName": "Article Approver",
-		"organizationId": root.OrganizationID, "departmentId": root.DepartmentID,
-		"status": "active", "roleIds": []int64{},
-		"overrides": []map[string]any{{"permission": "capability:approve", "effect": "allow", "scope": "ALL"}},
-		"password":  "TestOnly!2026Secure",
+		"initialStatus": "active", "password": "TestOnly!2026Secure",
 	}, true)
 	checkStatus(t, response, 200)
 	approver := decodeData[genidentity.AccountRecord](t, response)
-	approverPrincipal, err := iam.PrincipalForTask(ctx, "tenant-a", approver.ID, approver.DepartmentID)
+	seedTenantRole(t, pool, "tenant-a", "article-approver", root.ID, approver.ID, []*genidentity.PermissionGrant{
+		{Permission: "capability:approve", Effect: "allow", Scope: "ALL"},
+	})
+	approverPrincipal, err := iam.PrincipalForTask(ctx, "tenant-a", approver.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

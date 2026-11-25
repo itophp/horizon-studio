@@ -23,7 +23,7 @@ func TestRuntimeAIFormUsesAttachmentContent(t *testing.T) {
 	for _, entry := range automation.New(nil).Entries() {
 		module.Definitions[entry.Definition.Key()] = entry.Definition
 	}
-	principal, err := identity.NewPrincipal(&gen.AccountRecord{ID: 1, IsAdmin: true}, "test-tenant", nil)
+	principal, err := identity.NewPrincipal(&gen.AccountRecord{ID: 1}, "test-tenant", []*gen.PermissionGrant{{Permission: automation.WritePermission, Effect: "allow", Scope: "ALL"}})
 	if err != nil {
 		t.Fatal(err)
 	}

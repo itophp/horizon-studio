@@ -182,7 +182,7 @@ func (q *Queries) MemoryAttachProjectEvent(ctx context.Context, arg MemoryAttach
 const memoryClaimEvent = `-- name: MemoryClaimEvent :one
 SELECT i.source_event_id, i.tenant_id, i.event_id, i.attempts,
        e.event_type, e.aggregate_type, e.aggregate_id, e.invocation_id,
-       e.account_id, e.department_id, e.correlation_id, e.causation_id,
+       e.account_id, e.correlation_id, e.causation_id,
        e.trigger_depth, e.created_at
 FROM memory_event_inbox i JOIN cap_events e ON e.id = i.source_event_id AND e.tenant_id = i.tenant_id AND e.event_id = i.event_id
 WHERE i.completed_at IS NULL AND i.dead_at IS NULL AND i.available_at <= now()
@@ -199,7 +199,6 @@ type MemoryClaimEventRow struct {
 	AggregateID   string
 	InvocationID  string
 	AccountID     int64
-	DepartmentID  int64
 	CorrelationID string
 	CausationID   string
 	TriggerDepth  int32
@@ -219,7 +218,6 @@ func (q *Queries) MemoryClaimEvent(ctx context.Context) (MemoryClaimEventRow, er
 		&i.AggregateID,
 		&i.InvocationID,
 		&i.AccountID,
-		&i.DepartmentID,
 		&i.CorrelationID,
 		&i.CausationID,
 		&i.TriggerDepth,
@@ -1918,7 +1916,7 @@ func (q *Queries) MemoryLockGroup(ctx context.Context, arg MemoryLockGroupParams
 }
 
 const memoryLockGroupDepartment = `-- name: MemoryLockGroupDepartment :one
-SELECT d.id FROM iam_departments d WHERE d.tenant_id=$1 AND d.id::text=$2::text
+SELECT d.id FROM identity_departments d WHERE d.tenant_id=$1 AND d.id::text=$2::text
  AND memory_group_authorized(d.tenant_id,'department',d.id::text,$3::boolean,$4::bigint[],$5::bigint[],$6::boolean,$7::bigint[],$8::bigint[],$9::bigint) FOR SHARE OF d
 `
 
@@ -1988,7 +1986,7 @@ func (q *Queries) MemoryLockGroupEntity(ctx context.Context, arg MemoryLockGroup
 }
 
 const memoryLockGroupOrganization = `-- name: MemoryLockGroupOrganization :one
-SELECT o.id FROM iam_organizations o WHERE o.tenant_id=$1 AND o.id::text=$2::text
+SELECT o.id FROM identity_organizations o WHERE o.tenant_id=$1 AND o.id::text=$2::text
  AND memory_group_authorized(o.tenant_id,'organization',o.id::text,$3::boolean,$4::bigint[],$5::bigint[],$6::boolean,$7::bigint[],$8::bigint[],$9::bigint) FOR SHARE OF o
 `
 
@@ -2125,7 +2123,7 @@ INSERT INTO memory_events (tenant_id,event_id,event_type,event_version,occurred_
 SELECT i.tenant_id,'agent-tool:'||i.invocation_id||':'||i.status,
  CASE WHEN i.status='succeeded' THEN 'agent.tool.completed' WHEN i.status='cancelled' THEN 'agent.tool.cancelled' ELSE 'agent.tool.failed' END,
  '1.0',i.finished_at,CASE WHEN i.account_id>0 THEN i.account_id::text ELSE 'unknown' END,CASE WHEN i.account_id>0 THEN 'user' ELSE 'unknown' END,
- i.department_id,'agent',i.capability,i.status,i.invocation_id,i.trace_id,i.correlation_id,i.causation_id,i.trigger_depth,ARRAY['execution']::text[],jsonb_build_object('capabilityVersion',i.capability_version)
+ 0,'agent',i.capability,i.status,i.invocation_id,i.trace_id,i.correlation_id,i.causation_id,i.trigger_depth,ARRAY['execution']::text[],jsonb_build_object('capabilityVersion',i.capability_version)
 FROM cap_invocations i WHERE i.origin='agent' AND i.finished_at IS NOT NULL AND i.status IN ('succeeded','failed','cancelled') AND NOT EXISTS
  (SELECT 1 FROM memory_events m WHERE m.tenant_id=i.tenant_id AND m.event_id='agent-tool:'||i.invocation_id||':'||i.status)
 ORDER BY i.id LIMIT $1::int ON CONFLICT (tenant_id,event_id) DO NOTHING
@@ -2143,7 +2141,7 @@ const memoryProjectAgentToolStarts = `-- name: MemoryProjectAgentToolStarts :exe
 INSERT INTO memory_events (tenant_id,event_id,event_type,event_version,occurred_at,actor_id,actor_type,department_id,source_type,source_id,invocation_id,trace_id,correlation_id,causation_id,trigger_depth,candidate_partitions,payload)
 SELECT i.tenant_id,'agent-tool:'||i.invocation_id||':started','agent.tool.started','1.0',i.created_at,
  CASE WHEN i.account_id>0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id>0 THEN 'user' ELSE 'unknown' END,
- i.department_id,'agent',i.capability,i.invocation_id,i.trace_id,i.correlation_id,i.causation_id,i.trigger_depth,ARRAY['execution']::text[],jsonb_build_object('capabilityVersion',i.capability_version)
+ 0,'agent',i.capability,i.invocation_id,i.trace_id,i.correlation_id,i.causation_id,i.trigger_depth,ARRAY['execution']::text[],jsonb_build_object('capabilityVersion',i.capability_version)
 FROM cap_invocations i WHERE i.origin='agent' AND NOT EXISTS
  (SELECT 1 FROM memory_events m WHERE m.tenant_id=i.tenant_id AND m.event_id='agent-tool:'||i.invocation_id||':started')
 ORDER BY i.id LIMIT $1::int ON CONFLICT (tenant_id,event_id) DO NOTHING
@@ -2162,7 +2160,7 @@ INSERT INTO memory_events (tenant_id, event_id, event_type, event_version, occur
  department_id, source_type, source_id, result, invocation_id, trace_id, correlation_id, causation_id, trigger_depth, candidate_partitions, payload)
 SELECT i.tenant_id, 'inv:' || i.invocation_id || ':' || i.status,
  CASE WHEN i.status='succeeded' THEN 'capability.invocation.completed' WHEN i.status='cancelled' THEN 'capability.invocation.cancelled' ELSE 'capability.invocation.failed' END,
- '1.0', i.finished_at, CASE WHEN i.account_id > 0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id > 0 THEN 'user' ELSE 'unknown' END, i.department_id, 'capability', i.capability, i.status,
+ '1.0', i.finished_at, CASE WHEN i.account_id > 0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id > 0 THEN 'user' ELSE 'unknown' END, 0, 'capability', i.capability, i.status,
  i.invocation_id, i.trace_id, i.correlation_id, i.causation_id, i.trigger_depth, ARRAY['activity','execution']::text[], jsonb_build_object('origin',i.origin,'capabilityVersion',i.capability_version)
 FROM cap_invocations i WHERE i.finished_at IS NOT NULL AND i.status IN ('succeeded','failed','cancelled')
  AND NOT EXISTS (SELECT 1 FROM memory_events m WHERE m.tenant_id=i.tenant_id AND m.event_id='inv:' || i.invocation_id || ':' || i.status)
@@ -2181,7 +2179,7 @@ const memoryProjectInvocationStarts = `-- name: MemoryProjectInvocationStarts :e
 INSERT INTO memory_events (tenant_id, event_id, event_type, event_version, occurred_at, actor_id, actor_type,
  department_id, source_type, source_id, invocation_id, trace_id, correlation_id, causation_id, trigger_depth, candidate_partitions, payload)
 SELECT i.tenant_id, 'inv:' || i.invocation_id || ':started', 'capability.invocation.started', '1.0', i.created_at,
- CASE WHEN i.account_id > 0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id > 0 THEN 'user' ELSE 'unknown' END, i.department_id, 'capability', i.capability, i.invocation_id, i.trace_id,
+ CASE WHEN i.account_id > 0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id > 0 THEN 'user' ELSE 'unknown' END, 0, 'capability', i.capability, i.invocation_id, i.trace_id,
  i.correlation_id, i.causation_id, i.trigger_depth, ARRAY['activity','execution']::text[], jsonb_build_object('origin',i.origin,'capabilityVersion',i.capability_version)
 FROM cap_invocations i WHERE NOT EXISTS (SELECT 1 FROM memory_events m WHERE m.tenant_id=i.tenant_id AND m.event_id='inv:' || i.invocation_id || ':started')
 ORDER BY i.id LIMIT $1::int ON CONFLICT (tenant_id, event_id) DO NOTHING

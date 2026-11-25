@@ -73,6 +73,19 @@ SELECT binding FROM cap_execution_records WHERE tenant_id=$1 AND account_id=$2 A
 -- name: ExecutionRootForRun :one
 SELECT invocation_id FROM cap_execution_records WHERE tenant_id=$1 AND account_id=$2 AND run_id=$3;
 
+-- name: ExecutionMachineRunActive :one
+SELECT EXISTS (
+    SELECT 1 FROM cap_execution_records plan
+    JOIN cap_invocations call ON call.tenant_id = plan.tenant_id AND call.invocation_id = plan.invocation_id
+    JOIN ai_runs run ON run.tenant_id = plan.tenant_id AND run.id = plan.run_id AND run.account_id = plan.account_id
+    WHERE plan.tenant_id = sqlc.arg(tenant_id) AND plan.account_id = sqlc.arg(account_id)
+    AND plan.invocation_id = sqlc.arg(invocation_id) AND run.id = sqlc.arg(run_id)::bigint
+    AND run.identity_binding_id IS NOT DISTINCT FROM call.identity_binding_id AND call.status = 'executing'
+    AND run.status IN ('running', 'awaiting_approval')
+    AND call.machine_credential_id = sqlc.arg(credential_id)::text::uuid
+    AND call.agent_delegation_id IS NOT DISTINCT FROM NULLIF(sqlc.arg(delegation_id)::text, '')::uuid
+);
+
 -- name: ExecutionFinishWorkflow :execrows
 UPDATE cap_invocations SET status=$4,result=$5,error_code=$6,finished_at=now()
 WHERE tenant_id=$1 AND account_id=$2 AND invocation_id=$3 AND status='executing';

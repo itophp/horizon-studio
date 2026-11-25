@@ -14,6 +14,7 @@ description: "Build or modify React pages, navigation, shared UI, forms, tables,
 - React Router 管理 URL 和页面导航；可分享的筛选条件优先放 URL，不复制为多份全局状态。
 - 查询和写操作通过 Orval 生成 SDK / TanStack Query 接入，更新后失效相关 query key；跨用户/租户切换需清理或隔离缓存。组件不用裸 fetch 或自建 API DTO。
 - TanStack Query 保存服务端状态；React 局部状态保存临时交互。不要为了表单或接口结果引入 Zustand。
+- 表单默认支持 AI 表单组件，按 [Runtime 表单规则](../baseline-application-runtime/SKILL.md) 复用 `AIFormAssistant` 或声明 `aiAssistant`，并验证回填和人工提交。
 - React Hook Form + Zod 管表单与前端输入反馈；提交前后区分 pending/error/success。服务端继续做验证和授权；重复提交、失败重试和 mutation 幂等按实际语义设计。
 - TanStack Table 9 使用显式 features，data/columns 引用稳定；仅真有复杂电子表格式编辑需求才评估 AG Grid。
 - 从 components/ui 与现有 styles tokens 复用。需要新原语时用锁定 shadcn CLI / 官方 Registry，审查新增依赖和许可证，不为每个页面新建视觉系统。

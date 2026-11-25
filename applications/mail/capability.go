@@ -42,7 +42,7 @@ func mailboxSchema() *contracts.Schema {
 		"defaultSend": {Type: "boolean"}, "status": contracts.Enum("unverified", "active", "disabled"),
 		"revision": contracts.Int(1, 1<<53), "createdAt": {Type: "string"}, "updatedAt": {Type: "string"},
 		"channels": contracts.Array(contracts.Object(map[string]*contracts.Schema{
-			"direction": contracts.Enum("send", "receive"), "protocol": contracts.Enum("smtp", "pop3"),
+			"direction": contracts.Enum("send", "receive"), "protocol": contracts.Enum("smtp", "pop3", "imap"),
 			"host": contracts.Str(1, 253), "port": contracts.Int(1, 65535),
 			"tlsMode": contracts.Enum("starttls", "tls"), "username": contracts.Str(0, 200),
 			"verificationStatus": contracts.Enum("unknown", "ok", "failed"), "lastErrorCode": contracts.Str(0, 100),
@@ -117,20 +117,33 @@ func mailboxGetDefinition() contracts.Definition {
 func mailboxOnboardDefinition() contracts.Definition {
 	return contracts.Definition{Layer: contracts.LayerAtomic, Kind: contracts.KindExternal,
 		Name: "mail.mailbox.onboard", Version: version, Title: "Connect a mailbox",
-		Description: "Create and verify one SMTP/POP3S mailbox for the caller, then activate it after both connections pass.",
+		Description: "Create and verify one SMTP mailbox with POP3 or IMAP for the caller, then activate it after both connections pass.",
 		Domain:      "mail", Entity: "mail_mailbox", Entities: []string{"mail_mailbox", "mail_channel", "mail_credential"},
 		Permission: "mail:configure", Risk: contracts.RiskHigh, Approval: contracts.ApprovalAuto,
 		Idempotency:   contracts.Idempotency{Required: true, Scope: "tenant+operation+key"},
 		SuccessEvents: []string{MailboxOnboardedEvent}, Executor: "go:mail.mailbox.onboard",
-		Tags: []string{"mail", "write", "manual-only"}, Loggable: []string{"name", "emailAddress", "smtpHost", "pop3Host"},
-		Input: contracts.Object(map[string]*contracts.Schema{
+		Tags: []string{"mail", "write", "manual-only"}, Loggable: []string{"name", "emailAddress", "smtpHost", "pop3Host", "receiveProtocol", "receiveHost"},
+		Input: mailboxConnectionInput(map[string]*contracts.Schema{
 			"name": contracts.Str(1, 120), "emailAddress": contracts.Str(3, 254), "password": contracts.Str(1, 4096),
-			"smtpHost": contracts.Str(1, 253), "smtpPort": contracts.Int(1, 65535),
-			"smtpTls": contracts.Enum("starttls", "tls"), "smtpUsername": contracts.Str(0, 200),
-			"pop3Host": contracts.Str(1, 253), "pop3Port": contracts.Int(1, 65535), "pop3Username": contracts.Str(0, 200),
-		}, "name", "emailAddress", "password", "smtpHost", "pop3Host"),
+		}, "name", "emailAddress", "password"),
 		Output: contracts.Object(map[string]*contracts.Schema{"id": idSchema(), "status": contracts.Enum("active", "unverified")}, "id", "status"),
 	}
+}
+
+func mailboxConnectionInput(properties map[string]*contracts.Schema, required ...string) *contracts.Schema {
+	properties["smtpHost"] = contracts.Str(1, 253)
+	properties["smtpPort"] = contracts.Int(1, 65535)
+	properties["smtpTls"] = contracts.Enum("starttls", "tls")
+	properties["smtpUsername"] = contracts.Str(0, 200)
+	properties["receiveProtocol"] = contracts.Enum("pop3", "imap")
+	properties["receiveHost"] = contracts.Str(1, 253)
+	properties["receivePort"] = contracts.Int(1, 65535)
+	properties["receiveTls"] = contracts.Enum("starttls", "tls")
+	properties["receiveUsername"] = contracts.Str(0, 200)
+	properties["pop3Host"] = contracts.Str(1, 253)
+	properties["pop3Port"] = contracts.Int(1, 65535)
+	properties["pop3Username"] = contracts.Str(0, 200)
+	return contracts.Object(properties, append(required, "smtpHost", "smtpPort", "smtpTls")...)
 }
 
 func mailboxUpdateDefinition() contracts.Definition {
@@ -138,13 +151,10 @@ func mailboxUpdateDefinition() contracts.Definition {
 	d.Name, d.Title, d.Executor = "mail.mailbox.update", "Update a mailbox", "go:mail.mailbox.update"
 	d.Risk, d.SuccessEvents = contracts.RiskMedium, []string{MailboxUpdatedEvent}
 	d.Kind = contracts.KindSQL
-	d.Input = contracts.Object(map[string]*contracts.Schema{
+	d.Input = mailboxConnectionInput(map[string]*contracts.Schema{
 		"id": idSchema(), "revision": contracts.Int(1, 1<<53), "name": contracts.Str(1, 120),
 		"emailAddress": contracts.Str(3, 254), "defaultSend": {Type: "boolean"},
-		"smtpHost": contracts.Str(1, 253), "smtpPort": contracts.Int(1, 65535),
-		"smtpTls": contracts.Enum("starttls", "tls"), "smtpUsername": contracts.Str(0, 200),
-		"pop3Host": contracts.Str(1, 253), "pop3Port": contracts.Int(1, 65535), "pop3Username": contracts.Str(0, 200),
-	}, "id", "revision", "name", "emailAddress", "defaultSend", "smtpHost", "smtpTls", "pop3Host")
+	}, "id", "revision", "name", "emailAddress", "defaultSend")
 	d.Output = contracts.Object(map[string]*contracts.Schema{"id": idSchema()}, "id")
 	return d
 }
@@ -159,9 +169,9 @@ func credentialReplaceDefinition() contracts.Definition {
 		SuccessEvents: []string{CredentialRotated}, Executor: "go:mail.mailbox.credential.replace",
 		Tags: []string{"mail", "write", "manual-only"}, Loggable: []string{"mailboxId", "purpose"},
 		Input: contracts.Object(map[string]*contracts.Schema{
-			"mailboxId": idSchema(), "purpose": contracts.Enum("smtp", "pop3"), "password": contracts.Str(1, 4096),
+			"mailboxId": idSchema(), "purpose": contracts.Enum("smtp", "pop3", "imap"), "password": contracts.Str(1, 4096),
 		}, "mailboxId", "purpose", "password"),
-		Output: contracts.Object(map[string]*contracts.Schema{"mailboxId": idSchema(), "purpose": contracts.Enum("smtp", "pop3"), "version": contracts.Int(1, 1<<31)}, "mailboxId", "purpose", "version"),
+		Output: contracts.Object(map[string]*contracts.Schema{"mailboxId": idSchema(), "purpose": contracts.Enum("smtp", "pop3", "imap"), "version": contracts.Int(1, 1<<31)}, "mailboxId", "purpose", "version"),
 	}
 }
 
@@ -253,9 +263,9 @@ func messageSendDefinition() contracts.Definition {
 		Input: contracts.Object(map[string]*contracts.Schema{
 			"clientKey": contracts.Str(1, 64), "mailboxId": idSchema(), "to": addressArray(200),
 			"cc": contracts.Array(addressSchema(), 0, 200), "bcc": contracts.Array(addressSchema(), 0, 200),
-			"subject": contracts.Str(1, 998), "markdown": contracts.Str(1, 100000),
+			"subject": contracts.Str(1, 998), "markdown": contracts.Str(1, 100000), "html": contracts.Str(1, 100000),
 			"fileIds": contracts.Array(idSchema(), 0, 20), "replyTo": contracts.Str(0, 320),
-		}, "clientKey", "mailboxId", "to", "subject", "markdown"),
+		}, "clientKey", "mailboxId", "to", "subject"),
 		Output: contracts.Object(map[string]*contracts.Schema{
 			"messageId": idSchema(), "deliveryId": idSchema(), "status": contracts.Enum("queued"),
 		}, "messageId", "deliveryId", "status"),
@@ -317,32 +327,42 @@ func deliveryActionDefinition(name, title, permission, status string) contracts.
 func outboundProcessDefinition() contracts.Definition {
 	return contracts.Definition{Layer: contracts.LayerAtomic, Kind: contracts.KindExternal,
 		Name: "mail.outbound.process", Version: version, Title: "Process an outbound email",
-		Description: "Send one due external SMTP delivery and record its durable outcome.",
+		Description: "Execute one previously submitted SMTP delivery and record its durable outcome.",
 		Domain:      "mail", Entity: "mail_outbound_delivery",
 		Entities:   []string{"mail_outbound_delivery", "mail_message", "mail_channel", "mail_credential"},
-		Permission: "mail:sync", Risk: contracts.RiskHigh, Approval: contracts.ApprovalAuto,
+		Permission: "mail:sync", Risk: contracts.RiskMedium, Approval: contracts.ApprovalAuto,
 		Idempotency:   contracts.Idempotency{Required: true, Scope: "tenant+operation+key"},
 		SuccessEvents: []string{MessageDeliveredEvent, DeliveryFailedEvent, DeliveryAmbiguous},
 		Executor:      "go:mail.outbound.process", Tags: []string{"mail", "internal", "system-only"},
-		Input:  contracts.Object(map[string]*contracts.Schema{"id": idSchema()}, "id"),
-		Output: contracts.Object(map[string]*contracts.Schema{"id": idSchema(), "status": {Type: "string"}}, "id", "status"),
+		AllowedOrigins: []contracts.Origin{contracts.OriginEvent},
+		Input:          contracts.Object(map[string]*contracts.Schema{"id": idSchema()}, "id"),
+		Output:         contracts.Object(map[string]*contracts.Schema{"id": idSchema(), "status": {Type: "string"}}, "id", "status"),
 	}
 }
 
 func inboxSyncDefinition() contracts.Definition {
 	return contracts.Definition{Layer: contracts.LayerAtomic, Kind: contracts.KindExternal,
 		Name: "mail.inbox.sync", Version: version, Title: "Synchronize a mailbox",
-		Description: "Fetch one bounded POP3S batch, import it transactionally and mark remote deletions.",
+		Description: "Copy one bounded POP3 inbox batch into the local mailbox.",
 		Domain:      "mail", Entity: "mail_inbox_sync",
 		Entities:   []string{"mail_inbox_sync", "mail_channel", "mail_credential", "mail_message", "mail_message_recipient", "mail_mailbox"},
-		Permission: "mail:sync", Risk: contracts.RiskHigh, Approval: contracts.ApprovalAuto,
+		Permission: "mail:sync", Risk: contracts.RiskMedium, Approval: contracts.ApprovalAuto,
 		Idempotency:   contracts.Idempotency{Required: true, Scope: "tenant+operation+key"},
 		SuccessEvents: []string{MessageReceivedEvent, MailboxSyncedEvent},
 		Executor:      "go:mail.inbox.sync", Tags: []string{"mail", "internal", "system-only"},
-		Input: contracts.Object(map[string]*contracts.Schema{"channelId": idSchema()}, "channelId"),
+		AllowedOrigins: []contracts.Origin{contracts.OriginEvent},
+		Input:          contracts.Object(map[string]*contracts.Schema{"channelId": idSchema()}, "channelId"),
 		Output: contracts.Object(map[string]*contracts.Schema{
 			"mailboxId": idSchema(), "fetched": contracts.Int(0, 100), "imported": contracts.Int(0, 100),
 			"duplicates": contracts.Int(0, 100),
 		}, "mailboxId", "fetched", "imported", "duplicates"),
 	}
+}
+
+func imapInboxSyncDefinition() contracts.Definition {
+	d := inboxSyncDefinition()
+	d.Name, d.Title = "mail.inbox.imap.sync", "Synchronize an IMAP inbox"
+	d.Description = "Read one bounded IMAP inbox batch and import it with its UID cursor in a single transaction."
+	d.Executor = "go:mail.inbox.imap.sync"
+	return d
 }

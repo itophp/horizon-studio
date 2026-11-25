@@ -67,7 +67,9 @@ OpenAI 官方说明：AGENTS 按根到当前目录组合；从根启动不等于
 
 ## 身份与后台模块入口
 
-登录、账号、组织、角色或部门功能从 features/administration、design/identity.go、system/identity 进入；模块 Repository 仍只调用 sqlc dbgen。身份会话、Casbin、可信 scope 与参数化 SQL 是四个独立职责，即使组合在同一模块也不能省略。旧 demo 认证仅用于技术示例。改动合并优先级、六类数据范围、角色授权管理或会话策略时，先读 [身份决策](decisions/002-identity-access.md)，补 tests/identity_test.go 的允许与拒绝用例；关键 UI 流程补 e2e/administration.spec.ts。
+IAM 迁移发布前使用 `./horizon-cli test-iam-migration-drill` 验证独立 schema 的备份/升级/恢复/再次升级，配合 `test-security` 的旧库权限与归属回归；客户端及本地容器配置见 [测试约定](testing.md)。此工程命令不操作生产数据库，也不替代实际存量对账。
+
+登录、账号、组织、角色或部门功能从 features/identity、design/identity.go、system/identity 进入；模块 Repository 仍只调用 sqlc dbgen。身份会话、Casbin、可信 scope 与参数化 SQL 是四个独立职责，即使组合在同一模块也不能省略。旧 demo 认证仅用于技术示例。改动合并优先级、六类数据范围、角色授权管理或会话策略时，先读 [身份决策](decisions/002-identity-access.md)，补 tests/identity_test.go 的允许与拒绝用例；关键 UI 流程补 e2e/identity.spec.ts。
 
 修改权限目录、临时申请/审批或授权有效期时，使用 baseline-security 与 baseline-database-change，先读 [ADR 003](decisions/003-temporary-access.md)，联动 identity/catalog.go、会话授权解析、Goa/SDK、权限矩阵和临时权限页。审批上限只计算正式授权，验证范围固定、到期/撤销、deny、自批/再委托拒绝、跨租户及并发审批。
 

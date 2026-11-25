@@ -3,7 +3,29 @@
 // result, so a page button and an agent tool run the same code path.
 import { capabilityInvoke } from "@/api/generated/baseline";
 import { ApiError } from "@/api/client/request";
+import type {
+  IdentityAuditListInput,
+  IdentityAuditListOutput,
+  IdentityAuditExportInput,
+  IdentityAuditExportOutput,
+  IdentityExternalIdentityLinkInput,
+  IdentityExternalIdentityLinkOutput,
+  IdentityExternalIdentityListOutput,
+  IdentityExternalIdentityUnlinkInput,
+  IdentityExternalIdentityUnlinkOutput,
+  IdentitySessionListOutput,
+  IdentitySessionReauthenticateInput,
+  IdentitySessionReauthenticateOutput,
+  IdentitySessionRevokeInput,
+  IdentitySessionRevokeOutput,
+  IdentityMfaStatusOutput,
+  IdentityMfaEnrollInput,
+  IdentityMfaEnrollOutput,
+  IdentityMfaActivateInput,
+  IdentityMfaActivateOutput,
+} from "@/api/generated/capability-identity";
 import type * as EP from "@/api/generated/capability-execution-plans";
+import type * as IAM from "@/api/generated/capability-identity";
 import type {
   KnowledgeQueryInput,
   KnowledgeQueryOutput,
@@ -113,6 +135,712 @@ export type CapabilityResponse<T> = {
 };
 
 const emptyHeaders = new Headers();
+
+export const identityMembershipAccept = (
+  input: IAM.IdentityMembershipAcceptInput,
+  key: string,
+) =>
+  invoke<IAM.IdentityMembershipAcceptOutput>(
+    "identity.membership.accept",
+    input,
+    key,
+  );
+
+export const identityMembershipInvite = (
+  input: IAM.IdentityMembershipInviteInput,
+  key: string,
+) =>
+  invoke<IAM.IdentityMembershipInviteOutput>(
+    "identity.membership.invite",
+    input,
+    key,
+  );
+
+export const identityMembershipList = (
+  input: IAM.IdentityMembershipListInput,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityMembershipListOutput>(
+    "identity.membership.list",
+    input,
+    undefined,
+    signal,
+  );
+
+export const identityContactList = (signal?: AbortSignal) =>
+  invoke<IAM.IdentityContactListOutput>(
+    "identity.contact.list",
+    {},
+    undefined,
+    signal,
+  );
+export const identityContactStart = (
+  input: IAM.IdentityContactStartInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityContactStartOutput>(
+    "identity.contact.start",
+    input,
+    key,
+    signal,
+  );
+export const identityContactVerify = (
+  input: IAM.IdentityContactVerifyInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityContactVerifyOutput>(
+    "identity.contact.verify",
+    input,
+    key,
+    signal,
+  );
+export const identityMfaReauthenticate = (
+  input: IAM.IdentityMfaReauthenticateInput,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityMfaReauthenticateOutput>(
+    "identity.mfa.reauthenticate",
+    input,
+    undefined,
+    signal,
+  );
+export const identityMfaRenewRecoveryCodes = (
+  input: IAM.IdentityMfaRenewRecoveryCodesInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityMfaRenewRecoveryCodesOutput>(
+    "identity.mfa.renewRecoveryCodes",
+    input,
+    key,
+    signal,
+  );
+export const identityMfaDisable = (
+  input: IAM.IdentityMfaDisableInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityMfaDisableOutput>(
+    "identity.mfa.disable",
+    input,
+    key,
+    signal,
+  );
+
+export const identityMfaReplace = (
+  input: IAM.IdentityMfaReplaceInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityMfaReplaceOutput>(
+    "identity.mfa.replace",
+    input,
+    key,
+    signal,
+  );
+export const identityMfaActivateReplacement = (
+  input: IAM.IdentityMfaActivateReplacementInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityMfaActivateReplacementOutput>(
+    "identity.mfa.activateReplacement",
+    input,
+    key,
+    signal,
+  );
+
+export const identityLoginReauthenticate = (
+  input: IAM.IdentityLoginReauthenticateInput,
+  key: string,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityLoginReauthenticateOutput>(
+    "identity.login.reauthenticate",
+    input,
+    key,
+    signal,
+  );
+export const identityLoginFreeze = (
+  input: IAM.IdentityLoginFreezeInput,
+  key: string,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityLoginFreezeOutput>(
+    "identity.login.freeze",
+    input,
+    key,
+    signal,
+  );
+export const identityLoginRestore = (
+  input: IAM.IdentityLoginRestoreInput,
+  key: string,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityLoginRestoreOutput>(
+    "identity.login.restore",
+    input,
+    key,
+    signal,
+  );
+export const identityMembershipRevoke = (
+  input: IAM.IdentityMembershipRevokeInput,
+  key: string,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityMembershipRevokeOutput>(
+    "identity.membership.revoke",
+    input,
+    key,
+    signal,
+  );
+
+export const identityPlatformWorkspaces = (
+  after: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityTenantListOutput>(
+    "identity.tenant.list",
+    after ? { after } : {},
+    undefined,
+    signal,
+  );
+export const identityPlatformPrincipals = (
+  targetTenantId: string,
+  after: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityPrincipalListOutput>(
+    "identity.principal.list",
+    { targetTenantId, ...(after && { after }) },
+    undefined,
+    signal,
+  );
+export const identityPlatformProof = (
+  input: IAM.IdentityPrincipalReauthenticateInput,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityPrincipalReauthenticateOutput>(
+    "identity.principal.reauthenticate",
+    input,
+    undefined,
+    signal,
+  );
+export const identityPrincipalDetail = (
+  input: IAM.IdentityPrincipalDetailInput,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityPrincipalDetailOutput>(
+    "identity.principal.detail",
+    input,
+    undefined,
+    signal,
+  );
+export const identityPrincipalSetSecurity = (
+  input: IAM.IdentityPrincipalSetSecurityInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityPrincipalSetSecurityOutput>(
+    "identity.principal.setSecurity",
+    input,
+    key,
+    signal,
+  );
+export const identityLoginMergeList = (
+  input: IAM.IdentityLoginMergeListInput,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityLoginMergeListOutput>(
+    "identity.loginMerge.list",
+    input,
+    undefined,
+    signal,
+  );
+export const identityLoginMergeRequest = (
+  input: IAM.IdentityLoginMergeRequestInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityLoginMergeRequestOutput>(
+    "identity.loginMerge.request",
+    input,
+    key,
+    signal,
+  );
+export const identityLoginMergeConfirm = (
+  input: IAM.IdentityLoginMergeConfirmInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityLoginMergeConfirmOutput>(
+    "identity.loginMerge.confirm",
+    input,
+    key,
+    signal,
+  );
+export const identityLoginMergeDecide = (
+  input: IAM.IdentityLoginMergeDecideInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityLoginMergeDecideOutput>(
+    "identity.loginMerge.decide",
+    input,
+    key,
+    signal,
+  );
+export function identityPlatformChange(
+  operation: IAM.IdentityPrincipalReauthenticateInput["operation"],
+  input: IAM.IdentityPrincipalCreateInput,
+  key: string,
+  signal: AbortSignal,
+) {
+  const {
+    targetTenantId,
+    reason,
+    proof,
+    target,
+    initialPassword,
+    displayName,
+  } = input;
+  const common = { targetTenantId, reason, proof };
+  switch (operation) {
+    case "tenant.create":
+      return invoke<IAM.IdentityTenantCreateOutput>(
+        "identity.tenant.create",
+        { ...common, target, initialPassword },
+        key,
+        signal,
+      );
+    case "tenant.deactivate":
+    case "tenant.restore":
+      return invoke<IAM.IdentityTenantRestoreOutput>(
+        "identity." + operation,
+        common,
+        key,
+        signal,
+      );
+    case "create":
+      return invoke<IAM.IdentityPrincipalCreateOutput>(
+        "identity.principal.create",
+        { ...common, target, displayName, initialPassword },
+        key,
+        signal,
+      );
+    default:
+      return invoke<IAM.IdentityPrincipalRestoreOutput>(
+        "identity.principal." + operation,
+        { ...common, target },
+        key,
+        signal,
+      );
+  }
+}
+
+export const identityRegistrationPolicy = (signal?: AbortSignal) =>
+  invoke<IAM.IdentityTenantRegistrationReadOutput>(
+    "identity.tenant.registration.read",
+    {},
+    undefined,
+    signal,
+  );
+export const identityConfigureRegistration = (
+  input: IAM.IdentityTenantRegistrationConfigureInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityTenantRegistrationConfigureOutput>(
+    "identity.tenant.registration.configure",
+    input,
+    key,
+    signal,
+  );
+
+export const identityReviewList = (
+  input: IAM.IdentityReviewListInput,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityReviewListOutput>(
+    "identity.review.list",
+    input,
+    undefined,
+    signal,
+  );
+export const identityExternalReviewList = (
+  input: IAM.IdentityExternalReviewListInput,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityExternalReviewListOutput>(
+    "identity.externalReview.list",
+    input,
+    undefined,
+    signal,
+  );
+export const machineCredentialList = (
+  input: IAM.IdentityMachineCredentialListInput,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityMachineCredentialListOutput>(
+    "identity.machine.credential.list",
+    input,
+    undefined,
+    signal,
+  );
+export const machineCredentialRotate = (
+  input: IAM.IdentityMachineCredentialRotateInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityMachineCredentialRotateOutput>(
+    "identity.machine.credential.rotate",
+    input,
+    key,
+    signal,
+  );
+export const machineCredentialRevoke = (
+  input: IAM.IdentityMachineCredentialRevokeInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityMachineCredentialRevokeOutput>(
+    "identity.machine.credential.revoke",
+    input,
+    key,
+    signal,
+  );
+export const agentDelegationList = (
+  input: IAM.IdentityAgentDelegationListInput,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityAgentDelegationListOutput>(
+    "identity.agentDelegation.list",
+    input,
+    undefined,
+    signal,
+  );
+export const agentDelegationRevoke = (
+  input: IAM.IdentityAgentDelegationRevokeInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityAgentDelegationRevokeOutput>(
+    "identity.agentDelegation.revoke",
+    input,
+    key,
+    signal,
+  );
+export const loginAssociationList = (
+  input: IAM.IdentityLoginAssociationListInput,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityLoginAssociationListOutput>(
+    "identity.loginAssociation.list",
+    input,
+    undefined,
+    signal,
+  );
+export const loginAssociationLink = (
+  input: IAM.IdentityLoginAssociationLinkInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityLoginAssociationLinkOutput>(
+    "identity.loginAssociation.link",
+    input,
+    key,
+    signal,
+  );
+export const loginAssociationUnlink = (
+  input: IAM.IdentityLoginAssociationUnlinkInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityLoginAssociationUnlinkOutput>(
+    "identity.loginAssociation.unlink",
+    input,
+    key,
+    signal,
+  );
+export const identityBindingList = (
+  input: IAM.IdentityBindingListInput,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityBindingListOutput>(
+    "identity.binding.list",
+    input,
+    undefined,
+    signal,
+  );
+export const identityBindingChange = (
+  action: "approve" | "suspend" | "remove",
+  input: IAM.IdentityBindingApproveInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityBindingApproveOutput>(
+    `identity.binding.${action}`,
+    input,
+    key,
+    signal,
+  );
+export const identityExternalReviewConfirm = (
+  input: IAM.IdentityExternalReviewConfirmInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityExternalReviewConfirmOutput>(
+    "identity.externalReview.confirm",
+    input,
+    key,
+    signal,
+  );
+export const identityExternalReviewDecide = (
+  input: IAM.IdentityExternalReviewDecideInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityExternalReviewDecideOutput>(
+    "identity.externalReview.decide",
+    input,
+    key,
+    signal,
+  );
+export const identityReviewStart = (key: string, signal: AbortSignal) =>
+  invoke<IAM.IdentityReviewStartOutput>(
+    "identity.review.start",
+    {},
+    key,
+    signal,
+  );
+export const identityReviewDecide = (
+  input: IAM.IdentityReviewDecideInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityReviewDecideOutput>(
+    "identity.review.decide",
+    input,
+    key,
+    signal,
+  );
+export const identityReviewConfigure = (
+  input: IAM.IdentityReviewConfigureInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityReviewConfigureOutput>(
+    "identity.review.configure",
+    input,
+    key,
+    signal,
+  );
+
+export const identityMembershipSuspend = (
+  input: IAM.IdentityMembershipSuspendInput,
+  key: string,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityMembershipSuspendOutput>(
+    "identity.membership.suspend",
+    input,
+    key,
+    signal,
+  );
+
+export const identityMembershipRestore = (
+  input: IAM.IdentityMembershipRestoreInput,
+  key: string,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityMembershipRestoreOutput>(
+    "identity.membership.restore",
+    input,
+    key,
+    signal,
+  );
+
+export const identityMembershipSetExpiry = (
+  input: IAM.IdentityMembershipSetExpiryInput,
+  key: string,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityMembershipSetExpiryOutput>(
+    "identity.membership.setExpiry",
+    input,
+    key,
+    signal,
+  );
+
+export const identityGovernanceReport = (
+  input: IAM.IdentityGovernanceReportInput,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityGovernanceReportOutput>(
+    "identity.governance.report",
+    input,
+    undefined,
+    signal,
+  );
+
+export const identityPolicyHistory = (signal?: AbortSignal) =>
+  invoke<IAM.IdentityPolicyHistoryOutput>(
+    "identity.policy.history",
+    {},
+    undefined,
+    signal,
+  );
+export const identityPolicyPreview = (
+  input: IAM.IdentityPolicyPreviewInput,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityPolicyPreviewOutput>(
+    "identity.policy.preview",
+    input,
+    undefined,
+    signal,
+  );
+export const identityPolicyDraft = (
+  input: IAM.IdentityPolicyDraftInput,
+  key: string,
+) => invoke<IAM.IdentityPolicyDraftOutput>("identity.policy.draft", input, key);
+export const identityPolicyCheck = (
+  input: IAM.IdentityPolicyCheckInput,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityPolicyCheckOutput>(
+    "identity.policy.check",
+    input,
+    undefined,
+    signal,
+  );
+export const identityPolicySearchContexts = (
+  input: IAM.IdentityPolicySearchContextsInput,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityPolicySearchContextsOutput>(
+    "identity.policy.searchContexts",
+    input,
+    undefined,
+    signal,
+  );
+export const identityPolicyRollback = (
+  input: IAM.IdentityPolicyRollbackInput,
+  key: string,
+) =>
+  invoke<IAM.IdentityPolicyRollbackOutput>(
+    "identity.policy.rollback",
+    input,
+    key,
+  );
+export const identityPolicyPublish = (
+  input: IAM.IdentityPolicyPublishInput,
+  key: string,
+) =>
+  invoke<IAM.IdentityPolicyPublishOutput>(
+    "identity.policy.publish",
+    input,
+    key,
+  );
+export const identityPolicySimulate = (
+  input: IAM.IdentityPolicySimulateInput,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityPolicySimulateOutput>(
+    "identity.policy.simulate",
+    input,
+    undefined,
+    signal,
+  );
+
+export const securityAuditList = (
+  input: IdentityAuditListInput,
+  signal?: AbortSignal,
+) =>
+  invoke<IdentityAuditListOutput>(
+    "identity.audit.list",
+    input,
+    undefined,
+    signal,
+  );
+export const securityAuditExport = (
+  input: IdentityAuditExportInput,
+  signal?: AbortSignal,
+) =>
+  invoke<IdentityAuditExportOutput>(
+    "identity.audit.export",
+    input,
+    undefined,
+    signal,
+  );
+
+export const externalIdentityLink = (
+  input: IdentityExternalIdentityLinkInput,
+  key: string,
+) =>
+  invoke<IdentityExternalIdentityLinkOutput>(
+    "identity.externalIdentity.link",
+    input,
+    key,
+  );
+
+export const externalIdentityList = () =>
+  invoke<IdentityExternalIdentityListOutput>("identity.externalIdentity.list");
+export const externalIdentityUnlink = (
+  input: IdentityExternalIdentityUnlinkInput,
+  key: string,
+  signal?: AbortSignal,
+) =>
+  invoke<IdentityExternalIdentityUnlinkOutput>(
+    "identity.externalIdentity.unlink",
+    input,
+    key,
+    signal,
+  );
+export const identitySessions = () =>
+  invoke<IdentitySessionListOutput>("identity.session.list");
+export const identitySessionReauthenticate = (
+  input: IdentitySessionReauthenticateInput,
+  key: string,
+  signal?: AbortSignal,
+) =>
+  invoke<IdentitySessionReauthenticateOutput>(
+    "identity.session.reauthenticate",
+    input,
+    key,
+    signal,
+  );
+export const identitySessionRevoke = (
+  input: IdentitySessionRevokeInput,
+  key: string,
+  signal?: AbortSignal,
+) =>
+  invoke<IdentitySessionRevokeOutput>(
+    "identity.session.revoke",
+    input,
+    key,
+    signal,
+  );
+export const identityMfaStatus = () =>
+  invoke<IdentityMfaStatusOutput>("identity.mfa.status");
+export const identityMfaEnroll = (
+  input: IdentityMfaEnrollInput,
+  key: string,
+  signal?: AbortSignal,
+) => invoke<IdentityMfaEnrollOutput>("identity.mfa.enroll", input, key, signal);
+export const identityMfaActivate = (
+  input: IdentityMfaActivateInput,
+  key: string,
+  signal?: AbortSignal,
+) =>
+  invoke<IdentityMfaActivateOutput>(
+    "identity.mfa.activate",
+    input,
+    key,
+    signal,
+  );
 
 export type ActivityObservation = MemoryActivityCollectInput["events"][number];
 
@@ -627,8 +1355,8 @@ export const mcpManagementRotate = (id: number, value: unknown) =>
 export const mcpManagementAdminRevoke = (id: number, value: unknown) =>
   invoke<{ id: number }>("mcp.token.admin_revoke", { id, ...body(value) });
 
-export const mcpManagementCapabilities = (params?: { departmentId?: number }) =>
-  invoke<string[]>("mcp.capability.list", { ...params });
+export const mcpManagementCapabilities = () =>
+  invoke<{ tools: string[] }>("mcp.capability.list", {});
 
 // ---------------------------------------------------------------- identity
 
@@ -644,17 +1372,11 @@ export const identityUpdateAccount = (id: number, value: unknown) =>
 export const identityDeleteAccount = (id: number) =>
   invoke<{ id: number }>("identity.account.delete", { id });
 
-export const identityCreateOrganization = (value: unknown) =>
-  invoke<Record<string, unknown>>("identity.organization.create", body(value));
-
 export const identityUpdateOrganization = (id: number, value: unknown) =>
   invoke<Record<string, unknown>>("identity.organization.update", {
     id,
     ...body(value),
   });
-
-export const identityDeleteOrganization = (id: number) =>
-  invoke<{ id: number }>("identity.organization.delete", { id });
 
 export const identityCreateDepartment = (value: unknown) =>
   invoke<Record<string, unknown>>("identity.department.create", body(value));
@@ -728,38 +1450,6 @@ export async function invokeCapability(
     throw new ApiError(result.errorCode || "internal", 400);
   return result;
 }
-
-export type Article = {
-  id: number;
-  title: string;
-  status: string;
-  revision: number;
-  reviewCode: string;
-  body?: string;
-};
-export const articlesList = () => invoke<{ items: Article[] }>("article.list");
-export const articleGet = (id: number) =>
-  invoke<Article>("article.get", { id });
-export const articleSave = (value: {
-  id?: number;
-  revision?: number;
-  title: string;
-  body: string;
-}) =>
-  invoke<{ id: number }>(
-    value.id ? "article.update" : "article.create",
-    body(value),
-  );
-// Publishing is one durable flow: save into review, agent review, then exactly
-// one of publish or reject. The page only starts the run and reads the state.
-export const articlePublish = (id: number, revision: number) =>
-  invoke<{ runId: number; status: string }>("orchestration.workflow.run", {
-    flow: "article-publish",
-    version: "1.0.0",
-    input: { id, revision },
-  });
-export const articleDecide = (id: number, revision: number, approve: boolean) =>
-  invoke<{ id: number }>("article.decide", { id, revision, approve });
 
 // ---------------------------------------------------------------- projects
 // Every call below is a capability: the page never composes SQL or bypasses the
@@ -993,7 +1683,7 @@ export const runtimeSave = (
 // ---------------------------------------------------------------- mail
 export type MailChannel = {
   direction: "send" | "receive";
-  protocol: "smtp" | "pop3";
+  protocol: "smtp" | "pop3" | "imap";
   host: string;
   port: number;
   tlsMode: "starttls" | "tls";
@@ -1065,35 +1755,42 @@ export type MailDelivery = {
 
 export const mailMailboxList = (signal?: AbortSignal) =>
   invoke<{ items: Mailbox[] }>("mail.mailbox.list", {}, undefined, signal);
-export const mailMailboxOnboard = (input: {
-  name: string;
-  emailAddress: string;
-  password: string;
-  smtpHost: string;
-  smtpPort: number;
-  smtpTls: "starttls" | "tls";
-  smtpUsername?: string;
-  pop3Host: string;
-  pop3Port: number;
-  pop3Username?: string;
-}) => invoke<{ id: number; status: string }>("mail.mailbox.onboard", input);
-export const mailMailboxUpdate = (input: {
-  id: number;
-  revision: number;
-  name: string;
-  emailAddress: string;
-  defaultSend: boolean;
-  smtpHost: string;
-  smtpPort: number;
-  smtpTls: "starttls" | "tls";
-  smtpUsername?: string;
-  pop3Host: string;
-  pop3Port: number;
-  pop3Username?: string;
-}) => invoke<{ id: number }>("mail.mailbox.update", input);
+type MailReceiveInput =
+  | { pop3Host: string; pop3Port: number; pop3Username?: string }
+  | {
+      receiveProtocol: "pop3" | "imap";
+      receiveHost: string;
+      receivePort: number;
+      receiveTls: "starttls" | "tls";
+      receiveUsername?: string;
+    };
+export const mailMailboxOnboard = (
+  input: MailReceiveInput & {
+    name: string;
+    emailAddress: string;
+    password: string;
+    smtpHost: string;
+    smtpPort: number;
+    smtpTls: "starttls" | "tls";
+    smtpUsername?: string;
+  },
+) => invoke<{ id: number; status: string }>("mail.mailbox.onboard", input);
+export const mailMailboxUpdate = (
+  input: MailReceiveInput & {
+    id: number;
+    revision: number;
+    name: string;
+    emailAddress: string;
+    defaultSend: boolean;
+    smtpHost: string;
+    smtpPort: number;
+    smtpTls: "starttls" | "tls";
+    smtpUsername?: string;
+  },
+) => invoke<{ id: number }>("mail.mailbox.update", input);
 export const mailCredentialReplace = (
   mailboxId: number,
-  purpose: "smtp" | "pop3",
+  purpose: MailChannel["protocol"],
   password: string,
 ) =>
   invoke<{ mailboxId: number; purpose: string; version: number }>(
@@ -1134,17 +1831,20 @@ export const mailMessageMarkRead = (id: number) =>
     id,
     read: true,
   });
-export const mailMessageSend = (input: {
-  clientKey: string;
-  mailboxId: number;
-  to: MailAddress[];
-  cc?: MailAddress[];
-  bcc?: MailAddress[];
-  subject: string;
-  markdown: string;
-  replyTo?: string;
-  fileIds?: number[];
-}) =>
+export const mailMessageSend = (
+  input: (
+    { markdown: string; html?: never } | { html: string; markdown?: never }
+  ) & {
+    clientKey: string;
+    mailboxId: number;
+    to: MailAddress[];
+    cc?: MailAddress[];
+    bcc?: MailAddress[];
+    subject: string;
+    replyTo?: string;
+    fileIds?: number[];
+  },
+) =>
   invoke<{ messageId: number; deliveryId: number; status: string }>(
     "mail.message.send",
     input,
@@ -1258,3 +1958,90 @@ export const executionPlans = {
   preflight: (input: EP.ExecutionPlanPreflightInput) =>
     invoke<EP.ExecutionPlanPreflightOutput>("execution.plan.preflight", input),
 };
+
+export const previewIdentityRole = (
+  input: Record<string, unknown>,
+  signal?: AbortSignal,
+) =>
+  invoke<IAM.IdentityRolePreviewOutput>(
+    "identity.role.preview",
+    input,
+    undefined,
+    signal,
+  );
+
+export const listIAMResources = (
+  input: IAM.IdentityResourceListInput,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityResourceListOutput>(
+    "identity.resource.list",
+    input,
+    undefined,
+    signal,
+  );
+
+export const setIAMResourceStatus = (
+  input: IAM.IdentityResourceSetStatusInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityResourceSetStatusOutput>(
+    "identity.resource.setStatus",
+    input,
+    key,
+    signal,
+  );
+
+export const readAuditExportPolicy = (signal: AbortSignal) =>
+  invoke<IAM.IdentityAuditExportPolicyOutput>(
+    "identity.audit.exportPolicy",
+    {},
+    undefined,
+    signal,
+  );
+
+export const listAuditExportPermits = (signal: AbortSignal) =>
+  invoke<IAM.IdentityAuditExportPermitsOutput>(
+    "identity.audit.exportPermits",
+    {},
+    undefined,
+    signal,
+  );
+
+export const configureAuditExport = (
+  input: IAM.IdentityAuditConfigureExportInput,
+  key: string,
+  signal: AbortSignal,
+) =>
+  invoke<IAM.IdentityAuditConfigureExportOutput>(
+    "identity.audit.configureExport",
+    input,
+    key,
+    signal,
+  );
+
+export async function requestAuditExport(
+  input: IAM.IdentityAuditRequestExportInput,
+  key: string,
+  signal: AbortSignal,
+) {
+  const response = await capabilityInvoke(
+    "identity.audit.requestExport",
+    { input, idempotencyKey: key },
+    { signal },
+  );
+  if (response.status !== 200)
+    throw new ApiError("unavailable", response.status);
+  if (response.data.status !== "awaiting_approval")
+    throw new ApiError(response.data.errorCode || "internal", 400);
+  return response.data;
+}
+
+export const previewContextRoleRevocation = (id: string, signal: AbortSignal) =>
+  invoke<IAM.IdentityRoleGrantPreviewRevokeOutput>(
+    "identity.roleGrant.previewRevoke",
+    { id },
+    undefined,
+    signal,
+  );

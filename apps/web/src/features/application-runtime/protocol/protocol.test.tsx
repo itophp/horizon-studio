@@ -29,7 +29,7 @@ vi.mock("@/lib/capabilities", async (original) => ({
   runtimeExecute: api.execute,
 }));
 
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant",
     account: {
@@ -39,7 +39,7 @@ vi.mock("@/features/administration/auth", () => ({
         { departmentId: 4, departmentName: "Operations" },
       ],
     },
-    activeDepartmentId: 3,
+
     permissions: [
       "runtime.protocol.view",
       "accounts:read",
@@ -279,25 +279,8 @@ beforeEach(async () => {
   api.read.mockImplementation(async (name: string) =>
     name === "application.runtime.list"
       ? { items: [fixture] }
-      : name === "identity.accounts.admin.read"
-        ? {
-            items: [
-              {
-                id: 1,
-                fullName: "Alice Chen",
-                username: "alice",
-                email: "alice@example.test",
-                status: "active",
-                createdAt: "2026-01-01T00:00:00Z",
-                memberships: [],
-              },
-            ],
-            organizations: [],
-            departments: [],
-            roles: [],
-            catalog: [],
-            total: 1,
-          }
+      : name === "identity.accounts.read"
+        ? { items: [{ id: 1, username: "alice", status: "active" }], total: 1 }
         : { items: [{ id: 1, name: "Alice" }] },
   );
   api.execute.mockResolvedValue({ status: "succeeded" });
@@ -370,12 +353,12 @@ it("routes the deployment catalog through the V3 protocol renderer", async () =>
     </I18nextProvider>,
   );
 
-  expect(await screen.findByText("Alice Chen")).toBeInTheDocument();
+  expect(await screen.findByText("alice")).toBeInTheDocument();
   expect(
     screen.getByRole("heading", { name: "Runtime protocol preview" }),
   ).toBeInTheDocument();
   expect(api.read).toHaveBeenCalledWith(
-    "identity.accounts.admin.read",
+    "identity.accounts.read",
     {},
     expect.any(AbortSignal),
     "1.0.0",
@@ -642,7 +625,7 @@ it("submits an action form without retaining its password in the page retry stat
   expect(password).toHaveValue("");
 });
 
-it("resolves a bound dialog title and projects the current account's department options", async () => {
+it("resolves a bound dialog title and submits the credential label", async () => {
   const candidate = dialogPage();
   const modal =
     candidate.root.layout!.children![1].layout!.children![0].component!;
@@ -670,32 +653,18 @@ it("resolves a bound dialog title and projects the current account's department 
                 target: "name",
                 value: expression({
                   kind: "literal",
-                  literal: '"departmentId"',
+                  literal: '"name"',
                 }),
               },
               {
                 target: "type",
-                value: expression({ kind: "literal", literal: '"select"' }),
+                value: expression({ kind: "literal", literal: '"text"' }),
               },
               {
                 target: "labelKey",
                 value: expression({
                   kind: "literal",
-                  literal: '"mcp:department"',
-                }),
-              },
-              {
-                target: "options",
-                value: expression({
-                  kind: "path",
-                  path: "context.departmentOptions",
-                }),
-              },
-              {
-                target: "defaultValue",
-                value: expression({
-                  kind: "path",
-                  path: "context.activeDepartmentId",
+                  literal: '"mcp:name"',
                 }),
               },
             ],
@@ -712,7 +681,7 @@ it("resolves a bound dialog title and projects the current account's department 
       payload: expression({ kind: "path", path: "event.values" }),
       inputSchema: JSON.stringify({
         type: "object",
-        properties: { departmentId: { type: "integer" } },
+        properties: { name: { type: "string" } },
       }),
     },
   ];
@@ -724,21 +693,17 @@ it("resolves a bound dialog title and projects the current account's department 
   const dialog = await screen.findByRole("dialog", {
     name: "Rotate token: Deployment",
   });
-  const field = within(dialog).getByRole("combobox", { name: "Department" });
-  expect(field).toHaveValue("3");
-  expect(
-    within(field)
-      .getAllByRole("option")
-      .map((option) => option.textContent),
-  ).toEqual(["Engineering", "Operations"]);
-  await user.selectOptions(field, "4");
+  await user.type(
+    within(dialog).getByRole("textbox", { name: "Token name" }),
+    "Deployment",
+  );
   await user.click(
     within(dialog).getByRole("button", { name: "Create token" }),
   );
   expect(api.execute).toHaveBeenCalledWith(
     "mcp.token.create",
     "1.0.0",
-    { departmentId: 4 },
+    { name: "Deployment" },
     expect.any(String),
     expect.any(String),
     undefined,

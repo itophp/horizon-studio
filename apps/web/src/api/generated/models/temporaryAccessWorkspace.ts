@@ -7,13 +7,11 @@
  */
 import type { PermissionDefinition } from "./permissionDefinition";
 import type { PermissionGrant } from "./permissionGrant";
-import type { ScopeDepartmentChoice } from "./scopeDepartmentChoice";
 import type { TemporaryAccessRecord } from "./temporaryAccessRecord";
 
 export interface TemporaryAccessWorkspace {
   canReview: boolean;
   catalog: PermissionDefinition[];
-  departments: ScopeDepartmentChoice[];
   effectiveGrants: PermissionGrant[];
   requests: TemporaryAccessRecord[];
 }

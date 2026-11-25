@@ -14,7 +14,7 @@ import {
 } from "@/lib/capabilities";
 import type { ManagedFile } from "@/api/types";
 import { ApiError } from "@/api/client/request";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   PageHeading,
   DataTable,
@@ -23,7 +23,7 @@ import {
   ErrorBanner,
   Loading,
   type AdminColumn,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useGovKey, useGovTask, NoAccess, downloadContent } from "./shared";

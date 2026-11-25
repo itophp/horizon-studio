@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import { runtimeRead } from "@/lib/capabilities";
-import { ErrorBanner, Loading } from "@/features/administration/shared";
+import { ErrorBanner, Loading } from "@/features/identity/shared";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 

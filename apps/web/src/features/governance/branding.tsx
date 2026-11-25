@@ -4,7 +4,7 @@ import { useTheme } from "@/app/providers/theme";
 import { useQuery } from "@tanstack/react-query";
 import { brandingGet, brandingLogo } from "@/api/generated/baseline";
 import { settingsLogo } from "@/lib/capabilities";
-import { useAuth } from "@/features/administration/auth";
+import { useAuth } from "@/features/identity/auth";
 import { useConfiguration } from "./runtime";
 export function useBranding() {
   const auth = useAuth();
@@ -65,7 +65,7 @@ export function PublishedLogo() {
       "published-branding-logo",
       profile?.tenantId,
       profile?.account.id,
-      profile?.activeDepartmentId,
+      profile?.identityBindingId,
       brand.logo,
     ],
     queryFn: async () => {

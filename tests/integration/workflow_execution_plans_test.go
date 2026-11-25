@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cloudwego/eino/components/model"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"horizon/applications/example"
 	"horizon/foundation/kernel/approval"
@@ -22,6 +24,153 @@ import (
 	orchmodule "horizon/foundation/system/orchestration"
 	"horizon/internal/repository/dbgen"
 )
+
+func TestMachineWorkflowPlanRevalidatesEachNode(t *testing.T) {
+	handler, pool, root := iamFixture(t)
+	ctx := t.Context()
+	iam := pluginIAM(t, pool)
+	core := governance.New(pool, iam, governance.Options{EncryptionKey: []byte("01234567890123456789012345678901")})
+	admin := loginTenantIAM(t, handler, root.Username, "tenant-a")
+	const password = "TestOnly!2026Secure"
+	machine := checkIAMInvocation(t, admin.invoke(t, "identity.machine.create", map[string]any{
+		"kind": "service", "name": "Workflow service", "password": password,
+		"grants": []map[string]any{
+			{"permission": "example:create", "scope": "OWN", "effect": "allow"},
+			{"permission": "assistant:use", "scope": "ALL", "effect": "allow"},
+		},
+	}, true))
+	entries := example.New(pool).Entries()
+	exampleRegistry := registry.New(entries)
+	target, ok := exampleRegistry.Resolve("example.record.create", "1.0.0")
+	if !ok {
+		t.Fatal("missing target")
+	}
+	probe := target
+	probe.Definition.Name = "test.machineWorkflow.probe"
+	probe.Handler.ExecuteTx = func(ctx context.Context, tx pgx.Tx, input contracts.Input) (contracts.Output, error) {
+		if input["title"] == "revoked during workflow" {
+			principal, err := identity.Current(ctx)
+			if err != nil {
+				return contracts.Output{}, err
+			}
+			if _, err = tx.Exec(ctx, `UPDATE iam_machine_credentials SET revoked_at=now() WHERE id=$1::uuid`, principal.MachineCredentialID()); err != nil {
+				return contracts.Output{}, err
+			}
+		}
+		return target.Handler.ExecuteTx(ctx, tx, input)
+	}
+	entries = append(entries, probe)
+	read := registry.Entry{
+		Definition: contracts.Definition{
+			Name: "test.machineWorkflow.read", Version: "1.0.0", Title: "Read workflow test data",
+			Domain: "example", Entity: "example_record", Permission: "example:create", Layer: contracts.LayerAtomic,
+			Input: contracts.Object(nil), Output: contracts.Object(map[string]*contracts.Schema{"value": {Type: "boolean"}}, "value"),
+			Risk: contracts.RiskLow, Approval: contracts.ApprovalAuto, ReadOnly: true, MachineCallable: true, Executor: "go:test.machineWorkflow.read",
+		},
+		Handler: contracts.Handler{ExecuteTx: func(ctx context.Context, _ pgx.Tx, _ contracts.Input) (contracts.Output, error) {
+			principal, err := identity.Current(ctx)
+			if err != nil || principal.MachineCredentialID() == "" {
+				return contracts.Output{}, contracts.Problem("forbidden")
+			}
+			return contracts.Output{Data: map[string]any{"value": true}}, nil
+		}},
+	}
+	entries = append(entries, read)
+	engine := runtime.New(core, []runtime.Definition{{
+		Name: "machine-plan", Version: "1.0.0", Input: target.Definition.Input,
+		Steps: []runtime.Step{
+			{ID: "probe", Capability: probe.Definition.Name, Version: "1.0.0", Input: map[string]runtime.Mapping{"title": {From: "input", Field: "title"}}},
+			{ID: "review", DependsOn: []string{"probe"}, Agent: &runtime.Agent{
+				Tools: []string{read.Definition.Key()}, Instruction: "Check the workflow status.", MaxIterations: 3,
+				Output: contracts.Object(map[string]*contracts.Schema{"ready": {Type: "boolean"}}, "ready"),
+			}},
+			{ID: "native", Capability: target.Definition.Name, Version: "1.0.0", CallMode: "invoke_native", DependsOn: []string{"review"}, Input: map[string]runtime.Mapping{"title": {From: "input", Field: "title"}}},
+		},
+	}})
+	engine.AgentModel = func(context.Context) (model.ToolCallingChatModel, error) {
+		return &workflowModel{preferredTool: read.Definition.ToolName(), answer: `{"ready":true}`}, nil
+	}
+	plans := &executionplans.Module{Pool: pool, Definitions: map[string]contracts.Definition{}, ValidateWorkflow: engine.ValidatePlanWithQueries}
+	entries = append(entries, plans.Entries()...)
+	for _, entry := range entries {
+		plans.Definitions[entry.Definition.Key()] = entry.Definition
+	}
+	catalog := registry.New(entries)
+	if err := catalog.Err(); err != nil {
+		t.Fatal(err)
+	}
+	g := gateway.New(gateway.Options{Pool: pool, Registry: catalog, Identity: iam, Approvals: approval.NewStore(pool), Audit: audit.NewStore(pool)})
+	if err := engine.Attach(g, catalog); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := func(action string, fields contracts.Input) {
+		t.Helper()
+		fields["capability"], fields["capabilityVersion"] = target.Definition.Name, target.Definition.Version
+		result, err := g.Invoke(identity.WithPrincipal(ctx, owner), gateway.Request{
+			Name: "execution.plan." + action, Origin: contracts.OriginHumanUI, IdempotencyKey: action, Input: fields,
+		})
+		if err != nil || result.Status != contracts.StatusSucceeded {
+			t.Fatalf("%s: %+v %v", action, result, err)
+		}
+	}
+	plan("create", contracts.Input{"planId": "machine-workflow", "name": "Machine workflow", "mode": "workflow", "workflowRef": "machine-plan@1.0.0"})
+	plan("validate", contracts.Input{"planId": "machine-workflow", "planVersion": 1})
+	plan("publish", contracts.Input{"planId": "machine-workflow", "planVersion": 1})
+	plan("bind", contracts.Input{"planId": "machine-workflow", "planVersion": 1, "expectedRevision": 0, "reason": "Workflow service test"})
+	issue := func(capabilities ...string) *identity.Principal {
+		t.Helper()
+		credential := checkIAMInvocation(t, admin.invoke(t, "identity.machine.credential.rotate", map[string]any{
+			"accountId": machine["id"], "audience": "horizon-capability", "capabilities": capabilities, "minutes": 30, "password": password,
+		}, true))
+		principal, err := iam.AuthenticateMachine(ctx, credential["secret"].(string), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return principal
+	}
+	invoke := func(principal *identity.Principal, title string) (*contracts.Result, error) {
+		t.Helper()
+		return g.Invoke(identity.WithPrincipal(ctx, principal), gateway.Request{
+			Name: target.Definition.Name, Version: "1.0.0", Origin: contracts.OriginAPI, IdempotencyKey: title, Input: contracts.Input{"title": title},
+		})
+	}
+	onlyRoot := issue(target.Definition.Key())
+	if _, err := invoke(onlyRoot, "missing node permission"); contracts.Code(err) != "forbidden" {
+		t.Fatalf("accepted workflow with unlisted node: %v", err)
+	}
+	for _, scenario := range []struct{ title, status string }{
+		{"complete workflow", "succeeded"},
+		{"revoked during workflow", "failed"},
+	} {
+		principal := issue(target.Definition.Key(), probe.Definition.Key(), read.Definition.Key())
+		started, err := invoke(principal, scenario.title)
+		if err != nil || started.Status != contracts.StatusExecuting {
+			t.Fatalf("start %+v %v", started, err)
+		}
+		if err := engine.Tick(ctx); err != nil {
+			t.Fatal(err)
+		}
+		var status string
+		if err := pool.QueryRow(ctx, `SELECT status FROM cap_invocations WHERE tenant_id='tenant-a' AND invocation_id=$1`, started.InvocationID).Scan(&status); err != nil || status != scenario.status {
+			t.Fatalf("workflow status=%s want %s: %v", status, scenario.status, err)
+		}
+		var nativeCalls int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM cap_invocations WHERE tenant_id='tenant-a' AND causation_id=$1 AND capability=$2 AND account_id=$3 AND machine_credential_id=$4::uuid`,
+			started.InvocationID, target.Definition.Name, principal.Account.ID, principal.MachineCredentialID()).Scan(&nativeCalls); err != nil || (nativeCalls == 1) != (status == "succeeded") {
+			t.Fatalf("native effect used stale or wrong machine authority: %d %v", nativeCalls, err)
+		}
+		var agentReads int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM cap_invocations WHERE tenant_id='tenant-a' AND causation_id=$1
+ AND capability=$2 AND origin='agent' AND machine_credential_id=$3::uuid AND status='succeeded'`,
+			started.InvocationID, read.Definition.Name, principal.MachineCredentialID()).Scan(&agentReads); err != nil || (agentReads == 1) != (status == "succeeded") {
+			t.Fatalf("ADK read did not enforce current machine authority: %d %v", agentReads, err)
+		}
+	}
+}
 
 func TestWorkflowExecutionPlanApprovalRollbackAndRestart(t *testing.T) {
 	_, pool, root := iamFixture(t)
@@ -54,7 +203,7 @@ func TestWorkflowExecutionPlanApprovalRollbackAndRestart(t *testing.T) {
 	if err := engine.Attach(g, catalog); err != nil {
 		t.Fatal(err)
 	}
-	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

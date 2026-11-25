@@ -75,19 +75,20 @@ func (s *Service) authorityStamp(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fresh, err := s.Core.Identity.PrincipalForTask(ctx, p.TenantID, p.Account.ID, p.Account.DepartmentID)
+	fresh, err := s.refreshAuthority(ctx, p)
 	if err != nil {
 		return "", err
-	}
-	if p.TokenHash != "" {
-		session, e := dbgen.New(s.Core.Pool).IAMSession(ctx, p.TokenHash)
-		if e != nil || session.ActiveDepartmentID != p.Account.DepartmentID {
-			return "", contracts.Problem("unauthenticated")
-		}
 	}
 	rows, err := dbgen.New(s.Core.Pool).RuntimeScopeStamp(ctx, p.TenantID)
 	if err != nil {
 		return "", err
 	}
 	return contracts.Digest(contracts.Input{"principal": identity.AuthorizationVersion(fresh), "applications": rows}), nil
+}
+
+func (s *Service) refreshAuthority(ctx context.Context, principal *identity.Principal) (*identity.Principal, error) {
+	if principal.TokenHash != "" {
+		return s.Core.Identity.PrincipalForSessionInvocation(ctx, principal, false)
+	}
+	return s.Core.Identity.RefreshTaskPrincipal(ctx, principal)
 }

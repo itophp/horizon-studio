@@ -10,7 +10,7 @@ func sessionEntity() contracts.Entity {
 		Name:        "session",
 		Domain:      "identity",
 		Table:       "iam_sessions",
-		Description: "A signed in browser session for one account in one department.",
+		Description: "A browser session bound to one tenant, account and optional identity binding.",
 		Key:         "tokenHash",
 		Attributes: []contracts.Attribute{
 			{Name: "tokenHash", Kind: contracts.AttributeSystem, Type: contracts.TypeString, Required: true,
@@ -19,12 +19,17 @@ func sessionEntity() contracts.Entity {
 			{Name: "csrfToken", Kind: contracts.AttributeSystem, Type: contracts.TypeString, Required: true,
 				Sensitive: true, Description: "Nonce required on unsafe methods; held in memory by the console."},
 			{Name: "expiresAt", Kind: contracts.AttributeSystem, Type: contracts.TypeTimestamp, Required: true},
+			{Name: "publicId", Kind: contracts.AttributeSystem, Type: contracts.TypeUUID, Required: true},
+			{Name: "deviceLabel", Kind: contracts.AttributeSystem, Type: contracts.TypeString, Required: true},
 			{Name: "lastSeenAt", Kind: contracts.AttributeSystem, Type: contracts.TypeTimestamp, Required: true},
-			{Name: "activeDepartmentId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Nullable: true,
-				Description: "Department the session is currently acting in; falls back to the primary one."},
+			{Name: "refreshedAt", Kind: contracts.AttributeSystem, Type: contracts.TypeTimestamp, Nullable: true},
+			{Name: "identityBindingId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Nullable: true},
+			{Name: "externalIdentityId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Nullable: true},
 		},
 		Relations: []contracts.Relation{
 			{Name: "account", Target: "account", Kind: "one", Via: "account_id", Required: true},
+			{Name: "identityBinding", Target: "identity_binding", Kind: "one", Via: "identity_binding_id"},
+			{Name: "externalIdentity", Target: "external_identity", Kind: "one", Via: "external_identity_id"},
 		},
 	}
 }

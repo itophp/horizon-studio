@@ -11,19 +11,10 @@ var PermissionDefinition = Type("PermissionDefinition", func() {
 	Attribute("scopeConfigurable", Boolean)
 	Required("code", "module", "function", "action", "temporaryEligible", "scopeConfigurable")
 })
-var ScopeDepartmentChoice = Type("ScopeDepartmentChoice", func() {
-	Attribute("id", Int64)
-	Attribute("name", String)
-	Attribute("organizationId", Int64)
-	Attribute("organizationName", String)
-	Required("id", "name", "organizationId", "organizationName")
-})
 var TemporaryAccessRecord = Type("TemporaryAccessRecord", func() {
 	Attribute("id", Int64)
 	Attribute("applicantId", Int64)
 	Attribute("applicantName", String)
-	Attribute("departmentId", Int64)
-	Attribute("departmentName", String)
 	Attribute("requestedGrants", ArrayOf(Grant))
 	Attribute("requestedMinutes", Int)
 	Attribute("reason", String)
@@ -36,15 +27,14 @@ var TemporaryAccessRecord = Type("TemporaryAccessRecord", func() {
 	Attribute("createdAt", String)
 	Attribute("reviewedAt", String)
 	Attribute("expiresAt", String)
-	Required("departmentId", "departmentName", "id", "applicantId", "applicantName", "requestedGrants", "requestedMinutes", "reason", "status", "approvedGrants", "approvedMinutes", "reviewerId", "reviewerName", "reviewNote", "createdAt", "reviewedAt", "expiresAt")
+	Required("id", "applicantId", "applicantName", "requestedGrants", "requestedMinutes", "reason", "status", "approvedGrants", "approvedMinutes", "reviewerId", "reviewerName", "reviewNote", "createdAt", "reviewedAt", "expiresAt")
 })
 var TemporaryAccessWorkspace = Type("TemporaryAccessWorkspace", func() {
 	Attribute("requests", ArrayOf(TemporaryAccessRecord))
 	Attribute("catalog", ArrayOf(PermissionDefinition))
-	Attribute("departments", ArrayOf(ScopeDepartmentChoice))
 	Attribute("effectiveGrants", ArrayOf(Grant))
 	Attribute("canReview", Boolean)
-	Required("requests", "catalog", "departments", "effectiveGrants", "canReview")
+	Required("requests", "catalog", "effectiveGrants", "canReview")
 })
 
 func temporaryDuration() {

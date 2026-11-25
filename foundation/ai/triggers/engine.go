@@ -173,7 +173,7 @@ func (e *Engine) skip(ctx context.Context, event eventhub.Event, policy Policy, 
 func (e *Engine) run(event eventhub.Event, policy Policy, executionID int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
-	principal, err := e.identity.PrincipalForTask(ctx, event.TenantID, event.AccountID, event.DepartmentID)
+	principal, err := e.identity.PrincipalForBoundTask(ctx, event.TenantID, event.AccountID, event.IdentityBindingID)
 	if err != nil {
 		e.policies.Finish(ctx, event.TenantID, executionID, Skipped, "forbidden", 0)
 		return

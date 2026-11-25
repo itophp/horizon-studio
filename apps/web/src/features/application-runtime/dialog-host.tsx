@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { EditorDialog } from "@/features/administration/shared";
+import { EditorDialog } from "@/features/identity/shared";
 import {
   Sheet,
   SheetContent,

@@ -120,15 +120,15 @@
     },
     "knowledge_search": {
       "title": "Knowledge search",
-      "description": "Search the workspace knowledge base for rules, configuration and uploaded documents."
+      "description": "Search the tenant knowledge base for rules, configuration and uploaded documents."
     },
     "knowledge_query": {
       "title": "Find knowledge documents",
-      "description": "Find workspace documents by a keyword in the title or text."
+      "description": "Find tenant documents by a keyword in the title or text."
     },
     "knowledge_read": {
       "title": "Read a knowledge document",
-      "description": "Open the original text and metadata of a workspace document."
+      "description": "Open the original text and metadata of a tenant document."
     },
     "knowledge_update": {
       "title": "Update a knowledge document",

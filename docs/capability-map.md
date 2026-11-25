@@ -48,7 +48,7 @@ xxh-baseline/
 ├── docs/                      架构、安全、测试、决策记录与外部规范
 ├── .github/workflows/ci.yml   CI 质量门禁
 ├── compose.yaml               本地 PostgreSQL 18.6（54329）
-├── package.json               pnpm 工作区根脚本
+├── package.json               pnpm 租户根脚本
 ├── skills-lock.json           上游 Skill 的版本与 hash 锁定
 ├── AGENTS.md                  项目长期开发规则（根）
 └── README.md                  项目定位与架构方向说明
@@ -63,11 +63,11 @@ xxh-baseline/
 | `cmd/horizon-cli/` | 开发、迁移、生成、检查、测试和 CI 命令入口（见 §4）。 |
 | `compose.yaml` | 本地依赖：`postgres:18.6`，只绑定 `127.0.0.1:54329`，数据落 `postgres-data` 卷。 |
 | `package.json` | pnpm 根脚本，聚合 web 的 lint/typecheck/test/build，以及 `rules:check`、`webmcp:*`、`mcp:*`。 |
-| `pnpm-workspace.yaml` | 工作区定义（`apps/*`）。 |
+| `pnpm-workspace.yaml` | 前端包组织（`apps/*`）。 |
 | `pnpm-lock.yaml` | 依赖锁文件；版本升级需在 `docs/versions.md` 记录依据。 |
 | `.npmrc` | npm registry、`save-exact`、`strict-peer-dependencies=true`。 |
 | `.env` | 本地实际配置，不入库；由 Horizon CLI 读取，进程环境变量优先。 |
-| `.env.example` | 全部环境变量样例与语义注释：`DATABASE_URL`、`COOKIE_SECURE`、`BOOTSTRAP_*`、`DEMO_AUTH_TOKEN`、`SETTINGS_ENCRYPTION_KEY`、`FILE_STORAGE_ROOT`、`PUBLIC_WORKSPACE_ID`、`PUBLIC_APP_URL`、`SMTP_ALLOWED_HOSTS`、`WEBMCP_*`、`MCP_BUSINESS_URL`。 |
+| `.env.example` | 全部环境变量样例与语义注释：`DATABASE_URL`、`COOKIE_SECURE`、`BOOTSTRAP_*`、`DEMO_AUTH_TOKEN`、`SETTINGS_ENCRYPTION_KEY`、`FILE_STORAGE_ROOT`、`PUBLIC_TENANT_ID`、`PUBLIC_APP_URL`、`SMTP_ALLOWED_HOSTS`、`WEBMCP_*`、`MCP_BUSINESS_URL`。 |
 | `.gitignore` / `.prettierignore` | 忽略产物目录（`dist`、`.local`、`test-results`、`playwright-report`、`.tools`）与格式化范围。 |
 | `skills-lock.json` | 上游 `goa-service-designer` 等 Skill 的来源与 hash，防止手改上游指南夹带项目约定。 |
 | `.github/workflows/ci.yml` | CI：pnpm/node 22.23.2 + Go + PostgreSQL service → `./horizon-cli ci-fast` → `test-integration` → WebMCP 真实客户端 → 全量 E2E，失败上传报告。 |
@@ -162,7 +162,7 @@ xxh-baseline/
 | 文件 | 作用 |
 |---|---|
 | `cmd/api/main.go` | 加载配置、初始化结构化日志、信号处理，交给 `server.Run`。 |
-| `cmd/bootstrap/main.go` | 首次部署创建内置管理员与工作区（读取 `BOOTSTRAP_*`）。 |
+| `cmd/bootstrap/main.go` | 首次部署创建内置管理员与租户（读取 `BOOTSTRAP_*`）。 |
 | `cmd/migrate/main.go` | 执行 Goose 迁移（嵌入 `db/migrations`）。 |
 | `cmd/e2e/main.go` | E2E 专用启动器：从 `TEST_DATABASE_URL` 建隔离数据库/schema，迁移后以独立端口启动服务，供 Playwright `webServer` 使用。 |
 
@@ -253,7 +253,7 @@ xxh-baseline/
 |---|---|
 | `example/module.go` | 参考模块：3 个能力（list/create/archive，覆盖读→写→高风险状态变更）+ Outbox 事件 + 事件触发 AI 评审，示范完整闭环。 |
 | `settings/types.go` | 设置域类型：`ConfigDefinition`、`ConfigEntry`、`ChangeEntry/ChangeRecord`、`ConfigTarget`。 |
-| `settings/capability.go` | 12 个设置能力（读工作区/生效值/偏好、草稿、发布、回滚、导出、Logo、密码验证、排期增删查）。 |
+| `settings/capability.go` | 12 个设置能力（读租户/生效值/偏好、草稿、发布、回滚、导出、Logo、密码验证、排期增删查）。 |
 | `settings/service.go` | 发布事务：版本锁、同事务快照与审计、敏感发布单次绑定重新认证、偏好写入。 |
 | `settings/schedules.go` | 定时发布 worker：`pending` 部分唯一索引 + `SKIP LOCKED` 领取，到期重建原 Principal 重新授权，状态与失败码原子保存。 |
 | `dictionaries/types.go` | 字典域类型：定义、文档、条目、覆盖、引用。 |
@@ -552,7 +552,7 @@ xxh-baseline/
 | 能力 | 说明 |
 |---|---|
 | `identity.account.create/update/delete` | 账号增改删（含部门与权限覆盖），事件 `identity.account.{created,updated,deleted}`。 |
-| `identity.organization.create/update/delete` | 组织（企业/公司）增改删。 |
+| `identity.organization.update` | 更新当前租户的组织资料。 |
 | `identity.department.create/update/delete` | 部门增改删。 |
 | `identity.role.create/update/delete` | 角色与授权增改删。 |
 
@@ -560,7 +560,7 @@ xxh-baseline/
 
 | 能力 | 风险/审批 | 说明 |
 |---|---|---|
-| `settings.workspace.read` | low/auto | 工作区配置目录。 |
+| `settings.workspace.read` | low/auto | 租户配置目录。 |
 | `settings.effective.read` | low/auto | 生效配置与 revision。 |
 | `settings.preferences.update` | low/auto | 个人偏好。 |
 | `settings.draft.create` | medium/auto | 创建草稿。 |

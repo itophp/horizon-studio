@@ -22,13 +22,13 @@ import type {
   DictionaryDetail,
   ImportPreview,
 } from "@/api/types";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   useAdminData,
   EditorDialog,
   ErrorBanner,
   Loading,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {

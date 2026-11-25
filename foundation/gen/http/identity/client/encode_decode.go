@@ -16,10 +16,753 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// BuildSamlCallbackRequest instantiates a HTTP request object with method and
+// path set to call the "identity" service "saml_callback" endpoint
+func (c *Client) BuildSamlCallbackRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		providerID string
+	)
+	{
+		p, ok := v.(*identity.SamlCallbackPayload)
+		if !ok {
+			return nil, goahttp.ErrInvalidType("identity", "saml_callback", "*identity.SamlCallbackPayload", v)
+		}
+		providerID = p.ProviderID
+	}
+
+	rawPath := fmt.Sprintf("/api/auth/federation/saml/%v/acs", url.PathEscape(fmt.Sprint(providerID)))
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SamlCallbackIdentityPath(providerID), RawPath: rawPath}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identity", "saml_callback", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSamlCallbackRequest returns an encoder for requests sent to the
+// identity saml_callback server.
+func EncodeSamlCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identity.SamlCallbackPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identity", "saml_callback", "*identity.SamlCallbackPayload", v)
+		}
+		{
+			head := p.Cookie
+			req.Header.Set("Cookie", head)
+		}
+		body := NewSamlCallbackRequestBody(p)
+		// Convert the typed body fields into the form keys selected by the design.
+		form := make(url.Values, 2)
+		{
+			value := body.SAMLResponse
+			form.Set("SAMLResponse", value)
+		}
+		{
+			value := body.RelayState
+			form.Set("RelayState", value)
+		}
+		// Retain the exact encoded body so the HTTP client can replay these bytes.
+		encoded := form.Encode()
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Body = io.NopCloser(strings.NewReader(encoded))
+		req.ContentLength = int64(len(encoded))
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(strings.NewReader(encoded)), nil
+		}
+		return nil
+	}
+}
+
+// DecodeSamlCallbackResponse returns a decoder for responses returned by the
+// identity saml_callback endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeSamlCallbackResponse may return the following errors:
+//   - "unauthenticated" (type *identity.IAMProblem): http.StatusUnauthorized
+//   - "rate_limited" (type *identity.IAMProblem): http.StatusTooManyRequests
+//   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeSamlCallbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "saml_callback", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "saml_callback", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusSeeOther:
+			var (
+				authorizationURL string
+				cookie           string
+				err              error
+			)
+			authorizationURLRaw := resp.Header.Get("Location")
+			if authorizationURLRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("authorizationUrl", "header"))
+			}
+			authorizationURL = authorizationURLRaw
+			cookieRaw := resp.Header.Get("Set-Cookie")
+			if cookieRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("cookie", "header"))
+			}
+			cookie = cookieRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "saml_callback", err)
+			}
+			res := NewSamlCallbackFederationStartResultSeeOther(authorizationURL, cookie)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SamlCallbackUnauthenticatedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "saml_callback", err)
+			}
+			err = ValidateSamlCallbackUnauthenticatedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "saml_callback", err)
+			}
+			return nil, NewSamlCallbackUnauthenticated(&body)
+		case http.StatusTooManyRequests:
+			var (
+				body SamlCallbackRateLimitedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "saml_callback", err)
+			}
+			err = ValidateSamlCallbackRateLimitedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "saml_callback", err)
+			}
+			return nil, NewSamlCallbackRateLimited(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body SamlCallbackUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "saml_callback", err)
+			}
+			err = ValidateSamlCallbackUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "saml_callback", err)
+			}
+			return nil, NewSamlCallbackUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body SamlCallbackInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "saml_callback", err)
+			}
+			err = ValidateSamlCallbackInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "saml_callback", err)
+			}
+			return nil, NewSamlCallbackInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "saml_callback", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("identity", "saml_callback", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCompleteSamlRequest instantiates a HTTP request object with method and
+// path set to call the "identity" service "complete_saml" endpoint
+func (c *Client) BuildCompleteSamlRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CompleteSamlIdentityPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identity", "complete_saml", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCompleteSamlRequest returns an encoder for requests sent to the
+// identity complete_saml server.
+func EncodeCompleteSamlRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identity.CompleteSamlPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identity", "complete_saml", "*identity.CompleteSamlPayload", v)
+		}
+		{
+			head := p.Cookie
+			req.Header.Set("Cookie", head)
+		}
+		body := NewCompleteSamlRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identity", "complete_saml", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCompleteSamlResponse returns a decoder for responses returned by the
+// identity complete_saml endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeCompleteSamlResponse may return the following errors:
+//   - "unauthenticated" (type *identity.IAMProblem): http.StatusUnauthorized
+//   - "rate_limited" (type *identity.IAMProblem): http.StatusTooManyRequests
+//   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeCompleteSamlResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_saml", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "complete_saml", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CompleteSamlResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_saml", err)
+			}
+			err = ValidateCompleteSamlResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_saml", err)
+			}
+			var (
+				cookie *string
+			)
+			cookieRaw := resp.Header.Get("Set-Cookie")
+			if cookieRaw != "" {
+				cookie = &cookieRaw
+			}
+			res := NewCompleteSamlFederationCompleteResultOK(&body, cookie)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CompleteSamlUnauthenticatedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_saml", err)
+			}
+			err = ValidateCompleteSamlUnauthenticatedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_saml", err)
+			}
+			return nil, NewCompleteSamlUnauthenticated(&body)
+		case http.StatusTooManyRequests:
+			var (
+				body CompleteSamlRateLimitedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_saml", err)
+			}
+			err = ValidateCompleteSamlRateLimitedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_saml", err)
+			}
+			return nil, NewCompleteSamlRateLimited(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body CompleteSamlUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_saml", err)
+			}
+			err = ValidateCompleteSamlUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_saml", err)
+			}
+			return nil, NewCompleteSamlUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body CompleteSamlInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_saml", err)
+			}
+			err = ValidateCompleteSamlInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_saml", err)
+			}
+			return nil, NewCompleteSamlInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_saml", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("identity", "complete_saml", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildFederationProvidersRequest instantiates a HTTP request object with
+// method and path set to call the "identity" service "federation_providers"
+// endpoint
+func (c *Client) BuildFederationProvidersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: FederationProvidersIdentityPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identity", "federation_providers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeFederationProvidersResponse returns a decoder for responses returned
+// by the identity federation_providers endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeFederationProvidersResponse may return the following errors:
+//   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeFederationProvidersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "federation_providers", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "federation_providers", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body []*FederationProviderResponse
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "federation_providers", err)
+			}
+			for _, e := range body {
+				if e != nil {
+					if err2 := validateFederationProviderResponse(e, "body[*]"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "federation_providers", err)
+			}
+			res := NewFederationProvidersFederationProviderOK(body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body FederationProvidersUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "federation_providers", err)
+			}
+			err = ValidateFederationProvidersUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "federation_providers", err)
+			}
+			return nil, NewFederationProvidersUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body FederationProvidersInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "federation_providers", err)
+			}
+			err = ValidateFederationProvidersInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "federation_providers", err)
+			}
+			return nil, NewFederationProvidersInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "federation_providers", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("identity", "federation_providers", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildStartFederationRequest instantiates a HTTP request object with method
+// and path set to call the "identity" service "start_federation" endpoint
+func (c *Client) BuildStartFederationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: StartFederationIdentityPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identity", "start_federation", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeStartFederationRequest returns an encoder for requests sent to the
+// identity start_federation server.
+func EncodeStartFederationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identity.StartFederationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identity", "start_federation", "*identity.StartFederationPayload", v)
+		}
+		body := NewStartFederationRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identity", "start_federation", err)
+		}
+		return nil
+	}
+}
+
+// DecodeStartFederationResponse returns a decoder for responses returned by
+// the identity start_federation endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeStartFederationResponse may return the following errors:
+//   - "invalid" (type *identity.IAMProblem): http.StatusBadRequest
+//   - "rate_limited" (type *identity.IAMProblem): http.StatusTooManyRequests
+//   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeStartFederationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "start_federation", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "start_federation", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body StartFederationResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "start_federation", err)
+			}
+			err = ValidateStartFederationResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "start_federation", err)
+			}
+			var (
+				cookie string
+			)
+			cookieRaw := resp.Header.Get("Set-Cookie")
+			if cookieRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("cookie", "header"))
+			}
+			cookie = cookieRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "start_federation", err)
+			}
+			res := NewStartFederationFederationStartResultOK(&body, cookie)
+			return res, nil
+		case http.StatusBadRequest:
+			var (
+				body StartFederationInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "start_federation", err)
+			}
+			err = ValidateStartFederationInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "start_federation", err)
+			}
+			return nil, NewStartFederationInvalid(&body)
+		case http.StatusTooManyRequests:
+			var (
+				body StartFederationRateLimitedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "start_federation", err)
+			}
+			err = ValidateStartFederationRateLimitedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "start_federation", err)
+			}
+			return nil, NewStartFederationRateLimited(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body StartFederationUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "start_federation", err)
+			}
+			err = ValidateStartFederationUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "start_federation", err)
+			}
+			return nil, NewStartFederationUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body StartFederationInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "start_federation", err)
+			}
+			err = ValidateStartFederationInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "start_federation", err)
+			}
+			return nil, NewStartFederationInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "start_federation", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("identity", "start_federation", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCompleteFederationRequest instantiates a HTTP request object with
+// method and path set to call the "identity" service "complete_federation"
+// endpoint
+func (c *Client) BuildCompleteFederationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CompleteFederationIdentityPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identity", "complete_federation", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCompleteFederationRequest returns an encoder for requests sent to the
+// identity complete_federation server.
+func EncodeCompleteFederationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identity.CompleteFederationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identity", "complete_federation", "*identity.CompleteFederationPayload", v)
+		}
+		{
+			head := p.Cookie
+			req.Header.Set("Cookie", head)
+		}
+		body := NewCompleteFederationRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identity", "complete_federation", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCompleteFederationResponse returns a decoder for responses returned by
+// the identity complete_federation endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCompleteFederationResponse may return the following errors:
+//   - "unauthenticated" (type *identity.IAMProblem): http.StatusUnauthorized
+//   - "rate_limited" (type *identity.IAMProblem): http.StatusTooManyRequests
+//   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeCompleteFederationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_federation", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "complete_federation", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CompleteFederationResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_federation", err)
+			}
+			err = ValidateCompleteFederationResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_federation", err)
+			}
+			var (
+				cookie *string
+			)
+			cookieRaw := resp.Header.Get("Set-Cookie")
+			if cookieRaw != "" {
+				cookie = &cookieRaw
+			}
+			res := NewCompleteFederationFederationCompleteResultOK(&body, cookie)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CompleteFederationUnauthenticatedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_federation", err)
+			}
+			err = ValidateCompleteFederationUnauthenticatedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_federation", err)
+			}
+			return nil, NewCompleteFederationUnauthenticated(&body)
+		case http.StatusTooManyRequests:
+			var (
+				body CompleteFederationRateLimitedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_federation", err)
+			}
+			err = ValidateCompleteFederationRateLimitedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_federation", err)
+			}
+			return nil, NewCompleteFederationRateLimited(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body CompleteFederationUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_federation", err)
+			}
+			err = ValidateCompleteFederationUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_federation", err)
+			}
+			return nil, NewCompleteFederationUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body CompleteFederationInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_federation", err)
+			}
+			err = ValidateCompleteFederationInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_federation", err)
+			}
+			return nil, NewCompleteFederationInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_federation", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("identity", "complete_federation", resp.StatusCode, string(body))
+		}
+	}
+}
 
 // BuildTemporaryAccessRequest instantiates a HTTP request object with method
 // and path set to call the "identity" service "temporary_access" endpoint
@@ -1004,13 +1747,14 @@ func DecodeRevokeTemporaryAccessResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
-// BuildSwitchDepartmentRequest instantiates a HTTP request object with method
-// and path set to call the "identity" service "switch_department" endpoint
-func (c *Client) BuildSwitchDepartmentRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SwitchDepartmentIdentityPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
+// BuildListSignInIdentitiesRequest instantiates a HTTP request object with
+// method and path set to call the "identity" service "list_sign_in_identities"
+// endpoint
+func (c *Client) BuildListSignInIdentitiesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListSignInIdentitiesIdentityPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("identity", "switch_department", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("identity", "list_sign_in_identities", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -1019,43 +1763,38 @@ func (c *Client) BuildSwitchDepartmentRequest(ctx context.Context, v any) (*http
 	return req, nil
 }
 
-// EncodeSwitchDepartmentRequest returns an encoder for requests sent to the
-// identity switch_department server.
-func EncodeSwitchDepartmentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeListSignInIdentitiesRequest returns an encoder for requests sent to
+// the identity list_sign_in_identities server.
+func EncodeListSignInIdentitiesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*identity.SwitchDepartmentPayload)
+		p, ok := v.(*identity.ListSignInIdentitiesPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("identity", "switch_department", "*identity.SwitchDepartmentPayload", v)
+			return goahttp.ErrInvalidType("identity", "list_sign_in_identities", "*identity.ListSignInIdentitiesPayload", v)
 		}
 		{
 			head := p.Cookie
 			req.Header.Set("Cookie", head)
 		}
-		body := NewSwitchDepartmentRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("identity", "switch_department", err)
-		}
 		return nil
 	}
 }
 
-// DecodeSwitchDepartmentResponse returns a decoder for responses returned by
-// the identity switch_department endpoint. restoreBody controls whether the
-// response body should be restored after having been read.
-// DecodeSwitchDepartmentResponse may return the following errors:
+// DecodeListSignInIdentitiesResponse returns a decoder for responses returned
+// by the identity list_sign_in_identities endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListSignInIdentitiesResponse may return the following errors:
 //   - "unauthenticated" (type *identity.IAMProblem): http.StatusUnauthorized
-//   - "forbidden" (type *identity.IAMProblem): http.StatusForbidden
 //   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
 //   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
 //   - error: internal error
-func DecodeSwitchDepartmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeListSignInIdentitiesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (result any, decodeErr error) {
 		responseBody := resp.Body
 		if restoreBody {
 			b, readErr := io.ReadAll(responseBody)
 			closeErr := responseBody.Close()
 			if err := errors.Join(readErr, closeErr); err != nil {
-				return nil, goahttp.ErrDecodingError("identity", "switch_department", err)
+				return nil, goahttp.ErrDecodingError("identity", "list_sign_in_identities", err)
 			}
 			resp.Body = io.NopCloser(bytes.NewBuffer(b))
 			defer func() {
@@ -1064,88 +1803,361 @@ func DecodeSwitchDepartmentResponse(decoder func(*http.Response) goahttp.Decoder
 		} else {
 			defer func() {
 				if err := responseBody.Close(); err != nil {
-					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "switch_department", err))
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "list_sign_in_identities", err))
 				}
 			}()
 		}
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body SwitchDepartmentResponseBody
+				body []*SignInIdentityResponse
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("identity", "switch_department", err)
+				return nil, goahttp.ErrDecodingError("identity", "list_sign_in_identities", err)
 			}
-			err = ValidateSwitchDepartmentResponseBody(&body)
+			for _, e := range body {
+				if e != nil {
+					if err2 := validateSignInIdentityResponse(e, "body[*]"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
 			if err != nil {
-				return nil, goahttp.ErrValidationError("identity", "switch_department", err)
+				return nil, goahttp.ErrValidationError("identity", "list_sign_in_identities", err)
 			}
-			res := NewSwitchDepartmentSessionProfileOK(&body)
+			res := NewListSignInIdentitiesSignInIdentityOK(body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body SwitchDepartmentUnauthenticatedResponseBody
+				body ListSignInIdentitiesUnauthenticatedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("identity", "switch_department", err)
+				return nil, goahttp.ErrDecodingError("identity", "list_sign_in_identities", err)
 			}
-			err = ValidateSwitchDepartmentUnauthenticatedResponseBody(&body)
+			err = ValidateListSignInIdentitiesUnauthenticatedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("identity", "switch_department", err)
+				return nil, goahttp.ErrValidationError("identity", "list_sign_in_identities", err)
 			}
-			return nil, NewSwitchDepartmentUnauthenticated(&body)
-		case http.StatusForbidden:
-			var (
-				body SwitchDepartmentForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("identity", "switch_department", err)
-			}
-			err = ValidateSwitchDepartmentForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("identity", "switch_department", err)
-			}
-			return nil, NewSwitchDepartmentForbidden(&body)
+			return nil, NewListSignInIdentitiesUnauthenticated(&body)
 		case http.StatusServiceUnavailable:
 			var (
-				body SwitchDepartmentUnavailableResponseBody
+				body ListSignInIdentitiesUnavailableResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("identity", "switch_department", err)
+				return nil, goahttp.ErrDecodingError("identity", "list_sign_in_identities", err)
 			}
-			err = ValidateSwitchDepartmentUnavailableResponseBody(&body)
+			err = ValidateListSignInIdentitiesUnavailableResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("identity", "switch_department", err)
+				return nil, goahttp.ErrValidationError("identity", "list_sign_in_identities", err)
 			}
-			return nil, NewSwitchDepartmentUnavailable(&body)
+			return nil, NewListSignInIdentitiesUnavailable(&body)
 		case http.StatusInternalServerError:
 			var (
-				body SwitchDepartmentInternalResponseBody
+				body ListSignInIdentitiesInternalResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("identity", "switch_department", err)
+				return nil, goahttp.ErrDecodingError("identity", "list_sign_in_identities", err)
 			}
-			err = ValidateSwitchDepartmentInternalResponseBody(&body)
+			err = ValidateListSignInIdentitiesInternalResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("identity", "switch_department", err)
+				return nil, goahttp.ErrValidationError("identity", "list_sign_in_identities", err)
 			}
-			return nil, NewSwitchDepartmentInternal(&body)
+			return nil, NewListSignInIdentitiesInternal(&body)
 		default:
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("identity", "switch_department", err)
+				return nil, goahttp.ErrDecodingError("identity", "list_sign_in_identities", err)
 			}
-			return nil, goahttp.ErrInvalidResponse("identity", "switch_department", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("identity", "list_sign_in_identities", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSelectSignInIdentityRequest instantiates a HTTP request object with
+// method and path set to call the "identity" service "select_sign_in_identity"
+// endpoint
+func (c *Client) BuildSelectSignInIdentityRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SelectSignInIdentityIdentityPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identity", "select_sign_in_identity", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSelectSignInIdentityRequest returns an encoder for requests sent to
+// the identity select_sign_in_identity server.
+func EncodeSelectSignInIdentityRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identity.SelectSignInIdentityPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identity", "select_sign_in_identity", "*identity.SelectSignInIdentityPayload", v)
+		}
+		{
+			head := p.Cookie
+			req.Header.Set("Cookie", head)
+		}
+		body := NewSelectSignInIdentityRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identity", "select_sign_in_identity", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSelectSignInIdentityResponse returns a decoder for responses returned
+// by the identity select_sign_in_identity endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeSelectSignInIdentityResponse may return the following errors:
+//   - "unauthenticated" (type *identity.IAMProblem): http.StatusUnauthorized
+//   - "forbidden" (type *identity.IAMProblem): http.StatusForbidden
+//   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeSelectSignInIdentityResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "select_sign_in_identity", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "select_sign_in_identity", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SelectSignInIdentityResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "select_sign_in_identity", err)
+			}
+			err = ValidateSelectSignInIdentityResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "select_sign_in_identity", err)
+			}
+			res := NewSelectSignInIdentitySessionProfileOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SelectSignInIdentityUnauthenticatedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "select_sign_in_identity", err)
+			}
+			err = ValidateSelectSignInIdentityUnauthenticatedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "select_sign_in_identity", err)
+			}
+			return nil, NewSelectSignInIdentityUnauthenticated(&body)
+		case http.StatusForbidden:
+			var (
+				body SelectSignInIdentityForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "select_sign_in_identity", err)
+			}
+			err = ValidateSelectSignInIdentityForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "select_sign_in_identity", err)
+			}
+			return nil, NewSelectSignInIdentityForbidden(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body SelectSignInIdentityUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "select_sign_in_identity", err)
+			}
+			err = ValidateSelectSignInIdentityUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "select_sign_in_identity", err)
+			}
+			return nil, NewSelectSignInIdentityUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body SelectSignInIdentityInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "select_sign_in_identity", err)
+			}
+			err = ValidateSelectSignInIdentityInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "select_sign_in_identity", err)
+			}
+			return nil, NewSelectSignInIdentityInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "select_sign_in_identity", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("identity", "select_sign_in_identity", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRedeemSignInInvitationRequest instantiates a HTTP request object with
+// method and path set to call the "identity" service
+// "redeem_sign_in_invitation" endpoint
+func (c *Client) BuildRedeemSignInInvitationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RedeemSignInInvitationIdentityPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identity", "redeem_sign_in_invitation", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRedeemSignInInvitationRequest returns an encoder for requests sent to
+// the identity redeem_sign_in_invitation server.
+func EncodeRedeemSignInInvitationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identity.RedeemSignInInvitationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identity", "redeem_sign_in_invitation", "*identity.RedeemSignInInvitationPayload", v)
+		}
+		{
+			head := p.Cookie
+			req.Header.Set("Cookie", head)
+		}
+		body := NewRedeemSignInInvitationRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identity", "redeem_sign_in_invitation", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRedeemSignInInvitationResponse returns a decoder for responses
+// returned by the identity redeem_sign_in_invitation endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeRedeemSignInInvitationResponse may return the following errors:
+//   - "unauthenticated" (type *identity.IAMProblem): http.StatusUnauthorized
+//   - "forbidden" (type *identity.IAMProblem): http.StatusForbidden
+//   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeRedeemSignInInvitationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "redeem_sign_in_invitation", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "redeem_sign_in_invitation", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body RedeemSignInInvitationUnauthenticatedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "redeem_sign_in_invitation", err)
+			}
+			err = ValidateRedeemSignInInvitationUnauthenticatedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "redeem_sign_in_invitation", err)
+			}
+			return nil, NewRedeemSignInInvitationUnauthenticated(&body)
+		case http.StatusForbidden:
+			var (
+				body RedeemSignInInvitationForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "redeem_sign_in_invitation", err)
+			}
+			err = ValidateRedeemSignInInvitationForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "redeem_sign_in_invitation", err)
+			}
+			return nil, NewRedeemSignInInvitationForbidden(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RedeemSignInInvitationUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "redeem_sign_in_invitation", err)
+			}
+			err = ValidateRedeemSignInInvitationUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "redeem_sign_in_invitation", err)
+			}
+			return nil, NewRedeemSignInInvitationUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body RedeemSignInInvitationInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "redeem_sign_in_invitation", err)
+			}
+			err = ValidateRedeemSignInInvitationInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "redeem_sign_in_invitation", err)
+			}
+			return nil, NewRedeemSignInInvitationInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "redeem_sign_in_invitation", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("identity", "redeem_sign_in_invitation", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1314,6 +2326,526 @@ func DecodeLoginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 				return nil, goahttp.ErrDecodingError("identity", "login", err)
 			}
 			return nil, goahttp.ErrInvalidResponse("identity", "login", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRequestRegistrationRequest instantiates a HTTP request object with
+// method and path set to call the "identity" service "request_registration"
+// endpoint
+func (c *Client) BuildRequestRegistrationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RequestRegistrationIdentityPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identity", "request_registration", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRequestRegistrationRequest returns an encoder for requests sent to the
+// identity request_registration server.
+func EncodeRequestRegistrationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identity.RequestRegistrationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identity", "request_registration", "*identity.RequestRegistrationPayload", v)
+		}
+		body := NewRequestRegistrationRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identity", "request_registration", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRequestRegistrationResponse returns a decoder for responses returned
+// by the identity request_registration endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeRequestRegistrationResponse may return the following errors:
+//   - "invalid" (type *identity.IAMProblem): http.StatusBadRequest
+//   - "rate_limited" (type *identity.IAMProblem): http.StatusTooManyRequests
+//   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeRequestRegistrationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "request_registration", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "request_registration", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusBadRequest:
+			var (
+				body RequestRegistrationInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "request_registration", err)
+			}
+			err = ValidateRequestRegistrationInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "request_registration", err)
+			}
+			return nil, NewRequestRegistrationInvalid(&body)
+		case http.StatusTooManyRequests:
+			var (
+				body RequestRegistrationRateLimitedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "request_registration", err)
+			}
+			err = ValidateRequestRegistrationRateLimitedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "request_registration", err)
+			}
+			return nil, NewRequestRegistrationRateLimited(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RequestRegistrationUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "request_registration", err)
+			}
+			err = ValidateRequestRegistrationUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "request_registration", err)
+			}
+			return nil, NewRequestRegistrationUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body RequestRegistrationInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "request_registration", err)
+			}
+			err = ValidateRequestRegistrationInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "request_registration", err)
+			}
+			return nil, NewRequestRegistrationInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "request_registration", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("identity", "request_registration", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCompleteRegistrationRequest instantiates a HTTP request object with
+// method and path set to call the "identity" service "complete_registration"
+// endpoint
+func (c *Client) BuildCompleteRegistrationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CompleteRegistrationIdentityPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identity", "complete_registration", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCompleteRegistrationRequest returns an encoder for requests sent to
+// the identity complete_registration server.
+func EncodeCompleteRegistrationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identity.CompleteRegistrationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identity", "complete_registration", "*identity.CompleteRegistrationPayload", v)
+		}
+		body := NewCompleteRegistrationRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identity", "complete_registration", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCompleteRegistrationResponse returns a decoder for responses returned
+// by the identity complete_registration endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeCompleteRegistrationResponse may return the following errors:
+//   - "forbidden" (type *identity.IAMProblem): http.StatusForbidden
+//   - "rate_limited" (type *identity.IAMProblem): http.StatusTooManyRequests
+//   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeCompleteRegistrationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_registration", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "complete_registration", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusForbidden:
+			var (
+				body CompleteRegistrationForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_registration", err)
+			}
+			err = ValidateCompleteRegistrationForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_registration", err)
+			}
+			return nil, NewCompleteRegistrationForbidden(&body)
+		case http.StatusTooManyRequests:
+			var (
+				body CompleteRegistrationRateLimitedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_registration", err)
+			}
+			err = ValidateCompleteRegistrationRateLimitedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_registration", err)
+			}
+			return nil, NewCompleteRegistrationRateLimited(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body CompleteRegistrationUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_registration", err)
+			}
+			err = ValidateCompleteRegistrationUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_registration", err)
+			}
+			return nil, NewCompleteRegistrationUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body CompleteRegistrationInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_registration", err)
+			}
+			err = ValidateCompleteRegistrationInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_registration", err)
+			}
+			return nil, NewCompleteRegistrationInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_registration", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("identity", "complete_registration", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRequestPasswordResetRequest instantiates a HTTP request object with
+// method and path set to call the "identity" service "request_password_reset"
+// endpoint
+func (c *Client) BuildRequestPasswordResetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RequestPasswordResetIdentityPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identity", "request_password_reset", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRequestPasswordResetRequest returns an encoder for requests sent to
+// the identity request_password_reset server.
+func EncodeRequestPasswordResetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identity.RequestPasswordResetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identity", "request_password_reset", "*identity.RequestPasswordResetPayload", v)
+		}
+		body := NewRequestPasswordResetRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identity", "request_password_reset", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRequestPasswordResetResponse returns a decoder for responses returned
+// by the identity request_password_reset endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeRequestPasswordResetResponse may return the following errors:
+//   - "rate_limited" (type *identity.IAMProblem): http.StatusTooManyRequests
+//   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeRequestPasswordResetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "request_password_reset", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "request_password_reset", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusTooManyRequests:
+			var (
+				body RequestPasswordResetRateLimitedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "request_password_reset", err)
+			}
+			err = ValidateRequestPasswordResetRateLimitedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "request_password_reset", err)
+			}
+			return nil, NewRequestPasswordResetRateLimited(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RequestPasswordResetUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "request_password_reset", err)
+			}
+			err = ValidateRequestPasswordResetUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "request_password_reset", err)
+			}
+			return nil, NewRequestPasswordResetUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body RequestPasswordResetInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "request_password_reset", err)
+			}
+			err = ValidateRequestPasswordResetInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "request_password_reset", err)
+			}
+			return nil, NewRequestPasswordResetInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "request_password_reset", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("identity", "request_password_reset", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCompletePasswordResetRequest instantiates a HTTP request object with
+// method and path set to call the "identity" service "complete_password_reset"
+// endpoint
+func (c *Client) BuildCompletePasswordResetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CompletePasswordResetIdentityPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identity", "complete_password_reset", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCompletePasswordResetRequest returns an encoder for requests sent to
+// the identity complete_password_reset server.
+func EncodeCompletePasswordResetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identity.CompletePasswordResetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identity", "complete_password_reset", "*identity.CompletePasswordResetPayload", v)
+		}
+		body := NewCompletePasswordResetRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identity", "complete_password_reset", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCompletePasswordResetResponse returns a decoder for responses returned
+// by the identity complete_password_reset endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeCompletePasswordResetResponse may return the following errors:
+//   - "invalid" (type *identity.IAMProblem): http.StatusBadRequest
+//   - "forbidden" (type *identity.IAMProblem): http.StatusForbidden
+//   - "rate_limited" (type *identity.IAMProblem): http.StatusTooManyRequests
+//   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeCompletePasswordResetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_password_reset", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "complete_password_reset", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusBadRequest:
+			var (
+				body CompletePasswordResetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_password_reset", err)
+			}
+			err = ValidateCompletePasswordResetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_password_reset", err)
+			}
+			return nil, NewCompletePasswordResetInvalid(&body)
+		case http.StatusForbidden:
+			var (
+				body CompletePasswordResetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_password_reset", err)
+			}
+			err = ValidateCompletePasswordResetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_password_reset", err)
+			}
+			return nil, NewCompletePasswordResetForbidden(&body)
+		case http.StatusTooManyRequests:
+			var (
+				body CompletePasswordResetRateLimitedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_password_reset", err)
+			}
+			err = ValidateCompletePasswordResetRateLimitedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_password_reset", err)
+			}
+			return nil, NewCompletePasswordResetRateLimited(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body CompletePasswordResetUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_password_reset", err)
+			}
+			err = ValidateCompletePasswordResetUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_password_reset", err)
+			}
+			return nil, NewCompletePasswordResetUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body CompletePasswordResetInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_password_reset", err)
+			}
+			err = ValidateCompletePasswordResetInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "complete_password_reset", err)
+			}
+			return nil, NewCompletePasswordResetInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "complete_password_reset", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("identity", "complete_password_reset", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1572,6 +3104,178 @@ func DecodeLogoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildRefreshSessionRequest instantiates a HTTP request object with method
+// and path set to call the "identity" service "refresh_session" endpoint
+func (c *Client) BuildRefreshSessionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RefreshSessionIdentityPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identity", "refresh_session", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRefreshSessionRequest returns an encoder for requests sent to the
+// identity refresh_session server.
+func EncodeRefreshSessionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identity.RefreshSessionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identity", "refresh_session", "*identity.RefreshSessionPayload", v)
+		}
+		{
+			head := p.Cookie
+			req.Header.Set("Cookie", head)
+		}
+		body := NewRefreshSessionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identity", "refresh_session", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRefreshSessionResponse returns a decoder for responses returned by the
+// identity refresh_session endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeRefreshSessionResponse may return the following errors:
+//   - "invalid" (type *identity.IAMProblem): http.StatusBadRequest
+//   - "unauthenticated" (type *identity.IAMProblem): http.StatusUnauthorized
+//   - "forbidden" (type *identity.IAMProblem): http.StatusForbidden
+//   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
+//   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
+//   - error: internal error
+func DecodeRefreshSessionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "refresh_session", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("identity", "refresh_session", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RefreshSessionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "refresh_session", err)
+			}
+			err = ValidateRefreshSessionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "refresh_session", err)
+			}
+			var (
+				cookie string
+			)
+			cookieRaw := resp.Header.Get("Set-Cookie")
+			if cookieRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("cookie", "header"))
+			}
+			cookie = cookieRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "refresh_session", err)
+			}
+			res := NewRefreshSessionLoginResultOK(&body, cookie)
+			return res, nil
+		case http.StatusBadRequest:
+			var (
+				body RefreshSessionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "refresh_session", err)
+			}
+			err = ValidateRefreshSessionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "refresh_session", err)
+			}
+			return nil, NewRefreshSessionInvalid(&body)
+		case http.StatusUnauthorized:
+			var (
+				body RefreshSessionUnauthenticatedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "refresh_session", err)
+			}
+			err = ValidateRefreshSessionUnauthenticatedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "refresh_session", err)
+			}
+			return nil, NewRefreshSessionUnauthenticated(&body)
+		case http.StatusForbidden:
+			var (
+				body RefreshSessionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "refresh_session", err)
+			}
+			err = ValidateRefreshSessionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "refresh_session", err)
+			}
+			return nil, NewRefreshSessionForbidden(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RefreshSessionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "refresh_session", err)
+			}
+			err = ValidateRefreshSessionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "refresh_session", err)
+			}
+			return nil, NewRefreshSessionUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body RefreshSessionInternalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "refresh_session", err)
+			}
+			err = ValidateRefreshSessionInternalResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "refresh_session", err)
+			}
+			return nil, NewRefreshSessionInternal(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "refresh_session", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("identity", "refresh_session", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSnapshotRequest instantiates a HTTP request object with method and path
 // set to call the "identity" service "snapshot" endpoint
 func (c *Client) BuildSnapshotRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1608,6 +3312,7 @@ func EncodeSnapshotRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 // should be restored after having been read.
 // DecodeSnapshotResponse may return the following errors:
 //   - "unauthenticated" (type *identity.IAMProblem): http.StatusUnauthorized
+//   - "forbidden" (type *identity.IAMProblem): http.StatusForbidden
 //   - "unavailable" (type *identity.IAMProblem): http.StatusServiceUnavailable
 //   - "internal" (type *identity.IAMProblem): http.StatusInternalServerError
 //   - error: internal error
@@ -1661,6 +3366,20 @@ func DecodeSnapshotResponse(decoder func(*http.Response) goahttp.Decoder, restor
 				return nil, goahttp.ErrValidationError("identity", "snapshot", err)
 			}
 			return nil, NewSnapshotUnauthenticated(&body)
+		case http.StatusForbidden:
+			var (
+				body SnapshotForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identity", "snapshot", err)
+			}
+			err = ValidateSnapshotForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identity", "snapshot", err)
+			}
+			return nil, NewSnapshotForbidden(&body)
 		case http.StatusServiceUnavailable:
 			var (
 				body SnapshotUnavailableResponseBody
@@ -1699,6 +3418,57 @@ func DecodeSnapshotResponse(decoder func(*http.Response) goahttp.Decoder, restor
 	}
 }
 
+// unmarshalSessionProfileResponseBodyToIdentitySessionProfile builds a value
+// of type *identity.SessionProfile from a value of type
+// *SessionProfileResponseBody.
+func unmarshalSessionProfileResponseBodyToIdentitySessionProfile(v *SessionProfileResponseBody) *identity.SessionProfile {
+	res := &identity.SessionProfile{
+		AuthorizationVersion:   v.AuthorizationVersion,
+		PlatformOperator:       v.PlatformOperator,
+		CsrfToken:              *v.CsrfToken,
+		TenantID:               *v.TenantID,
+		IdentityBindingID:      v.IdentityBindingID,
+		ActingOrganizationID:   v.ActingOrganizationID,
+		ActingOrganizationName: v.ActingOrganizationName,
+		Portal:                 v.Portal,
+	}
+	if v.Account != nil {
+		res.Account = unmarshalSessionAccountResponseBodyToIdentitySessionAccount(v.Account)
+	}
+	res.Permissions = make([]string, len(v.Permissions))
+	for i, val := range v.Permissions {
+		res.Permissions[i] = val
+	}
+
+	return res
+}
+
+// unmarshalSessionAccountResponseBodyToIdentitySessionAccount builds a value
+// of type *identity.SessionAccount from a value of type
+// *SessionAccountResponseBody.
+func unmarshalSessionAccountResponseBodyToIdentitySessionAccount(v *SessionAccountResponseBody) *identity.SessionAccount {
+	res := &identity.SessionAccount{
+		ID:       *v.ID,
+		Username: *v.Username,
+		Status:   *v.Status,
+		IsAdmin:  *v.IsAdmin,
+	}
+
+	return res
+}
+
+// unmarshalFederationProviderResponseToIdentityFederationProvider builds a
+// value of type *identity.FederationProvider from a value of type
+// *FederationProviderResponse.
+func unmarshalFederationProviderResponseToIdentityFederationProvider(v *FederationProviderResponse) *identity.FederationProvider {
+	res := &identity.FederationProvider{
+		ID:   *v.ID,
+		Name: *v.Name,
+	}
+
+	return res
+}
+
 // unmarshalTemporaryAccessRecordResponseBodyToIdentityTemporaryAccessRecord
 // builds a value of type *identity.TemporaryAccessRecord from a value of type
 // *TemporaryAccessRecordResponseBody.
@@ -1707,8 +3477,6 @@ func unmarshalTemporaryAccessRecordResponseBodyToIdentityTemporaryAccessRecord(v
 		ID:               *v.ID,
 		ApplicantID:      *v.ApplicantID,
 		ApplicantName:    *v.ApplicantName,
-		DepartmentID:     *v.DepartmentID,
-		DepartmentName:   *v.DepartmentName,
 		RequestedMinutes: *v.RequestedMinutes,
 		Reason:           *v.Reason,
 		Status:           *v.Status,
@@ -1749,10 +3517,6 @@ func unmarshalPermissionGrantResponseBodyToIdentityPermissionGrant(v *Permission
 		Effect:     *v.Effect,
 		Scope:      *v.Scope,
 	}
-	res.DepartmentIds = make([]int64, len(v.DepartmentIds))
-	for i, val := range v.DepartmentIds {
-		res.DepartmentIds[i] = val
-	}
 
 	return res
 }
@@ -1773,20 +3537,6 @@ func unmarshalPermissionDefinitionResponseBodyToIdentityPermissionDefinition(v *
 	return res
 }
 
-// unmarshalScopeDepartmentChoiceResponseBodyToIdentityScopeDepartmentChoice
-// builds a value of type *identity.ScopeDepartmentChoice from a value of type
-// *ScopeDepartmentChoiceResponseBody.
-func unmarshalScopeDepartmentChoiceResponseBodyToIdentityScopeDepartmentChoice(v *ScopeDepartmentChoiceResponseBody) *identity.ScopeDepartmentChoice {
-	res := &identity.ScopeDepartmentChoice{
-		ID:               *v.ID,
-		Name:             *v.Name,
-		OrganizationID:   *v.OrganizationID,
-		OrganizationName: *v.OrganizationName,
-	}
-
-	return res
-}
-
 // marshalIdentityPermissionGrantToPermissionGrantRequestBody builds a value of
 // type *PermissionGrantRequestBody from a value of type
 // *identity.PermissionGrant.
@@ -1795,14 +3545,6 @@ func marshalIdentityPermissionGrantToPermissionGrantRequestBody(v *identity.Perm
 		Permission: v.Permission,
 		Effect:     v.Effect,
 		Scope:      v.Scope,
-	}
-	if v.DepartmentIds != nil {
-		res.DepartmentIds = make([]int64, len(v.DepartmentIds))
-		for i, val := range v.DepartmentIds {
-			res.DepartmentIds[i] = val
-		}
-	} else {
-		res.DepartmentIds = []int64{}
 	}
 
 	return res
@@ -1817,13 +3559,17 @@ func marshalPermissionGrantRequestBodyToIdentityPermissionGrant(v *PermissionGra
 		Effect:     v.Effect,
 		Scope:      v.Scope,
 	}
-	if v.DepartmentIds != nil {
-		res.DepartmentIds = make([]int64, len(v.DepartmentIds))
-		for i, val := range v.DepartmentIds {
-			res.DepartmentIds[i] = val
-		}
-	} else {
-		res.DepartmentIds = []int64{}
+
+	return res
+}
+
+// unmarshalSignInIdentityResponseToIdentitySignInIdentity builds a value of
+// type *identity.SignInIdentity from a value of type *SignInIdentityResponse.
+func unmarshalSignInIdentityResponseToIdentitySignInIdentity(v *SignInIdentityResponse) *identity.SignInIdentity {
+	res := &identity.SignInIdentity{
+		IdentityBindingID:      v.IdentityBindingID,
+		ActingOrganizationName: v.ActingOrganizationName,
+		IdentityType:           v.IdentityType,
 	}
 
 	return res
@@ -1888,25 +3634,6 @@ func unmarshalDepartmentMembershipResponseBodyToIdentityDepartmentMembership(v *
 			continue
 		}
 		res.Overrides[i] = unmarshalPermissionGrantResponseBodyToIdentityPermissionGrant(val)
-	}
-
-	return res
-}
-
-// unmarshalSessionProfileResponseBodyToIdentitySessionProfile builds a value
-// of type *identity.SessionProfile from a value of type
-// *SessionProfileResponseBody.
-func unmarshalSessionProfileResponseBodyToIdentitySessionProfile(v *SessionProfileResponseBody) *identity.SessionProfile {
-	res := &identity.SessionProfile{
-		AuthorizationVersion: v.AuthorizationVersion,
-		CsrfToken:            *v.CsrfToken,
-		TenantID:             *v.TenantID,
-		ActiveDepartmentID:   *v.ActiveDepartmentID,
-	}
-	res.Account = unmarshalAccountRecordResponseBodyToIdentityAccountRecord(v.Account)
-	res.Permissions = make([]string, len(v.Permissions))
-	for i, val := range v.Permissions {
-		res.Permissions[i] = val
 	}
 
 	return res

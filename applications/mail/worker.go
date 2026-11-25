@@ -12,13 +12,14 @@ import (
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
 	"horizon/internal/repository/dbgen"
+	"horizon/internal/repository/dbgen/maildb"
 )
 
-func Run(ctx context.Context, pool *pgxpool.Pool, gw *gateway.Gateway, module *Module) {
-	if pool == nil || gw == nil || module == nil {
+func Run(ctx context.Context, pool *pgxpool.Pool, gw *gateway.Gateway) {
+	if pool == nil || gw == nil {
 		return
 	}
-	runOnce(ctx, pool, gw, module)
+	runOnce(ctx, pool, gw)
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -26,13 +27,14 @@ func Run(ctx context.Context, pool *pgxpool.Pool, gw *gateway.Gateway, module *M
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			runOnce(ctx, pool, gw, module)
+			runOnce(ctx, pool, gw)
 		}
 	}
 }
 
-func runOnce(ctx context.Context, pool *pgxpool.Pool, gw *gateway.Gateway, module *Module) {
+func runOnce(ctx context.Context, pool *pgxpool.Pool, gw *gateway.Gateway) {
 	q := dbgen.New(pool)
+	receive := maildb.New(pool)
 	tenants, err := q.MailTenants(ctx)
 	if err != nil {
 		slog.Error("mail worker tenant discovery failed", "code", "unavailable")
@@ -50,13 +52,17 @@ func runOnce(ctx context.Context, pool *pgxpool.Pool, gw *gateway.Gateway, modul
 			continue
 		}
 		workerCtx := identity.WithPrincipal(ctx, principal)
-		channels, err := q.MailReceiveDueIDs(workerCtx, tenant)
+		channels, err := receive.ReceiveDueIDs(workerCtx, tenant)
 		if err != nil {
 			slog.Error("mail receive discovery failed", "code", "unavailable")
 			continue
 		}
-		for _, channelID := range channels {
-			invokeMail(workerCtx, gw, module, "mail.inbox.sync", "mail-sync:"+tenant, contracts.Input{"channelId": channelID})
+		for _, channel := range channels {
+			capability := "mail.inbox.sync"
+			if channel.Protocol == "imap" {
+				capability = "mail.inbox.imap.sync"
+			}
+			invokeMail(workerCtx, gw, capability, "mail-sync:"+tenant, contracts.Input{"channelId": channel.ID})
 		}
 		deliveries, err := q.MailOutboundDueIDs(ctx, dbgen.MailOutboundDueIDsParams{TenantID: tenant, Limit: 20})
 		if err != nil {
@@ -64,12 +70,12 @@ func runOnce(ctx context.Context, pool *pgxpool.Pool, gw *gateway.Gateway, modul
 			continue
 		}
 		for _, deliveryID := range deliveries {
-			invokeMail(workerCtx, gw, module, "mail.outbound.process", "mail-outbound:"+tenant, contracts.Input{"id": deliveryID})
+			invokeMail(workerCtx, gw, "mail.outbound.process", "mail-outbound:"+tenant, contracts.Input{"id": deliveryID})
 		}
 	}
 }
 
-func invokeMail(ctx context.Context, gw *gateway.Gateway, module *Module, name, prefix string, input contracts.Input) {
+func invokeMail(ctx context.Context, gw *gateway.Gateway, name, prefix string, input contracts.Input) {
 	key, err := governance.Token()
 	if err != nil {
 		return
@@ -78,16 +84,11 @@ func invokeMail(ctx context.Context, gw *gateway.Gateway, module *Module, name, 
 		Name: name, Version: version, Input: input, IdempotencyKey: prefix + ":" + key,
 		Origin: contracts.OriginEvent,
 	})
-	if result != nil && result.InvocationID != "" {
-		if finishErr := module.FinishSyncSession(result.InvocationID, err == nil && result.Status == contracts.StatusSucceeded); finishErr != nil {
-			slog.Error("mail remote session finalize failed", "capability", name, "code", "unavailable")
-		}
-	}
 	if err != nil {
 		slog.Error("mail invocation failed", "capability", name, "code", contracts.Code(err))
 		return
 	}
 	if result.Status != contracts.StatusSucceeded {
-		slog.Error("mail execution failed", "capability", name, "code", result.ErrorCode)
+		slog.Error("mail execution failed", "capability", name, "status", result.Status, "code", result.ErrorCode)
 	}
 }

@@ -45,10 +45,10 @@ vi.mock("@/api/client/ai-stream", () => ({
   streamAIRun: (...args: unknown[]) => api.stream(...args),
 }));
 
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant-a",
-    activeDepartmentId: api.activeDepartment,
+    identityBindingId: String(api.activeDepartment),
     permissions: api.permissions,
     account: { id: 4, fullName: "Ada", memberships: [] },
   }),
@@ -247,9 +247,7 @@ it("explains a disabled agent instead of failing on send", async () => {
     },
   });
   show();
-  expect(
-    await screen.findByText(/not enabled for this workspace/i),
-  ).toBeTruthy();
+  expect(await screen.findByText(/agent is currently disabled/i)).toBeTruthy();
   expect(
     screen.getByRole("link", { name: "Open AI Configuration" }),
   ).toHaveAttribute("href", "/ai-settings?tab=general");

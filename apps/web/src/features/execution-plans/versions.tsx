@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, Eye, Check, Upload, RotateCcw, ArrowRight } from "lucide-react";
-import { DataTable, RowActions } from "@/features/administration/shared";
+import { DataTable, RowActions } from "@/features/identity/shared";
 import { Button } from "@/components/ui/button";
 import { planKey, type Source, type PlanRow, type Binding } from "./state";
 

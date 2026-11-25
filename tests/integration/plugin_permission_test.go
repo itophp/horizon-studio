@@ -60,7 +60,7 @@ func TestPluginPermissionGatewayTenantAndDeny(t *testing.T) {
 	}
 	core := governance.New(h.pool, iam, governance.Options{EncryptionKey: []byte("01234567890123456789012345678901"), StorageRoot: t.TempDir(), PublicWorkspace: "tenant-a"})
 	handler, _ := transport.HandlerWithRegistration(app.System{}, core, deployment.WithPlugins(core, manager), iam)
-	administrator := loginIAM(t, handler, "root-admin")
+	administrator := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	snapshotResponse := administrator.request(t, "GET", "/api/admin/snapshot", nil, false)
 	checkStatus(t, snapshotResponse, 200)
 	snapshot := decodeBody[genidentity.AdminSnapshot](t, snapshotResponse)
@@ -124,7 +124,7 @@ func TestPluginPermissionGatewayTenantAndDeny(t *testing.T) {
 	if _, err = h.pool.Exec(context.Background(), `UPDATE iam_accounts SET overrides=$1 WHERE tenant_id=$2 AND id=$3`, saved, "tenant-a", actor.id); err != nil {
 		t.Fatal(err)
 	}
-	rebuilt, err := iam.PrincipalForTask(context.Background(), "tenant-a", actor.id, account.DepartmentID)
+	rebuilt, err := iam.PrincipalForTask(context.Background(), "tenant-a", actor.id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestPluginPermissionGatewayTenantAndDeny(t *testing.T) {
 	if _, err = h.pool.Exec(context.Background(), `UPDATE iam_accounts SET overrides='[]' WHERE tenant_id=$1 AND id=$2`, "tenant-a", actor.id); err != nil {
 		t.Fatal(err)
 	}
-	rebuilt, err = iam.PrincipalForTask(context.Background(), "tenant-a", actor.id, account.DepartmentID)
+	rebuilt, err = iam.PrincipalForTask(context.Background(), "tenant-a", actor.id)
 	if err != nil {
 		t.Fatal(err)
 	}

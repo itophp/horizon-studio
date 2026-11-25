@@ -43,7 +43,7 @@ func TestExecutionPlanInspectionAndTraceIsolation(t *testing.T) {
 	if err := engine.Attach(g, catalog); err != nil {
 		t.Fatal(err)
 	}
-	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

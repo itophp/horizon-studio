@@ -1,8 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import { runtimeApplication } from "@/lib/capabilities";
-import { ErrorBanner, Loading } from "@/features/administration/shared";
+import { ErrorBanner, Loading } from "@/features/identity/shared";
 import { ApiError } from "@/api/client/request";
 import {
   validateDefinition,
@@ -24,7 +24,8 @@ export function ApplicationPage({
   const authority = JSON.stringify([
     session.tenantId,
     session.account.id,
-    session.activeDepartmentId,
+    session.identityBindingId,
+    session.identityBindingId,
     session.authorizationVersion,
     [...session.permissions].sort(),
   ]);

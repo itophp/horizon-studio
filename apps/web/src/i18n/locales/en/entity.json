@@ -1,4 +1,33 @@
 {
+  "audit_export_permit": {
+    "label": "Audit export approval"
+  },
+  "authorization_resource_state": {
+    "label": "Authorization resource availability"
+  },
+  "login_merge_review": { "label": "Login merge review" },
+  "external_identity": { "label": "External identity" },
+  "account_role": { "label": "Primary department role" },
+  "department_role": { "label": "Additional department role" },
+  "external_identity_review": { "label": "External identity transfer" },
+  "login_association": { "label": "Associated sign-in account" },
+  "external_identity_proof": { "label": "External identity proof" },
+  "federation_flow": { "label": "External sign-in flow" },
+  "federation_assertion_use": { "label": "Consumed federation assertion" },
+  "security_principal": { "label": "Security principal" },
+  "login_account": { "label": "Login account" },
+  "password_credential": { "label": "Password credential" },
+  "machine_credential": { "label": "Machine credential" },
+  "agent_delegation": { "label": "Agent delegation" },
+  "tenant": { "label": "Tenant" },
+  "tenant_membership": { "label": "Tenant membership" },
+  "iam_access_review": { "label": "Access review" },
+  "verified_login_contact": { "label": "Verified recovery contact" },
+  "iam_contact_challenge": { "label": "Contact challenge" },
+  "pending_registration": { "label": "Pending registration" },
+  "login_session": { "label": "Login session" },
+  "membership_invitation": { "label": "Membership invitation" },
+  "identity_binding": { "label": "Identity binding" },
   "ai_configuration": {
     "label": "AI configuration"
   },
@@ -64,6 +93,9 @@
   "account": {
     "label": "Account"
   },
+  "context_role_grant": { "label": "Context role assignment" },
+  "totp_credential": { "label": "Authenticator credential" },
+  "mfa_recovery_code": { "label": "Recovery code" },
   "session": {
     "label": "Session"
   },
@@ -108,6 +140,21 @@
   },
   "project_task_brief": {
     "label": "Task brief"
+  },
+  "security_audit_event": {
+    "label": "Security audit event"
+  },
+  "security_audit_checkpoint": {
+    "label": "Signed audit checkpoint"
+  },
+  "authorization_policy_version": {
+    "label": "Authorization policy version"
+  },
+  "authorization_policy_head": {
+    "label": "Active authorization policy"
+  },
+  "example_order": {
+    "label": "Supplier order"
   },
   "example_record": {
     "label": "Example record",

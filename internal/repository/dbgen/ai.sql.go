@@ -43,14 +43,14 @@ func (q *Queries) AIClaimPageTool(ctx context.Context, arg AIClaimPageToolParams
 
 const aICreateRun = `-- name: AICreateRun :one
 WITH run AS (
-INSERT INTO ai_runs (tenant_id, account_id, department_id, session_id, agent, model, instruction_version, question, trace_id, context, origin, correlation_id, causation_id, trigger_depth, trigger_policy, event_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+INSERT INTO ai_runs (tenant_id, account_id, department_id, session_id, agent, model, instruction_version, question, trace_id, context, origin, correlation_id, causation_id, trigger_depth, trigger_policy, event_id, identity_binding_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NULLIF($17::text, '')::uuid)
 RETURNING id, created_at, tenant_id, account_id, session_id
 ), conversation AS (
     INSERT INTO ai_conversations (tenant_id, account_id, session_id, title)
-    SELECT tenant_id, account_id, session_id, left($17::text, 200)
+    SELECT tenant_id, account_id, session_id, left($18::text, 200)
     FROM run
-    WHERE session_id <> '' AND $17::text <> ''
+    WHERE session_id <> '' AND $18::text <> ''
     ON CONFLICT (tenant_id, account_id, session_id) DO NOTHING
 )
 SELECT id, created_at FROM run
@@ -73,6 +73,7 @@ type AICreateRunParams struct {
 	TriggerDepth       int32
 	TriggerPolicy      string
 	EventID            string
+	IdentityBindingID  string
 	ConversationTitle  string
 }
 
@@ -99,6 +100,7 @@ func (q *Queries) AICreateRun(ctx context.Context, arg AICreateRunParams) (AICre
 		arg.TriggerDepth,
 		arg.TriggerPolicy,
 		arg.EventID,
+		arg.IdentityBindingID,
 		arg.ConversationTitle,
 	)
 	var i AICreateRunRow
@@ -163,7 +165,7 @@ SET status = $3, answer = $4, error_code = $5,
     tool_calls = $6, prompt_tokens = $7,
     completion_tokens = $8, duration_ms = $9,
     finished_at = now()
-WHERE tenant_id = $1 AND id = $2
+WHERE tenant_id = $1 AND id = $2 AND status IN ('running', 'awaiting_approval')
 `
 
 type AIFinishRunParams struct {
@@ -244,7 +246,7 @@ const aIGetRun = `-- name: AIGetRun :one
 SELECT id, account_id, department_id, session_id, agent, model, instruction_version, question,
        answer, status, error_code, tool_calls, prompt_tokens, completion_tokens, duration_ms,
        trace_id, context, origin, correlation_id, causation_id, trigger_depth, trigger_policy, event_id,
-       created_at, finished_at
+       created_at, finished_at, COALESCE(identity_binding_id::text, '')::text AS identity_binding_id
 FROM ai_runs
 WHERE tenant_id = $1 AND account_id = $2 AND id = $3
 `
@@ -281,6 +283,7 @@ type AIGetRunRow struct {
 	EventID            string
 	CreatedAt          pgtype.Timestamptz
 	FinishedAt         pgtype.Timestamptz
+	IdentityBindingID  string
 }
 
 func (q *Queries) AIGetRun(ctx context.Context, arg AIGetRunParams) (AIGetRunRow, error) {
@@ -312,6 +315,7 @@ func (q *Queries) AIGetRun(ctx context.Context, arg AIGetRunParams) (AIGetRunRow
 		&i.EventID,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.IdentityBindingID,
 	)
 	return i, err
 }
@@ -617,7 +621,7 @@ func (q *Queries) AISetConversationArchived(ctx context.Context, arg AISetConver
 }
 
 const aISetRunStatus = `-- name: AISetRunStatus :exec
-UPDATE ai_runs SET status = $3 WHERE tenant_id = $1 AND id = $2
+UPDATE ai_runs SET status = $3 WHERE tenant_id = $1 AND id = $2 AND status IN ('running', 'awaiting_approval')
 `
 
 type AISetRunStatusParams struct {

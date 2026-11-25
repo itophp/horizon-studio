@@ -9,8 +9,8 @@ import type {
   CapabilityResult,
 } from "@/api/generated/models";
 import {
-  CapabilityRuntimeFixture,
-  capabilityDefinition,
+  ExampleRuntimeFixture,
+  exampleDefinition,
 } from "./runtime-fixture.test-helper";
 
 const api = vi.hoisted(() => ({
@@ -26,7 +26,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/capabilities", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/capabilities")>()),
-  runtimeApplication: async () => capabilityDefinition,
+  runtimeApplication: async () => exampleDefinition,
   runtimeRead: api.read,
   runtimeExecute: (
     name: string,
@@ -44,10 +44,10 @@ vi.mock("@/api/generated/baseline", async (importOriginal) => ({
   capabilityInvocations: api.invocations,
   capabilityDecide: api.decide,
 }));
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant-a",
-    activeDepartmentId: api.department,
+    identityBindingId: String(api.department),
     account: { id: 4 },
     permissions: api.permissions,
   }),
@@ -91,7 +91,7 @@ function show() {
   const view = () => (
     <I18nextProvider i18n={i18n}>
       <QueryClientProvider client={client}>
-        <CapabilityRuntimeFixture />
+        <ExampleRuntimeFixture />
       </QueryClientProvider>
     </I18nextProvider>
   );
@@ -236,7 +236,7 @@ it("keeps the basic flow available without a model, and enables the full flow on
   );
 });
 it("does not offer execution without the required permissions", async () => {
-  api.permissions = ["orchestration:read"];
+  api.permissions = ["orchestration:read", "example:read"];
   show();
   await screen.findByText(/permissions are required/);
   expect(

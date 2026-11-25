@@ -7,9 +7,8 @@ var IAMProblem = Type("IAMProblem", func() { Attribute("code", String, func() { 
 var Grant = Type("PermissionGrant", func() {
 	Attribute("permission", String, func() { MinLength(1); MaxLength(80) })
 	Attribute("effect", String, func() { Enum("allow", "deny") })
-	Attribute("scope", String, func() { Enum("ALL", "ORGANIZATION", "DEPARTMENT", "DEPARTMENT_TREE", "OWN", "CUSTOM") })
-	Attribute("departmentIds", ArrayOf(Int64), func() { MaxLength(200) })
-	Required("permission", "effect", "scope", "departmentIds")
+	Attribute("scope", String, func() { Enum("ALL", "OWN") })
+	Required("permission", "effect", "scope")
 })
 var Org = Type("OrganizationRecord", func() {
 	Attribute("id", Int64)
@@ -53,11 +52,6 @@ var DepartmentMembership = Type("DepartmentMembership", func() {
 	Attribute("overrides", ArrayOf(Grant), func() { MaxLength(100) })
 	Required("organizationId", "departmentId", "roleIds", "overrides")
 })
-var DepartmentAccess = Type("DepartmentAccess", func() {
-	Description("Explicitly replace additional memberships; the primary department remains in account fields. Omission preserves existing additional memberships.")
-	Attribute("memberships", ArrayOf(DepartmentMembership), func() { MaxLength(49) })
-	Required("memberships")
-})
 var Account = Type("AccountRecord", func() {
 	Attribute("id", Int64)
 	Attribute("username", String)
@@ -74,14 +68,30 @@ var Account = Type("AccountRecord", func() {
 	Attribute("lastLogin", String)
 	Required("id", "username", "fullName", "email", "status", "organizationId", "departmentId", "roleIds", "overrides", "isAdmin", "createdAt", "lastLogin", "memberships")
 })
+var SessionAccount = Type("SessionAccount", func() {
+	Attribute("id", Int64)
+	Attribute("username", String)
+	Attribute("status", String)
+	Attribute("isAdmin", Boolean)
+	Required("id", "username", "status", "isAdmin")
+})
 var SessionProfile = Type("SessionProfile", func() {
 	Attribute("authorizationVersion", String, "Opaque non-secret authorization cache revision.", func() { Pattern("^[a-f0-9]{64}$") })
-	Attribute("account", Account)
+	Attribute("platformOperator", Boolean, "Platform operator management is available in this session.")
+	Attribute("account", SessionAccount, "Tenant account when a work context is active.")
 	Attribute("csrfToken", String)
 	Attribute("permissions", ArrayOf(String))
 	Attribute("tenantId", String)
-	Attribute("activeDepartmentId", Int64)
-	Required("account", "csrfToken", "permissions", "tenantId", "activeDepartmentId")
+	Attribute("identityBindingId", String, func() { Format(FormatUUID) })
+	Attribute("actingOrganizationId", Int64, "Organization verified for the active portal binding.", func() { Minimum(1) })
+	Attribute("actingOrganizationName", String, "Display name of the verified organization.")
+	Attribute("portal", String, "Application portal verified for the active binding.")
+	Required("csrfToken", "permissions", "tenantId")
+})
+var SignInIdentity = Type("SignInIdentity", func() {
+	Attribute("identityBindingId", String, func() { Format(FormatUUID) })
+	Attribute("actingOrganizationName", String)
+	Attribute("identityType", String)
 })
 var LoginResult = Type("LoginResult", func() {
 	Attribute("profile", SessionProfile)
@@ -127,35 +137,52 @@ func roleFields() {
 	Attribute("grants", ArrayOf(Grant), func() { MaxLength(100) })
 	Required("name", "code", "description", "status", "grants")
 }
-func accountFields() {
-	Attribute("departmentAccess", DepartmentAccess)
-	Attribute("username", String, func() { Pattern("^[A-Za-z0-9_.@-]{3,80}$") })
-	Attribute("fullName", String, func() { MinLength(1); MaxLength(100) })
-	Attribute("email", String, func() { MaxLength(160) })
-	Attribute("status", String, func() { Enum("active", "inactive") })
-	Attribute("organizationId", Int64, func() { Minimum(1) })
-	Attribute("departmentId", Int64, func() { Minimum(1) })
-	Attribute("roleIds", ArrayOf(Int64), func() { MaxLength(50) })
-	Attribute("overrides", ArrayOf(Grant), func() { MaxLength(100) })
-	Attribute("password", String, func() { MaxLength(128) })
-	Required("username", "fullName", "email", "status", "organizationId", "departmentId", "roleIds", "overrides", "password")
-}
 
 var _ = Service("identity", func() {
+	federationMethods()
 	temporaryMethods()
-	Method("switch_department", func() {
+	Method("list_sign_in_identities", func() {
+		Payload(cookiePayload)
+		Result(ArrayOf(SignInIdentity))
+		Error("unauthenticated", IAMProblem)
+		HTTP(func() {
+			Header("cookie:Cookie")
+			GET("/api/auth/identities")
+			Response(StatusOK)
+			Response("unauthenticated", StatusUnauthorized)
+		})
+	})
+	Method("select_sign_in_identity", func() {
 		Payload(func() {
 			cookiePayload()
-			Attribute("departmentId", Int64, func() { Minimum(1) })
-			Required("departmentId")
+			Attribute("identityBindingId", String, func() { Format(FormatUUID) })
+			Attribute("actingOrganizationId", Int64, func() { Minimum(1) })
+			Attribute("portal", String, func() { MinLength(1); MaxLength(100) })
 		})
 		Result(SessionProfile)
 		Error("unauthenticated", IAMProblem)
 		Error("forbidden", IAMProblem)
 		HTTP(func() {
 			Header("cookie:Cookie")
-			POST("/api/auth/department")
+			POST("/api/auth/identity")
 			Response(StatusOK)
+			Response("unauthenticated", StatusUnauthorized)
+			Response("forbidden", StatusForbidden)
+		})
+	})
+	Method("redeem_sign_in_invitation", func() {
+		Description("Redeem an invitation for the configured tenant from a verified login session.")
+		Payload(func() {
+			cookiePayload()
+			Attribute("code", String, func() { Pattern("^[a-f0-9]{64}$") })
+			Required("code")
+		})
+		Error("unauthenticated", IAMProblem)
+		Error("forbidden", IAMProblem)
+		HTTP(func() {
+			Header("cookie:Cookie")
+			POST("/api/auth/invitation")
+			Response(StatusNoContent)
 			Response("unauthenticated", StatusUnauthorized)
 			Response("forbidden", StatusForbidden)
 		})
@@ -176,6 +203,8 @@ var _ = Service("identity", func() {
 		Payload(func() {
 			Attribute("username", String, func() { MinLength(3); MaxLength(80) })
 			Attribute("password", String, func() { MinLength(1); MaxLength(128) })
+			Attribute("mfaCode", String, func() { MinLength(6); MaxLength(6) })
+			Attribute("recoveryCode", String, func() { MinLength(32); MaxLength(32) })
 			Required("username", "password")
 		})
 		Result(LoginResult)
@@ -185,6 +214,76 @@ var _ = Service("identity", func() {
 			Response(StatusOK, func() { Header("cookie:Set-Cookie") })
 			Response("unauthenticated", StatusUnauthorized)
 			Response("invalid", StatusBadRequest)
+		})
+	})
+	Method("request_registration", func() {
+		NoSecurity()
+		Payload(func() {
+			Attribute("username", String, func() { Pattern("^[a-zA-Z0-9_.@-]{3,80}$") })
+			Attribute("displayName", String, func() { MinLength(1); MaxLength(100) })
+			Attribute("password", String, func() { MinLength(12); MaxLength(128) })
+			Attribute("destination", String, func() { MinLength(3); MaxLength(254) })
+			Required("username", "displayName", "password", "destination")
+		})
+		Error("invalid", IAMProblem)
+		Error("rate_limited", IAMProblem)
+		HTTP(func() {
+			POST("/api/auth/registration/request")
+			Response(StatusNoContent)
+			Response("invalid", StatusBadRequest)
+			Response("rate_limited", StatusTooManyRequests)
+		})
+	})
+	Method("complete_registration", func() {
+		NoSecurity()
+		Payload(func() {
+			Attribute("token", String, func() { Pattern("^[a-f0-9]{64}$") })
+			Attribute("password", String, func() { MinLength(12); MaxLength(128) })
+			Required("token", "password")
+		})
+		Error("forbidden", IAMProblem)
+		Error("rate_limited", IAMProblem)
+		HTTP(func() {
+			POST("/api/auth/registration/complete")
+			Response(StatusNoContent)
+			Response("forbidden", StatusForbidden)
+			Response("rate_limited", StatusTooManyRequests)
+		})
+	})
+	Method("request_password_reset", func() {
+		NoSecurity()
+		Description("Queue a reset message for a verified contact, returning the same result for every account.")
+		Payload(func() {
+			Attribute("username", String, func() { MinLength(3); MaxLength(80) })
+			Attribute("channel", String, func() { Enum("email", "sms") })
+			Required("username", "channel")
+		})
+		Error("rate_limited", IAMProblem)
+		HTTP(func() {
+			POST("/api/auth/password-reset/request")
+			Response(StatusNoContent)
+			Response("rate_limited", StatusTooManyRequests)
+		})
+	})
+	Method("complete_password_reset", func() {
+		NoSecurity()
+		Description("Change a password with a one-use verified contact challenge and the account's active second factor.")
+		Payload(func() {
+			Attribute("token", String, func() { Pattern("^[a-f0-9]{64}$") })
+			Attribute("newPassword", String, func() { MinLength(12); MaxLength(128) })
+			Attribute("mfaCode", String, func() { MinLength(6); MaxLength(6) })
+			Attribute("recoveryCode", String, func() { MinLength(32); MaxLength(32) })
+			Required("token", "newPassword")
+		})
+		Error("invalid", IAMProblem)
+		Error("forbidden", IAMProblem)
+		Error("rate_limited", IAMProblem)
+		HTTP(func() {
+			POST("/api/auth/password-reset/complete")
+			Response(StatusNoContent)
+			Response("invalid", StatusBadRequest)
+			Response("forbidden", StatusForbidden)
+			Response("rate_limited", StatusTooManyRequests)
 		})
 	})
 	Method("me", func() {
@@ -209,8 +308,30 @@ var _ = Service("identity", func() {
 			Response("unauthenticated", StatusUnauthorized)
 		})
 	})
+	Method("refresh_session", func() {
+		Description("Reauthenticate and rotate the current browser session.")
+		Payload(func() {
+			cookiePayload()
+			Attribute("password", String, func() { MinLength(1); MaxLength(128) })
+			Attribute("factor", String, func() { MinLength(6); MaxLength(32) })
+			Required("password")
+		})
+		Result(LoginResult)
+		Error("invalid", IAMProblem)
+		Error("unauthenticated", IAMProblem)
+		Error("forbidden", IAMProblem)
+		HTTP(func() {
+			Header("cookie:Cookie")
+			POST("/api/auth/session/refresh")
+			Response(StatusOK, func() { Header("cookie:Set-Cookie") })
+			Response("invalid", StatusBadRequest)
+			Response("unauthenticated", StatusUnauthorized)
+			Response("forbidden", StatusForbidden)
+		})
+	})
 	Method("snapshot", func() {
 		Error("unauthenticated", IAMProblem)
+		Error("forbidden", IAMProblem)
 		Payload(cookiePayload)
 		Result(Snapshot)
 		HTTP(func() {
@@ -218,6 +339,7 @@ var _ = Service("identity", func() {
 			GET("/api/admin/snapshot")
 			Response(StatusOK)
 			Response("unauthenticated", StatusUnauthorized)
+			Response("forbidden", StatusForbidden)
 		})
 	})
 

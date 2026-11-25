@@ -325,7 +325,7 @@ func ExampleRuntimeApplication() ar.ApplicationV2 {
 		},
 	}
 	return ar.ApplicationV2{
-		Protocol: protocol, SchemaVersion: "3.0", ID: protocol.ID, Version: version, PluginVersion: version,
+		Protocol: protocol, SchemaVersion: "3.0", ID: protocol.ID, Version: version,
 		Source: "com.horizon.example", RuntimeCompatibility: "3.0", LabelKey: protocol.LabelKey, Permission: permission, Route: protocol.Route,
 		// The assistant discovers example tools through the trusted
 		// contribution profile, never through kernel defaults.

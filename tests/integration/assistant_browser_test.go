@@ -72,7 +72,7 @@ func TestEmbeddedWorkspaceAgentUsesBrowserToolAndResumesSameTask(t *testing.T) {
 		}
 	}))
 	defer upstream.Close()
-	owner := loginIAM(t, handler, "root-admin")
+	owner := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	saveAIConfig(t, owner, 0, map[string]any{
 		"assistant.enabled": true, "agent.enabled": true,
 		"aiModels.deepseek.baseUrl": upstream.URL + "/v1",

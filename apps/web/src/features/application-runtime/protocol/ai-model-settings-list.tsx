@@ -11,7 +11,7 @@ import {
   errorText,
   RowActions,
   type AdminColumn,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import { ModelEditor } from "./ai-model-editor";
 import {
   Choice,

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,16 +41,18 @@ const (
 // Request is one invocation request. Security fields are not part of it: the
 // principal comes from the trusted context, the origin from the adapter.
 type Request struct {
-	executionBinding contracts.ExecutionBinding
-	Runtime          *contracts.RuntimeReference
-	Name             string
-	Version          string
-	Input            contracts.Input
-	IdempotencyKey   string
-	Origin           contracts.Origin
-	CorrelationID    string
-	CausationID      string
-	TriggerDepth     int
+	executionBinding    contracts.ExecutionBinding
+	authorizationOrigin contracts.Origin
+	authorization       *identity.AuthorizationDecision
+	Runtime             *contracts.RuntimeReference
+	Name                string
+	Version             string
+	Input               contracts.Input
+	IdempotencyKey      string
+	Origin              contracts.Origin
+	CorrelationID       string
+	CausationID         string
+	TriggerDepth        int
 }
 
 // Options wires the gateway.
@@ -112,24 +115,23 @@ func (g *Gateway) invoke(ctx context.Context, request Request, selection *contra
 		return nil, contracts.Problem("unauthenticated")
 	}
 	if g.identity != nil && p.Account.ID > 0 {
-		refreshed, e := g.identity.PrincipalForTask(ctx, p.TenantID, p.Account.ID, p.Account.DepartmentID)
-		if e != nil {
-			return nil, contracts.Problem("forbidden")
-		}
-		if p.TokenHash != "" {
-			session, se := dbgen.New(g.pool).IAMSession(ctx, p.TokenHash)
-			if se != nil || session.ActiveDepartmentID != p.Account.DepartmentID {
-				return nil, contracts.Problem("unauthenticated")
+		var refreshed *identity.Principal
+		if p.MachineCredentialID() != "" {
+			refreshed, err = g.identity.RefreshMachine(ctx, p, false)
+			if err != nil {
+				return nil, err
+			}
+		} else if p.TokenHash != "" {
+			refreshed, err = g.identity.PrincipalForSessionInvocation(ctx, p, request.Origin == contracts.OriginHumanUI)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			refreshed, err = g.identity.RefreshTaskPrincipal(ctx, p)
+			if err != nil {
+				return nil, contracts.Problem("forbidden")
 			}
 		}
-		if p.TokenHash != "" && request.Origin == contracts.OriginHumanUI {
-			refreshed, e = g.identity.PrincipalForSessionInvocation(ctx, p.TenantID, p.Account.ID, p.Account.DepartmentID, p.TokenHash)
-			if e != nil {
-				return nil, e
-			}
-		}
-		refreshed.CSRF = p.CSRF
-		refreshed.TokenHash = p.TokenHash
 		p = refreshed
 		ctx = identity.WithPrincipal(ctx, p)
 	}
@@ -144,6 +146,39 @@ func (g *Gateway) invoke(ctx context.Context, request Request, selection *contra
 		request.IdempotencyKey = ""
 	}
 	definition := entry.Definition
+	if request.Origin == contracts.OriginAutomation {
+		if p.MachineCredentialID() == "" || !serviceAutomationTarget(entry) {
+			g.observeDenied(ctx, p, request, definition.Name, "service_automation_scope")
+			return nil, contracts.Problem("forbidden")
+		}
+		direct := contracts.DefaultExecutionBinding(definition)
+		selection = &direct
+	}
+	if (p.IsDedicatedWorker() || slices.Contains(definition.Tags, "durable-system")) &&
+		(request.Origin != contracts.OriginEvent || !p.AllowsSystemCapability(definition.Key())) {
+		return nil, contracts.Problem("forbidden")
+	}
+	task, insideWorkflow := CurrentTaskReference(ctx)
+	if credential := p.MachineCredentialID(); credential != "" {
+		if g.identity == nil || hasParent || request.Version == "" || request.Runtime != nil ||
+			!p.MachineAllows(definition, request.Input, request.Origin) || !MachineDirectEntry(entry) {
+			g.observeDenied(ctx, p, request, definition.Name, "machine_scope")
+			return nil, contracts.Problem("forbidden")
+		}
+		prefix := "machine:"
+		if insideWorkflow || request.Origin == contracts.OriginWorkflow {
+			if !insideWorkflow || (request.Origin != contracts.OriginWorkflow && request.Origin != contracts.OriginAgent) ||
+				!g.activeMachineRun(ctx, dbgen.New(g.pool), p, task, request.CausationID) {
+				return nil, contracts.Problem("forbidden")
+			}
+			prefix = "orch:" + strconv.FormatInt(task.RunID, 10) + ":machine:"
+		} else if request.Origin == contracts.OriginAgent && p.AgentDelegationID() == "" {
+			return nil, contracts.Problem("forbidden")
+		}
+		if request.IdempotencyKey != "" {
+			request.IdempotencyKey = prefix + contracts.Digest(contracts.Input{"credential": credential, "delegation": p.AgentDelegationID(), "key": request.IdempotencyKey})
+		}
+	}
 	if slices.Contains(definition.Tags, "system-only") && (p.Account.ID != 0 || request.Origin != contracts.OriginEvent) {
 		return nil, contracts.Problem("forbidden")
 	}
@@ -155,23 +190,23 @@ func (g *Gateway) invoke(ctx context.Context, request Request, selection *contra
 	}
 	for _, tag := range definition.Tags {
 		if strings.HasPrefix(tag, "parent:") && (!hasParent || request.Origin != contracts.OriginCapability || parent.Capability+"@"+parent.Version != strings.TrimPrefix(tag, "parent:")) {
-			g.observeDenied(p, request, definition.Name, "origin")
+			g.observeDenied(ctx, p, request, definition.Name, "origin")
 			return nil, contracts.Problem("forbidden")
 		}
 	}
 	if slices.Contains(definition.Tags, "manual-only") && request.Origin != contracts.OriginHumanUI && request.Origin != contracts.OriginAPI && request.Origin != contracts.OriginApproval {
-		g.observeDenied(p, request, definition.Name, "origin")
+		g.observeDenied(ctx, p, request, definition.Name, "origin")
 		return nil, contracts.Problem("forbidden")
 	}
 	caller := callerOf(p)
 	if (definition.Permission != "" && !p.Can(definition.Permission)) || !caller.Allowed(definition.Permission) {
-		g.observeDenied(p, request, definition.Name, "permission")
+		g.observeDenied(ctx, p, request, definition.Name, "permission")
 		return nil, contracts.Problem("forbidden")
 	}
 	if err = definition.Input.Validate(request.Input); err != nil {
 		return nil, contracts.Problem("invalid")
 	}
-	if err = g.checkEntry(ctx, dbgen.New(g.pool), p, entry, request.Input, false); err != nil {
+	if err = g.checkEntry(ctx, dbgen.New(g.pool), p, entry, request, false); err != nil {
 		return nil, err
 	}
 	if definition.Idempotency.Required && strings.TrimSpace(request.IdempotencyKey) == "" {
@@ -195,7 +230,7 @@ func (g *Gateway) invoke(ctx context.Context, request Request, selection *contra
 	}
 	decision := policy.Admit(definition, caller, request.Origin)
 	if !decision.Allowed {
-		g.observeDenied(p, request, definition.Name, "policy")
+		g.observeDenied(ctx, p, request, definition.Name, "policy")
 		return nil, contracts.Problem(decision.Code)
 	}
 	if definition.TransientResult && !definition.ReadOnly && decision.Approval != contracts.ApprovalAuto {
@@ -207,6 +242,9 @@ func (g *Gateway) invoke(ctx context.Context, request Request, selection *contra
 		if existing, e := dbgen.New(g.pool).CapPendingApprovalFor(ctx, dbgen.CapPendingApprovalForParams{
 			TenantID: p.TenantID, Capability: definition.Name,
 			AccountID: p.Account.ID, ArgumentsDigest: digest, ActionKey: approvalActionKey(request),
+			IdentityBindingID:   p.IdentityBindingID,
+			MachineCredentialID: p.MachineCredentialID(),
+			AgentDelegationID:   p.AgentDelegationID(),
 		}); e == nil {
 			return &contracts.Result{
 				InvocationID: existing.InvocationID, Status: contracts.StatusAwaitingApproval,
@@ -221,6 +259,13 @@ func (g *Gateway) invoke(ctx context.Context, request Request, selection *contra
 	}
 	if err != nil {
 		return nil, err
+	}
+	if len(definition.RowFilterAttributes) > 0 && request.executionBinding.Plan.Mode != "direct" {
+		return nil, contracts.Problem("forbidden")
+	}
+	if p.MachineCredentialID() != "" && request.executionBinding.Plan.Mode != "direct" &&
+		(request.executionBinding.Plan.Mode != "workflow" || insideWorkflow) {
+		return nil, contracts.Problem("forbidden")
 	}
 	traceID := strings.TrimSpace(request.CorrelationID)
 	if traceID == "" {
@@ -256,7 +301,7 @@ func (g *Gateway) validateRequest(request *Request) error {
 		return contracts.Problem("invalid")
 	}
 	switch request.Origin {
-	case contracts.OriginCapability, contracts.OriginHumanUI, contracts.OriginAgent, contracts.OriginWorkflow, contracts.OriginAPI, contracts.OriginEvent, contracts.OriginApproval:
+	case contracts.OriginCapability, contracts.OriginHumanUI, contracts.OriginAgent, contracts.OriginWorkflow, contracts.OriginAPI, contracts.OriginEvent, contracts.OriginApproval, contracts.OriginAutomation:
 	default:
 		return contracts.Problem("invalid")
 	}
@@ -278,8 +323,12 @@ func (g *Gateway) replay(ctx context.Context, p *identity.Principal, definition 
 	if err != nil {
 		return nil, false, err
 	}
-	if row.AccountID != p.Account.ID || row.InputDigest != digest || row.CapabilityVersion != definition.Version {
+	if row.AccountID != p.Account.ID || row.IdentityBindingID != p.IdentityBindingID ||
+		row.MachineCredentialID != p.MachineCredentialID() || row.AgentDelegationID != p.AgentDelegationID() || row.InputDigest != digest || row.CapabilityVersion != definition.Version {
 		return nil, false, contracts.Problem("conflict")
+	}
+	if row.MembershipRevokedSinceInvocation {
+		return nil, true, contracts.Problem("forbidden")
 	}
 	result := &contracts.Result{
 		InvocationID: row.InvocationID, TraceID: row.TraceID, ApprovalID: row.ApprovalID,
@@ -353,12 +402,25 @@ func (g *Gateway) requestApproval(ctx context.Context, p *identity.Principal, en
 	}
 	defer tx.Rollback(ctx)
 	q := dbgen.New(tx)
-	if err = g.checkEntry(ctx, q, p, entry, request.Input, true); err != nil {
+	if p.MachineCredentialID() != "" {
+		p, err = g.identity.WithReadQueries(q).RefreshMachine(ctx, p, true)
+		if err != nil {
+			return nil, err
+		}
+		if err = checkInputAccess(p, entry.Definition, request.Input); err != nil {
+			return nil, err
+		}
+	}
+	if err = g.checkEntry(ctx, q, p, entry, request, true); err != nil {
 		return nil, err
 	}
 	if _, err = q.CapCreateInvocation(ctx, dbgen.CapCreateInvocationParams{
-		TenantID: p.TenantID, AccountID: p.Account.ID, DepartmentID: p.Account.DepartmentID,
-		InvocationID: invocationID, Capability: entry.Definition.Name, CapabilityVersion: entry.Definition.Version,
+		ActingOrganizationID: p.ActingOrganization.OrganizationID, ActorPortal: p.ActingOrganization.Portal,
+		TenantID: p.TenantID, AccountID: p.Account.ID,
+		IdentityBindingID:   p.IdentityBindingID,
+		MachineCredentialID: p.MachineCredentialID(),
+		AgentDelegationID:   p.AgentDelegationID(),
+		InvocationID:        invocationID, Capability: entry.Definition.Name, CapabilityVersion: entry.Definition.Version,
 		Origin: string(request.Origin), IdempotencyKey: request.IdempotencyKey,
 		Status: string(contracts.StatusAwaitingApproval), Input: redacted, InputDigest: digest,
 		CorrelationID: traceID, CausationID: request.CausationID, TriggerDepth: int32(request.TriggerDepth),
@@ -386,8 +448,9 @@ func (g *Gateway) requestApproval(ctx context.Context, p *identity.Principal, en
 		}
 	}
 	approvalID, err := g.approvals.Create(ctx, q, approval.Approval{
-		TenantID: p.TenantID, AccountID: p.Account.ID, DepartmentID: p.Account.DepartmentID,
-		Capability: entry.Definition.Name, Version: entry.Definition.Version, InvocationID: invocationID,
+		TenantID: p.TenantID, AccountID: p.Account.ID,
+		IdentityBindingID: p.IdentityBindingID,
+		Capability:        entry.Definition.Name, Version: entry.Definition.Version, InvocationID: invocationID,
 		Risk: string(entry.Definition.Risk), Kind: string(kind), Arguments: arguments, Digest: digest, ActionKey: approvalActionKey(request),
 	}, ApprovalTTL)
 	if err != nil {
@@ -415,6 +478,15 @@ func (g *Gateway) Decide(ctx context.Context, id int64, approve bool, note strin
 	if err != nil {
 		return nil, contracts.Problem("unauthenticated")
 	}
+	if p.MachineCredentialID() != "" {
+		return nil, contracts.Problem("forbidden")
+	}
+	if p.TokenHash != "" {
+		p, err = g.identity.PrincipalForSessionInvocation(ctx, p, false)
+		if err != nil {
+			return nil, err
+		}
+	}
 	card, err := g.approvals.Get(ctx, p.TenantID, id)
 	if err != nil {
 		return nil, err
@@ -423,11 +495,20 @@ func (g *Gateway) Decide(ctx context.Context, id int64, approve bool, note strin
 		return nil, contracts.Problem("conflict")
 	}
 	other := card.AccountID != p.Account.ID
-	if other && !p.Can("capability:approve") {
+	if !other && (card.IdentityBindingID != p.IdentityBindingID) {
+		return nil, contracts.Problem("forbidden")
+	}
+	if other && !tenantApprovalReviewer(p) {
 		return nil, contracts.Problem("forbidden")
 	}
 	if card.Kind == string(contracts.ApprovalFourEyes) && !other {
 		return nil, contracts.Problem("forbidden")
+	}
+	if entry, ok := g.registry.Resolve(card.Capability, card.Version); ok && slices.Contains(entry.Definition.Tags, contracts.TagSeparatePrincipalApproval) {
+		requester, lookupErr := dbgen.New(g.pool).IAMActiveAccountSubject(ctx, dbgen.IAMActiveAccountSubjectParams{TenantID: p.TenantID, AccountID: card.AccountID})
+		if lookupErr != nil || p.SubjectID == "" || requester.PrincipalID.String() == p.SubjectID {
+			return nil, contracts.Problem("forbidden")
+		}
 	}
 	if !card.ExpiresAt.IsZero() && g.now().After(card.ExpiresAt) {
 		_ = g.approvals.Expire(ctx, p.TenantID)
@@ -465,15 +546,21 @@ func (g *Gateway) Decide(ctx context.Context, id int64, approve bool, note strin
 		_ = g.finish(ctx, p.TenantID, card.InvocationID, contracts.StatusFailed, nil, "invalid", 0)
 		return nil, contracts.Problem("invalid")
 	}
-	requester, err := g.identity.PrincipalForTask(ctx, p.TenantID, card.AccountID, card.DepartmentID)
+	var requester *identity.Principal
+	if trace.MachineCredentialID != "" {
+		requester, err = g.identity.PrincipalForMachineInvocation(ctx, p.TenantID, card.AccountID, trace.MachineCredentialID, trace.AgentDelegationID)
+	} else {
+		requester, err = g.identity.PrincipalForBoundTask(ctx, p.TenantID, card.AccountID, card.IdentityBindingID)
+	}
 	if err != nil {
 		_ = g.approvals.Complete(ctx, p.TenantID, id, approval.Failed, "forbidden")
 		_ = g.finish(ctx, p.TenantID, card.InvocationID, contracts.StatusFailed, nil, "forbidden", 0)
 		return nil, contracts.Problem("forbidden")
 	}
-	if err = g.checkEntry(ctx, dbgen.New(g.pool), requester, entry, input, false); err != nil {
-		_ = g.approvals.Complete(ctx, p.TenantID, id, approval.Failed, "unavailable")
-		_ = g.finish(ctx, p.TenantID, card.InvocationID, contracts.StatusFailed, nil, "unavailable", 0)
+	resumed := requestFrom(card, trace, input)
+	if err = g.checkEntry(ctx, dbgen.New(g.pool), requester, entry, resumed, false); err != nil {
+		_ = g.approvals.Complete(ctx, p.TenantID, id, approval.Failed, contracts.Code(err))
+		_ = g.finish(ctx, p.TenantID, card.InvocationID, contracts.StatusFailed, nil, contracts.Code(err), 0)
 		return nil, err
 	}
 	if err = checkInputAccess(requester, entry.Definition, input); err != nil {
@@ -494,17 +581,19 @@ func (g *Gateway) Decide(ctx context.Context, id int64, approve bool, note strin
 	} else if !errors.Is(e, pgx.ErrNoRows) {
 		return nil, e
 	}
-	resumed := requestFrom(card, trace, input)
 	result, err := g.run(identity.WithPrincipal(ctx, requester), requester, entry, resumed, card.InvocationID, trace.TraceID, card.Digest, nil, true)
 	if err != nil {
 		_ = g.approvals.Complete(ctx, p.TenantID, id, approval.Failed, contracts.Code(err))
 		return nil, err
 	}
 	status := approval.Executed
-	if result.Status != contracts.StatusSucceeded {
+	if result.Status != contracts.StatusSucceeded && result.Status != contracts.StatusExecuting {
 		status = approval.Failed
 	}
 	_ = g.approvals.Complete(ctx, p.TenantID, id, status, result.ErrorCode)
+	if trace.MachineCredentialID != "" {
+		result.Data = nil
+	}
 	return result, nil
 }
 
@@ -512,7 +601,8 @@ func requestFrom(card *approval.Approval, trace dbgen.CapInvocationTraceRow, inp
 	return Request{
 		Name: card.Capability, Version: card.Version, Input: input,
 		Origin: contracts.OriginApproval, CorrelationID: trace.TraceID,
-		CausationID: trace.CausationID, TriggerDepth: int(trace.TriggerDepth),
+		authorizationOrigin: contracts.Origin(trace.Origin),
+		CausationID:         trace.CausationID, TriggerDepth: int(trace.TriggerDepth),
 	}
 }
 
@@ -522,9 +612,13 @@ func (g *Gateway) Definitions(ctx context.Context) ([]contracts.Definition, erro
 	if err != nil {
 		return nil, contracts.Problem("unauthenticated")
 	}
+	disabled, err := g.disabledResources(ctx, p)
+	if err != nil {
+		return nil, err
+	}
 	out := []contracts.Definition{}
 	for _, d := range g.registry.Discover(callerOf(p)) {
-		if g.available(ctx, dbgen.New(g.pool), p, d, false) == nil {
+		if !disabled[d.Entity] && g.available(ctx, dbgen.New(g.pool), p, d, false) == nil {
 			d.Input = contracts.AuthorizedSchema(d.Input, d.InputAccess, p.Can)
 			if d.Input == nil {
 				continue
@@ -545,7 +639,14 @@ func (g *Gateway) AutomatedDefinitions(ctx context.Context) ([]contracts.Definit
 	if err != nil {
 		return nil, contracts.Problem("unauthenticated")
 	}
-	return g.registry.DiscoverAutomated(callerOf(p)), nil
+	disabled, err := g.disabledResources(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	discovered := g.registry.DiscoverAutomated(callerOf(p))
+	return slices.DeleteFunc(discovered, func(d contracts.Definition) bool {
+		return disabled[d.Entity] || (p.ActingOrganization.OrganizationID != 0 && !slices.Contains(d.Tags, contracts.OrganizationScopedTag))
+	}), nil
 }
 
 // Entities is the metadata projection for the caller.
@@ -575,7 +676,7 @@ func (g *Gateway) Invocations(ctx context.Context, limit int) ([]audit.Invocatio
 	if err != nil {
 		return nil, contracts.Problem("unauthenticated")
 	}
-	return g.audit.List(ctx, p.TenantID, p.Account.ID, limit)
+	return g.audit.List(ctx, p.TenantID, p.Account.ID, p.IdentityBindingID, limit)
 }
 
 // Invocation returns one audited call.
@@ -584,7 +685,7 @@ func (g *Gateway) Invocation(ctx context.Context, invocationID string) (*audit.I
 	if err != nil {
 		return nil, contracts.Problem("unauthenticated")
 	}
-	return g.audit.Get(ctx, p.TenantID, p.Account.ID, invocationID)
+	return g.audit.Get(ctx, p.TenantID, p.Account.ID, p.IdentityBindingID, invocationID)
 }
 
 // Approvals lists pending confirmations for the caller or, for reviewers, all.
@@ -596,7 +697,7 @@ func (g *Gateway) Approvals(ctx context.Context) ([]approval.Approval, error) {
 	if err = g.approvals.Expire(ctx, p.TenantID); err != nil {
 		return nil, err
 	}
-	return g.approvals.List(ctx, p.TenantID, p.Account.ID, p.Can("capability:approve"))
+	return g.approvals.List(ctx, p.TenantID, p.Account.ID, p.IdentityBindingID, tenantApprovalReviewer(p))
 }
 
 // Events lists business events the caller may see, with their AI trigger status.
@@ -605,13 +706,16 @@ func (g *Gateway) Events(ctx context.Context, limit int) ([]eventhub.Event, erro
 	if err != nil {
 		return nil, contracts.Problem("unauthenticated")
 	}
-	reviewer := p.Can("capability:approve")
-	return g.events.List(ctx, p.TenantID, p.Account.ID, reviewer, limit)
+	return g.events.List(ctx, p.TenantID, p.Account.ID, p.IdentityBindingID, tenantApprovalReviewer(p), limit)
+}
+
+func tenantApprovalReviewer(p *identity.Principal) bool {
+	return p.IdentityBindingID == "" && p.MachineCredentialID() == "" && p.HasTenantWideGrant("capability:approve")
 }
 
 func callerOf(p *identity.Principal) contracts.Caller {
 	return contracts.Caller{
-		TenantID: p.TenantID, AccountID: p.Account.ID, DepartmentID: p.Account.DepartmentID,
+		TenantID: p.TenantID, AccountID: p.Account.ID,
 		Admin: p.Account.IsAdmin, RestrictAdmin: true, Grants: p.Effective(),
 	}
 }

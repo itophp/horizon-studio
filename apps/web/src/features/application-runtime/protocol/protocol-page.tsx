@@ -11,13 +11,13 @@ import { RuntimeRouteParams } from "../route-params";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ErrorBanner, Loading } from "@/features/administration/shared";
+import { ErrorBanner, Loading } from "@/features/identity/shared";
 import { capabilityDecide } from "@/api/generated/baseline";
 import { evaluate, pathValue, validateInput } from "../expression";
 import { ApiError } from "@/api/client/request";
 import { useConfiguration } from "@/features/governance/runtime";
 import { downloadContent } from "@/features/governance/shared";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import type { RuntimeInvocationReference } from "@/api/generated/models";
 import { runtimeExecute } from "@/lib/capabilities";
 import {
@@ -122,21 +122,8 @@ export function ProtocolPage({
       ? browserRuntime
       : null;
   const presentationContext = useMemo(
-    () => ({
-      activeDepartmentId: session.activeDepartmentId,
-      browser: browser?.presentation,
-      departmentOptions: (session.account.memberships ?? []).map(
-        (membership) => ({
-          value: membership.departmentId,
-          label: membership.departmentName || String(membership.departmentId),
-        }),
-      ),
-    }),
-    [
-      session.activeDepartmentId,
-      session.account.memberships,
-      browser?.presentation,
-    ],
+    () => ({ browser: browser?.presentation }),
+    [browser?.presentation],
   );
   const timeZone = useConfiguration().value(
     "display.timezone",
@@ -183,7 +170,7 @@ export function ProtocolPage({
     () => (schemaValid ? collectDataSpecs(page.root) : []),
     [page.root, schemaValid],
   );
-  const identity = `${session.tenantId}:${session.account.id}:${session.activeDepartmentId ?? ""}:${session.authorizationVersion ?? ""}`;
+  const identity = `${session.tenantId}:${session.account.id}:${session.identityBindingId ?? ""}:${session.authorizationVersion ?? ""}`;
   const scope = useMemo<ProtocolScope>(
     () => ({
       route: { ...previewRouteParams, ...routeParams },

@@ -18,8 +18,8 @@ import {
   Loading,
   PageHeading,
   SuccessNotice,
-} from "@/features/administration/shared";
-import { useSession } from "@/features/administration/auth";
+} from "@/features/identity/shared";
+import { useSession } from "@/features/identity/auth";
 import { ApprovalCard, RunStatusBadge } from "@/features/ai/shared";
 import { invokeCapability } from "@/lib/capabilities";
 import { useCapabilityKey } from "@/features/capabilities/shared";

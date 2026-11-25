@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -42,7 +43,8 @@ const (
 type Origin string
 
 const (
-	TagSealedApprovalInput = "sealed-approval-input"
+	TagSealedApprovalInput       = "sealed-approval-input"
+	TagSeparatePrincipalApproval = "separate-principal-approval"
 )
 
 const (
@@ -53,9 +55,9 @@ const (
 	OriginAPI        Origin = "api"
 	OriginEvent      Origin = "event"
 	OriginApproval   Origin = "approval"
-	// OriginAutomation is a scheduled automation task launched by the runtime
-	// worker. It is automated for risk admission: high risk work waits for a
-	// human and critical work is never reachable from it.
+	// OriginAutomation identifies scheduled work launched by the runtime.
+	// Direct Gateway calls from this origin require a Service credential and
+	// a low-risk capability with an explicit origin opt-in.
 	OriginAutomation Origin = "automation"
 )
 
@@ -83,6 +85,10 @@ type FieldAccess struct {
 	Path       string
 	Permission string
 }
+
+// OrganizationScopedTag identifies an executor that enforces the trusted
+// acting organization in its data access, or exposes only that caller.
+const OrganizationScopedTag = "organization-scoped"
 
 type Definition struct {
 	// Installation/Application are deployment-owned activation references, never client authority.
@@ -125,7 +131,13 @@ type Definition struct {
 	TransientResult bool
 	// Loggable lists input fields allowed into the audit projection. Everything
 	// else is replaced by the payload digest.
-	Loggable []string
+	Loggable                   []string
+	DelegationResourceID       string   `json:",omitempty"`
+	DelegationBindingType      string   `json:",omitempty"`
+	DelegationBindingAttribute string   `json:",omitempty"`
+	ResourceAttributeID        string   `json:",omitempty"`
+	RowFilterAttributes        []string `json:",omitempty"`
+	MachineCallable            bool     `json:",omitempty"`
 }
 
 // Key identifies a capability version.
@@ -187,7 +199,20 @@ type Executor func(ctx context.Context, in Input) (Output, error)
 // business data and outbox events in one commit. New modules should prefer it.
 type TxExecutor func(ctx context.Context, tx pgx.Tx, in Input) (Output, error)
 
-// Handler binds one definition to its implementation. Exactly one field is set.
+// RowPredicate restricts a trusted resource attribute to an exact value.
+// Each predicate is required. The executor maps attributes to fixed SQL and
+// binds values as parameters before selecting, counting or exporting rows.
+type RowPredicate struct {
+	Attribute string `json:"attribute"`
+	Equals    string `json:"equals"`
+}
+
+var rowFilterName = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_.-]{0,199}$`)
+
+func ValidRowFilterName(name string) bool { return rowFilterName.MatchString(name) }
+
+type ScopedTxExecutor func(context.Context, pgx.Tx, Input, []RowPredicate) (Output, error)
+
 type RuntimeReference struct {
 	ApplicationVersion, DefinitionDigest   string
 	CatalogRevision                        int64
@@ -203,15 +228,25 @@ type Handler struct {
 	ActivationSources func(Input) ([]Activation, error)
 	Execute           Executor
 	ExecuteTx         TxExecutor
+	ExecuteScopedTx   ScopedTxExecutor
+}
+
+func (h Handler) Matches(definition Definition) bool {
+	executors := 0
+	for _, present := range []bool{h.Execute != nil, h.ExecuteTx != nil, h.ExecuteScopedTx != nil} {
+		if present {
+			executors++
+		}
+	}
+	return executors == 1 && (len(definition.RowFilterAttributes) > 0) == (h.ExecuteScopedTx != nil)
 }
 
 // Caller is the resolved subject of a call. It is built from a trusted
 // principal, never from request bodies.
 type Caller struct {
-	TenantID     string
-	AccountID    int64
-	DepartmentID int64
-	Admin        bool
+	TenantID  string
+	AccountID int64
+	Admin     bool
 	// RestrictAdmin requires even administrators to use their resolved catalog grants.
 	RestrictAdmin bool
 	Grants        []string
@@ -285,11 +320,46 @@ func (d Definition) Problems() []string {
 	if d.TransientResult && !d.ReadOnly && (d.Layer != LayerAtomic || !slices.Contains(d.Tags, "manual-only")) {
 		out = append(out, "transient writes must be atomic and manual-only")
 	}
+	if len(d.RowFilterAttributes) > 0 {
+		if !d.TransientResult || d.Layer != LayerAtomic || d.Entity == "" {
+			out = append(out, "row filters require a transient atomic resource")
+		}
+		seen := map[string]bool{}
+		for _, name := range d.RowFilterAttributes {
+			if !ValidRowFilterName(name) || seen[name] {
+				out = append(out, "invalid or duplicate row filter attribute "+name)
+			}
+			seen[name] = true
+		}
+	}
+	if d.DelegationBindingType != "" || d.DelegationBindingAttribute != "" {
+		if !d.MachineCallable || d.DelegationResourceID == "" ||
+			!ValidRowFilterName(d.DelegationBindingType) || !ValidRowFilterName(d.DelegationBindingAttribute) {
+			out = append(out, "a delegated binding requires a machine-callable resource, binding type and resource attribute")
+		}
+		if d.ResourceAttributeID != "" && d.ResourceAttributeID != d.DelegationResourceID {
+			out = append(out, "attribute and delegation selectors must identify the same bound resource")
+		}
+	}
 	if d.Name == "" || d.Version == "" {
 		out = append(out, "name and version are required")
 	}
 	if d.Input == nil || d.Input.Type != "object" {
 		out = append(out, "input must be an object schema")
+	}
+	if d.Input != nil {
+		for _, field := range []struct{ name, selector string }{
+			{"delegation resource", d.DelegationResourceID},
+			{"attribute resource", d.ResourceAttributeID},
+		} {
+			if field.selector == "" {
+				continue
+			}
+			property := d.Input.Properties[field.selector]
+			if d.Entity == "" || property == nil || property.Type != "integer" || !slices.Contains(d.Input.Required, field.selector) {
+				out = append(out, field.name+" must be a required integer input selecting the primary entity")
+			}
+		}
 	}
 	if d.Risk != RiskLow && d.Risk != RiskMedium && d.Risk != RiskHigh && d.Risk != RiskCritical {
 		out = append(out, "risk must be low, medium, high or critical")

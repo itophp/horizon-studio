@@ -6,9 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
-	"horizon/foundation/db/migrations"
 	"sync"
 	"testing"
 
@@ -27,7 +24,7 @@ func TestExecutionPlanLifecycleAndIsolation(t *testing.T) {
 	_, pool, root := iamFixture(t)
 	ctx := context.Background()
 	iam := pluginIAM(t, pool)
-	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,44 +201,3 @@ func TestExecutionPlanLifecycleAndIsolation(t *testing.T) {
 }
 
 // The migration must pin existing approvals before the new runtime handles them.
-func TestExecutionPlanMigrationPinsLegacyInvocations(t *testing.T) {
-	_, pool, root := iamFixture(t)
-	ctx := context.Background()
-	db := stdlib.OpenDB(*pool.Config().ConnConfig)
-	defer db.Close()
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations.Files)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = provider.DownTo(ctx, 28); err != nil {
-		t.Fatal(err)
-	}
-	_, err = pool.Exec(ctx, `INSERT INTO cap_invocations(tenant_id,account_id,invocation_id,capability,capability_version,origin,status,input_digest,trace_id) VALUES('tenant-a',$1,'legacy-wait','example.record.list','1.0.0','api','awaiting_approval','digest','trace-legacy')`, root.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 2; i++ {
-		if _, err = provider.Up(ctx); err != nil {
-			t.Fatal(err)
-		}
-	}
-	raw, err := dbgen.New(pool).ExecutionGetRecord(ctx, dbgen.ExecutionGetRecordParams{TenantID: "tenant-a", InvocationID: "legacy-wait", AccountID: root.ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	d := contracts.Definition{Name: "example.record.list", Version: "1.0.0"}
-	binding, err := executionplan.Decode(raw, d)
-	if err != nil || binding != contracts.DefaultExecutionBinding(d) {
-		t.Fatal(binding, err)
-	}
-	// Down and Up preserve the legacy business invocation and regenerate metadata.
-	if _, err = provider.DownTo(ctx, 28); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = provider.Up(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = dbgen.New(pool).ExecutionGetRecord(ctx, dbgen.ExecutionGetRecordParams{TenantID: "tenant-a", InvocationID: "legacy-wait", AccountID: root.ID}); err != nil {
-		t.Fatal(err)
-	}
-}

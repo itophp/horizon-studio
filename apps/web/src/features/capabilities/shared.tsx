@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import { riskTone } from "@/lib/capability";
 
 // Query keys are scoped by the trusted session so switching account or
@@ -11,7 +11,7 @@ export function useCapabilityKey(...parts: (string | number)[]) {
     "capability",
     session.tenantId,
     session.account.id,
-    session.activeDepartmentId,
+    session.identityBindingId,
     ...parts,
   ] as const;
 }

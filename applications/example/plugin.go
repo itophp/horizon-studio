@@ -51,8 +51,8 @@ func (p Plugin) Register(_ context.Context, r *plugin.Registrar) error {
 // AttachGateway forwards the gateway to the module's orchestration capability.
 func (p Plugin) AttachGateway(g *gateway.Gateway) { p.Module.AttachGateway(g) }
 
-func (p Plugin) Start(context.Context) error { return nil }
-func (p Plugin) Stop(context.Context) error  { return nil }
+func (Plugin) Start(context.Context) error  { return nil }
+func (p Plugin) Stop(context.Context) error { return nil }
 
 // Workflows and Graphs expose the application's durable flow assets to the
 // deployment aggregation, which collects them by optional interface.

@@ -9,13 +9,13 @@ import {
 } from "@/api/generated/runtime";
 import { runtimeRead, runtimeExecute } from "@/lib/capabilities";
 import { formatDate } from "@/lib/format";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   ErrorBanner,
   EditorDialog,
   EmptyState,
   Loading,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import { Button } from "@/components/ui/button";
 
 export function DesignHistory({

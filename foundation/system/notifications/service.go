@@ -48,7 +48,7 @@ func (s *Service) Inbox(ctx context.Context, _ *InboxPayload) (res []*InboxMessa
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.Q.GovInbox(ctx, dbgen.GovInboxParams{TenantID: p.TenantID, RecipientID: p.Account.ID, DepartmentID: p.Account.DepartmentID})
+	rows, err := s.Q.GovInbox(ctx, dbgen.GovInboxParams{TenantID: p.TenantID, RecipientID: p.Account.ID, DepartmentID: p.Account.DepartmentID, TenantBase: p.IdentityBindingID == "", CanReview: p.CanPermanent("temporary:approve")})
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func (s *Service) InboxPage(ctx context.Context, offset, limit int) ([]*InboxMes
 	if offset < 0 || offset > 10000 || limit < 1 || limit > 50 {
 		return nil, governance.Problem("invalid")
 	}
-	rows, err := s.Q.GovInboxPage(ctx, dbgen.GovInboxPageParams{TenantID: p.TenantID, RecipientID: p.Account.ID, DepartmentID: p.Account.DepartmentID, CanReview: p.Can("temporary:approve"), PageLimit: int32(limit), PageOffset: int32(offset)})
+	rows, err := s.Q.GovInboxPage(ctx, dbgen.GovInboxPageParams{TenantID: p.TenantID, RecipientID: p.Account.ID, DepartmentID: p.Account.DepartmentID, TenantBase: p.IdentityBindingID == "", CanReview: p.CanPermanent("temporary:approve"), PageLimit: int32(limit), PageOffset: int32(offset)})
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (s *Service) inboxMessages(rows []dbgen.GovInboxRow, p *identity.Principal)
 		if !data.InApp {
 			continue
 		}
-		if data.Event == "requested" && !p.Can("temporary:approve") {
+		if data.Event == "requested" && !p.CanPermanent("temporary:approve") {
 			continue
 		}
 		if data.Attachments == nil {
@@ -98,7 +98,7 @@ func (s *Service) Read(ctx context.Context, payload *ReadPayload) (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = s.Q.GovReadNotification(ctx, dbgen.GovReadNotificationParams{TenantID: p.TenantID, ID: payload.ID, RecipientID: p.Account.ID, DepartmentID: p.Account.DepartmentID})
+	_, err = s.Q.GovReadNotification(ctx, dbgen.GovReadNotificationParams{TenantID: p.TenantID, ID: payload.ID, RecipientID: p.Account.ID, DepartmentID: p.Account.DepartmentID, TenantBase: p.IdentityBindingID == "", CanReview: p.CanPermanent("temporary:approve")})
 	return err
 }
 func (s *Service) Deliveries(ctx context.Context, _ *DeliveriesPayload) (res []*DeliveryRecord, err error) {
@@ -216,27 +216,27 @@ func (s *Service) fanout(ctx context.Context, event dbgen.GovClaimEventRow) erro
 	}
 	recipients := []*identity.Principal{}
 	if event.Event == "requested" {
-		candidates, err := s.Q.GovCandidateMemberships(ctx, event.TenantID)
+		candidates, err := s.Q.GovTemporaryNotificationCandidates(ctx, event.TenantID)
 		if err != nil {
 			return err
 		}
 		for _, candidate := range candidates {
-			if candidate.AccountID == r.ApplicantID {
+			if candidate == r.ApplicantID {
 				continue
 			}
-			p, e := s.Identity.PrincipalForTask(ctx, event.TenantID, candidate.AccountID, candidate.DepartmentID)
+			p, e := s.Identity.PrincipalForTask(ctx, event.TenantID, candidate)
 			if e != nil {
 				if governance.Code(e) == "forbidden" {
 					continue
 				}
 				return e
 			}
-			if p.Can("temporary:approve") {
+			if p.CanPermanent("temporary:approve") {
 				recipients = append(recipients, p)
 			}
 		}
 	} else if !(event.Event == "revoked" && r.RevokedBy.Int64 == r.ApplicantID) {
-		p, e := s.Identity.PrincipalForTask(ctx, event.TenantID, r.ApplicantID, r.DepartmentID)
+		p, e := s.Identity.PrincipalForTask(ctx, event.TenantID, r.ApplicantID)
 		if e == nil {
 			recipients = append(recipients, p)
 		} else if governance.Code(e) != "forbidden" && governance.Code(e) != "not_found" {
@@ -254,12 +254,12 @@ func (s *Service) fanout(ctx context.Context, event dbgen.GovClaimEventRow) erro
 	return s.Transaction(ctx, func(q *dbgen.Queries) error {
 		for _, p := range recipients {
 			inApp := preferences[p]
-			data := eventPayload{Event: event.Event, RequestID: event.RequestID, ApplicantName: r.FullName, DepartmentName: r.DepartmentName, Status: event.Event, InApp: inApp}
+			data := eventPayload{Event: event.Event, RequestID: event.RequestID, ApplicantName: r.FullName, Status: event.Event, InApp: inApp}
 			raw, e := json.Marshal(data)
 			if e != nil {
 				return e
 			}
-			id, e := q.GovAddNotification(ctx, dbgen.GovAddNotificationParams{TenantID: event.TenantID, EventID: governance.Int(event.ID), RecipientID: p.Account.ID, DepartmentID: p.Account.DepartmentID, Payload: raw})
+			id, e := q.GovAddNotification(ctx, dbgen.GovAddNotificationParams{TenantID: event.TenantID, EventID: governance.Int(event.ID), RecipientID: p.Account.ID, Payload: raw})
 			if e != nil {
 				return e
 			}
@@ -278,7 +278,7 @@ func (s *Service) deliver(ctx context.Context, d dbgen.GovClaimDeliveryRow) erro
 	if err != nil {
 		return err
 	}
-	p, err := s.Identity.PrincipalForTask(ctx, d.TenantID, r.RecipientID, r.DepartmentID)
+	p, err := s.Identity.PrincipalForTask(ctx, d.TenantID, r.RecipientID)
 	if err != nil {
 		code := governance.Code(err)
 		if code == "forbidden" || code == "not_found" {
@@ -290,7 +290,7 @@ func (s *Service) deliver(ctx context.Context, d dbgen.GovClaimDeliveryRow) erro
 	if err = json.Unmarshal(r.Payload, &data); err != nil {
 		return err
 	}
-	if data.Event == "requested" && !p.Can("temporary:approve") {
+	if data.Event == "requested" && !p.CanPermanent("temporary:approve") {
 		return finish("skipped", "permission_revoked")
 	}
 	enabled, err := s.enabled(ctx, p, "notifications.email")

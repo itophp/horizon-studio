@@ -1,6 +1,5 @@
 // Command entitycheck validates the declared business entities against the
-// schema produced by the migrations. It needs no database: migrations are
-// embedded and parsed in process, which keeps it inside the fast gate.
+// deployment schema. It parses the embedded SQL without a database connection.
 package main
 
 import (
@@ -31,11 +30,11 @@ var acceptedGaps = map[string]string{
 }
 
 func run() error {
+	registration := deployment.Register(nil)
 	tables, err := metadata.Load()
 	if err != nil {
-		return fmt.Errorf("parse migrations: %w", err)
+		return fmt.Errorf("parse initialization schema: %w", err)
 	}
-	registration := deployment.Register(nil)
 	declared := app.EntitiesWithRegistration(registration)
 	structural, contracts := 0, 0
 	for _, item := range declared {

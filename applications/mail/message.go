@@ -75,7 +75,7 @@ func (m *Module) listMessages(ctx context.Context, in contracts.Input) (contract
 	for _, row := range rows {
 		items = append(items, map[string]any{
 			"id": row.ID, "mailboxId": row.MailboxID, "direction": row.Direction, "folder": row.Folder,
-			"subject": row.Subject, "from": row.FromAddress, "snippet": row.Snippet,
+			"subject": messageSubject(row.Direction, row.Subject), "from": row.FromAddress, "snippet": row.Snippet,
 			"occurredAt": governance.Time(row.OccurredAt), "read": row.ReadAt.Valid,
 		})
 	}
@@ -103,7 +103,7 @@ func (m *Module) messageData(ctx context.Context, q *dbgen.Queries, tenant strin
 	}
 	return map[string]any{
 		"id": row.ID, "mailboxId": row.MailboxID, "direction": row.Direction, "folder": row.Folder,
-		"rfcMessageId": row.RfcMessageID, "subject": row.Subject, "from": row.FromAddress,
+		"rfcMessageId": row.RfcMessageID, "subject": messageSubject(row.Direction, row.Subject), "from": row.FromAddress,
 		"replyTo": row.ReplyTo, "bodyText": row.BodyText, "bodyHtml": row.BodyHtml,
 		"snippet": row.Snippet, "occurredAt": governance.Time(row.OccurredAt),
 		"read": row.ReadAt.Valid, "createdAt": governance.Time(row.CreatedAt),
@@ -239,7 +239,7 @@ func (m *Module) sendMessage(ctx context.Context, tx pgx.Tx, in contracts.Input)
 	if len(to)+len(cc)+len(bcc) > m.options.SendMaxRecipients {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
-	textBody, htmlBody, err := RenderMarkdown(payload.Markdown)
+	textBody, htmlBody, err := renderOutboundBody(payload.Markdown, payload.HTML, m.options.MaxMessageBytes)
 	if err != nil {
 		return contracts.Output{}, err
 	}
@@ -260,8 +260,9 @@ func (m *Module) sendMessage(ctx context.Context, tx pgx.Tx, in contracts.Input)
 		To, CC, BCC []mail.Address
 		Subject     string
 		Markdown    string
+		HTML        string `json:"HTML,omitempty"`
 		Files       []int64
-	}{to, cc, bcc, payload.Subject, payload.Markdown, payload.FileIDs})
+	}{to, cc, bcc, payload.Subject, payload.Markdown, payload.HTML, payload.FileIDs})
 	if err != nil {
 		return contracts.Output{}, err
 	}

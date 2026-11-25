@@ -5,8 +5,8 @@ import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import { ApiError } from "@/api/client/request";
 import { Button } from "@/components/ui/button";
-import { useSession } from "@/features/administration/auth";
-import { PageHeading } from "@/features/administration/shared";
+import { useSession } from "@/features/identity/auth";
+import { PageHeading } from "@/features/identity/shared";
 import { formatMoment } from "@/lib/capability";
 import { knowledgeRead } from "@/lib/capabilities";
 import { EditKnowledgeDocument } from "./edit-document";
@@ -31,7 +31,7 @@ export function KnowledgeDetailPage() {
       "document",
       session.tenantId,
       session.account.id,
-      session.activeDepartmentId,
+      session.identityBindingId,
       session.authorizationVersion,
       documentID,
     ],

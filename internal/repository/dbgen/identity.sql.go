@@ -11,6 +11,47 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const iAMAcceptMembershipInvitation = `-- name: IAMAcceptMembershipInvitation :one
+WITH recipient AS (
+    SELECT login.id, login.principal_id, login.username, login.realm
+    FROM iam_login_accounts login
+    JOIN iam_principals principal ON principal.id = login.principal_id AND principal.kind = 'human' AND principal.status = 'active'
+    WHERE login.id = $1 AND login.status = 'active'
+    FOR UPDATE OF login
+), accepted AS (
+    UPDATE iam_membership_invitations invite SET accepted_at = now()
+    FROM recipient
+    WHERE invite.id = $2 AND invite.accepted_at IS NULL AND invite.expires_at > now()
+        AND invite.username = recipient.username AND invite.recipient_realm = recipient.realm
+    RETURNING invite.tenant_id
+), membership AS (
+    INSERT INTO iam_tenant_memberships (tenant_id, principal_id)
+    SELECT accepted.tenant_id, recipient.principal_id FROM accepted CROSS JOIN recipient
+    ON CONFLICT (tenant_id, principal_id) DO NOTHING
+    RETURNING tenant_id, principal_id
+)
+INSERT INTO iam_accounts (tenant_id, username, status, login_account_id)
+SELECT accepted.tenant_id, recipient.username, 'active', recipient.id
+FROM accepted CROSS JOIN recipient
+WHERE EXISTS (SELECT 1 FROM membership)
+    OR EXISTS (SELECT 1 FROM iam_tenant_memberships existing WHERE existing.tenant_id = accepted.tenant_id
+        AND existing.principal_id = recipient.principal_id AND existing.status = 'active'
+        AND (existing.expires_at IS NULL OR existing.expires_at > now()))
+RETURNING id
+`
+
+type IAMAcceptMembershipInvitationParams struct {
+	LoginAccountID pgtype.UUID
+	InvitationID   pgtype.UUID
+}
+
+func (q *Queries) IAMAcceptMembershipInvitation(ctx context.Context, arg IAMAcceptMembershipInvitationParams) (int64, error) {
+	row := q.db.QueryRow(ctx, iAMAcceptMembershipInvitation, arg.LoginAccountID, arg.InvitationID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const iAMAccountRoles = `-- name: IAMAccountRoles :many
 SELECT role_id FROM iam_account_roles WHERE tenant_id=$1 AND account_id=$2 ORDER BY role_id
 `
@@ -40,42 +81,27 @@ func (q *Queries) IAMAccountRoles(ctx context.Context, arg IAMAccountRolesParams
 	return items, nil
 }
 
-const iAMActivePlacement = `-- name: IAMActivePlacement :one
-SELECT d.id FROM iam_departments d JOIN iam_organizations o ON o.tenant_id=d.tenant_id AND o.id=d.organization_id JOIN iam_organizations parent ON parent.tenant_id=o.tenant_id AND parent.id=o.parent_id WHERE d.tenant_id=$1 AND d.id=$2 AND d.organization_id=$3 AND d.status='active' AND o.status='active' AND parent.status='active'
+const iAMActiveAccountSubject = `-- name: IAMActiveAccountSubject :one
+SELECT principal_id, login_account_id, membership_id FROM iam_active_account_subjects
+WHERE tenant_id = $1 AND account_id = $2
 `
 
-type IAMActivePlacementParams struct {
-	TenantID       string
-	ID             int64
-	OrganizationID int64
+type IAMActiveAccountSubjectParams struct {
+	TenantID  string
+	AccountID int64
 }
 
-func (q *Queries) IAMActivePlacement(ctx context.Context, arg IAMActivePlacementParams) (int64, error) {
-	row := q.db.QueryRow(ctx, iAMActivePlacement, arg.TenantID, arg.ID, arg.OrganizationID)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
+type IAMActiveAccountSubjectRow struct {
+	PrincipalID    pgtype.UUID
+	LoginAccountID pgtype.UUID
+	MembershipID   pgtype.UUID
 }
 
-const iAMAssignMembershipRole = `-- name: IAMAssignMembershipRole :exec
-INSERT INTO iam_department_membership_roles(tenant_id,account_id,department_id,role_id) VALUES($1,$2,$3,$4)
-`
-
-type IAMAssignMembershipRoleParams struct {
-	TenantID     string
-	AccountID    int64
-	DepartmentID int64
-	RoleID       int64
-}
-
-func (q *Queries) IAMAssignMembershipRole(ctx context.Context, arg IAMAssignMembershipRoleParams) error {
-	_, err := q.db.Exec(ctx, iAMAssignMembershipRole,
-		arg.TenantID,
-		arg.AccountID,
-		arg.DepartmentID,
-		arg.RoleID,
-	)
-	return err
+func (q *Queries) IAMActiveAccountSubject(ctx context.Context, arg IAMActiveAccountSubjectParams) (IAMActiveAccountSubjectRow, error) {
+	row := q.db.QueryRow(ctx, iAMActiveAccountSubject, arg.TenantID, arg.AccountID)
+	var i IAMActiveAccountSubjectRow
+	err := row.Scan(&i.PrincipalID, &i.LoginAccountID, &i.MembershipID)
+	return i, err
 }
 
 const iAMAssignRole = `-- name: IAMAssignRole :exec
@@ -102,6 +128,37 @@ func (q *Queries) IAMBootstrapLock(ctx context.Context, tenantID string) error {
 	return err
 }
 
+const iAMChangeManagedLoginStatus = `-- name: IAMChangeManagedLoginStatus :one
+UPDATE iam_login_accounts login SET status = $1
+WHERE login.id = $2 AND login.status = $3
+AND EXISTS (SELECT 1 FROM iam_accounts placement WHERE placement.login_account_id = login.id
+    AND placement.tenant_id = $4 AND placement.id = $5 AND NOT placement.is_admin)
+AND NOT EXISTS (SELECT 1 FROM iam_accounts placement WHERE placement.login_account_id = login.id
+    AND placement.tenant_id <> $4)
+RETURNING login.id
+`
+
+type IAMChangeManagedLoginStatusParams struct {
+	NewStatus string
+	LoginID   pgtype.UUID
+	OldStatus string
+	TenantID  string
+	AccountID int64
+}
+
+func (q *Queries) IAMChangeManagedLoginStatus(ctx context.Context, arg IAMChangeManagedLoginStatusParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, iAMChangeManagedLoginStatus,
+		arg.NewStatus,
+		arg.LoginID,
+		arg.OldStatus,
+		arg.TenantID,
+		arg.AccountID,
+	)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const iAMClearAccountRoles = `-- name: IAMClearAccountRoles :exec
 DELETE FROM iam_account_roles WHERE tenant_id=$1 AND account_id=$2
 `
@@ -113,20 +170,6 @@ type IAMClearAccountRolesParams struct {
 
 func (q *Queries) IAMClearAccountRoles(ctx context.Context, arg IAMClearAccountRolesParams) error {
 	_, err := q.db.Exec(ctx, iAMClearAccountRoles, arg.TenantID, arg.AccountID)
-	return err
-}
-
-const iAMClearMemberships = `-- name: IAMClearMemberships :exec
-DELETE FROM iam_department_memberships WHERE tenant_id=$1 AND account_id=$2
-`
-
-type IAMClearMembershipsParams struct {
-	TenantID  string
-	AccountID int64
-}
-
-func (q *Queries) IAMClearMemberships(ctx context.Context, arg IAMClearMembershipsParams) error {
-	_, err := q.db.Exec(ctx, iAMClearMemberships, arg.TenantID, arg.AccountID)
 	return err
 }
 
@@ -142,31 +185,37 @@ func (q *Queries) IAMCountAccounts(ctx context.Context, tenantID string) (int64,
 }
 
 const iAMCreateAccount = `-- name: IAMCreateAccount :one
-INSERT INTO iam_accounts (tenant_id,username,full_name,email,status,organization_id,department_id,overrides,password_hash) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id
+WITH ensure_tenant AS (
+    INSERT INTO iam_tenants(id) VALUES ($1::text)
+    ON CONFLICT (id) DO NOTHING
+), subject AS (
+    INSERT INTO iam_principals(kind) VALUES ('human') RETURNING id
+), login AS (
+    INSERT INTO iam_login_accounts(principal_id, username) SELECT id, $2::text FROM subject RETURNING id, principal_id
+), credential AS (
+    INSERT INTO iam_password_credentials(login_account_id, password_hash)
+    SELECT id, $4::text FROM login
+), membership AS (
+    INSERT INTO iam_tenant_memberships(tenant_id, principal_id)
+    SELECT $1::text, principal_id FROM login
+)
+INSERT INTO iam_accounts (tenant_id, username, status, login_account_id)
+SELECT $1, $2, $3, login.id
+FROM login RETURNING iam_accounts.id
 `
 
 type IAMCreateAccountParams struct {
-	TenantID       string
-	Username       string
-	FullName       string
-	Email          string
-	Status         string
-	OrganizationID int64
-	DepartmentID   int64
-	Overrides      []byte
-	PasswordHash   string
+	TenantID     string
+	Username     string
+	Status       string
+	PasswordHash string
 }
 
 func (q *Queries) IAMCreateAccount(ctx context.Context, arg IAMCreateAccountParams) (int64, error) {
 	row := q.db.QueryRow(ctx, iAMCreateAccount,
 		arg.TenantID,
 		arg.Username,
-		arg.FullName,
-		arg.Email,
 		arg.Status,
-		arg.OrganizationID,
-		arg.DepartmentID,
-		arg.Overrides,
 		arg.PasswordHash,
 	)
 	var id int64
@@ -174,8 +223,47 @@ func (q *Queries) IAMCreateAccount(ctx context.Context, arg IAMCreateAccountPara
 	return id, err
 }
 
+const iAMCreateContextRoleGrant = `-- name: IAMCreateContextRoleGrant :one
+INSERT INTO iam_context_role_grants(tenant_id, principal_id, identity_binding_id, role_id, granted_by, reason, expires_at)
+SELECT subject.tenant_id, subject.principal_id, $1::uuid,
+       role.id, $2, $3, now() + make_interval(mins => $4::int)
+FROM iam_active_account_subjects subject
+JOIN iam_roles role ON role.tenant_id = subject.tenant_id AND role.id = $5 AND role.status = 'active' AND role.template_key = 'custom'
+WHERE subject.tenant_id = $6 AND subject.account_id = $7
+AND ($1::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM iam_active_identity_bindings binding WHERE binding.tenant_id = subject.tenant_id
+    AND binding.principal_id = subject.principal_id AND binding.id = $1::uuid
+))
+RETURNING id
+`
+
+type IAMCreateContextRoleGrantParams struct {
+	IdentityBindingID pgtype.UUID
+	GrantedBy         int64
+	Reason            string
+	ValidMinutes      int32
+	RoleID            int64
+	TenantID          string
+	AccountID         int64
+}
+
+func (q *Queries) IAMCreateContextRoleGrant(ctx context.Context, arg IAMCreateContextRoleGrantParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, iAMCreateContextRoleGrant,
+		arg.IdentityBindingID,
+		arg.GrantedBy,
+		arg.Reason,
+		arg.ValidMinutes,
+		arg.RoleID,
+		arg.TenantID,
+		arg.AccountID,
+	)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const iAMCreateDepartment = `-- name: IAMCreateDepartment :one
-INSERT INTO iam_departments (tenant_id,name,code,organization_id,parent_id,manager,status,description) VALUES ($1,$2,$3,$4,NULLIF($5::bigint,0),$6,$7,$8) RETURNING id
+INSERT INTO identity_departments (tenant_id,name,code,organization_id,parent_id,manager,status,description) VALUES ($1,$2,$3,$4,NULLIF($5::bigint,0),$6,$7,$8) RETURNING id
 `
 
 type IAMCreateDepartmentParams struct {
@@ -205,60 +293,77 @@ func (q *Queries) IAMCreateDepartment(ctx context.Context, arg IAMCreateDepartme
 	return id, err
 }
 
-const iAMCreateMembership = `-- name: IAMCreateMembership :exec
-INSERT INTO iam_department_memberships(tenant_id,account_id,organization_id,department_id,overrides) VALUES($1,$2,$3,$4,$5)
+const iAMCreateIdentityBinding = `-- name: IAMCreateIdentityBinding :one
+INSERT INTO iam_identity_bindings(tenant_id, principal_id, identity_type, identity_version, revocation_event, entity_id, status, valid_until)
+SELECT subject.tenant_id, subject.principal_id, $1::text, $2::text,
+       $3::text, $4::bigint, $5::text,
+       CASE WHEN $6::int > 0 THEN statement_timestamp() + make_interval(mins => $6::int) END
+FROM iam_active_account_subjects subject WHERE subject.tenant_id = $7 AND subject.account_id = $8
+AND NOT EXISTS (SELECT 1 FROM cap_outbox event WHERE event.tenant_id = subject.tenant_id
+    AND event.event_type = $3 AND event.aggregate_id = $4::bigint::text)
+RETURNING iam_identity_bindings.id
 `
 
-type IAMCreateMembershipParams struct {
-	TenantID       string
-	AccountID      int64
-	OrganizationID int64
-	DepartmentID   int64
-	Overrides      []byte
+type IAMCreateIdentityBindingParams struct {
+	IdentityType    string
+	IdentityVersion string
+	RevocationEvent string
+	EntityID        int64
+	Status          string
+	ValidMinutes    int32
+	TenantID        string
+	AccountID       int64
 }
 
-func (q *Queries) IAMCreateMembership(ctx context.Context, arg IAMCreateMembershipParams) error {
-	_, err := q.db.Exec(ctx, iAMCreateMembership,
+func (q *Queries) IAMCreateIdentityBinding(ctx context.Context, arg IAMCreateIdentityBindingParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, iAMCreateIdentityBinding,
+		arg.IdentityType,
+		arg.IdentityVersion,
+		arg.RevocationEvent,
+		arg.EntityID,
+		arg.Status,
+		arg.ValidMinutes,
 		arg.TenantID,
 		arg.AccountID,
-		arg.OrganizationID,
-		arg.DepartmentID,
-		arg.Overrides,
 	)
-	return err
-}
-
-const iAMCreateOrganization = `-- name: IAMCreateOrganization :one
-INSERT INTO iam_organizations (tenant_id,name,code,kind,parent_id,status,description) VALUES ($1,$2,$3,$4,NULLIF($5::bigint,0),$6,$7) RETURNING id
-`
-
-type IAMCreateOrganizationParams struct {
-	TenantID    string
-	Name        string
-	Code        string
-	Kind        string
-	ParentID    int64
-	Status      string
-	Description string
-}
-
-func (q *Queries) IAMCreateOrganization(ctx context.Context, arg IAMCreateOrganizationParams) (int64, error) {
-	row := q.db.QueryRow(ctx, iAMCreateOrganization,
-		arg.TenantID,
-		arg.Name,
-		arg.Code,
-		arg.Kind,
-		arg.ParentID,
-		arg.Status,
-		arg.Description,
-	)
-	var id int64
+	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
 }
 
+const iAMCreateMembershipInvitation = `-- name: IAMCreateMembershipInvitation :one
+INSERT INTO iam_membership_invitations (tenant_id, inviter_account_id, username, token_hash, expires_at, recipient_realm)
+VALUES ($1, $2, $3, $4, now() + interval '24 hours', $5) RETURNING id, expires_at
+`
+
+type IAMCreateMembershipInvitationParams struct {
+	TenantID         string
+	InviterAccountID int64
+	Username         string
+	TokenHash        string
+	RecipientRealm   string
+}
+
+type IAMCreateMembershipInvitationRow struct {
+	ID        pgtype.UUID
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) IAMCreateMembershipInvitation(ctx context.Context, arg IAMCreateMembershipInvitationParams) (IAMCreateMembershipInvitationRow, error) {
+	row := q.db.QueryRow(ctx, iAMCreateMembershipInvitation,
+		arg.TenantID,
+		arg.InviterAccountID,
+		arg.Username,
+		arg.TokenHash,
+		arg.RecipientRealm,
+	)
+	var i IAMCreateMembershipInvitationRow
+	err := row.Scan(&i.ID, &i.ExpiresAt)
+	return i, err
+}
+
 const iAMCreateRole = `-- name: IAMCreateRole :one
-INSERT INTO iam_roles (tenant_id,name,code,description,status,grants) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id
+INSERT INTO iam_roles (tenant_id,name,code,description,status,grants,template_key) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id
 `
 
 type IAMCreateRoleParams struct {
@@ -268,6 +373,7 @@ type IAMCreateRoleParams struct {
 	Description string
 	Status      string
 	Grants      []byte
+	TemplateKey string
 }
 
 func (q *Queries) IAMCreateRole(ctx context.Context, arg IAMCreateRoleParams) (int64, error) {
@@ -278,37 +384,50 @@ func (q *Queries) IAMCreateRole(ctx context.Context, arg IAMCreateRoleParams) (i
 		arg.Description,
 		arg.Status,
 		arg.Grants,
+		arg.TemplateKey,
 	)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
 }
 
-const iAMCreateSession = `-- name: IAMCreateSession :exec
-INSERT INTO iam_sessions(token_hash,tenant_id,account_id,csrf_token,expires_at) VALUES($1,$2,$3,$4,$5)
+const iAMCurrentContextRoleGrants = `-- name: IAMCurrentContextRoleGrants :many
+SELECT role.grants FROM iam_context_role_grants grant_record
+JOIN iam_roles role ON role.tenant_id = grant_record.tenant_id AND role.id = grant_record.role_id
+WHERE grant_record.tenant_id = $1 AND grant_record.principal_id = $2
+AND grant_record.expires_at > now() AND grant_record.revoked_at IS NULL
+AND grant_record.identity_binding_id IS NOT DISTINCT FROM $3::uuid
+AND role.status = 'active' AND role.template_key = 'custom'
 `
 
-type IAMCreateSessionParams struct {
-	TokenHash string
-	TenantID  string
-	AccountID int64
-	CsrfToken string
-	ExpiresAt pgtype.Timestamptz
+type IAMCurrentContextRoleGrantsParams struct {
+	TenantID          string
+	PrincipalID       pgtype.UUID
+	IdentityBindingID pgtype.UUID
 }
 
-func (q *Queries) IAMCreateSession(ctx context.Context, arg IAMCreateSessionParams) error {
-	_, err := q.db.Exec(ctx, iAMCreateSession,
-		arg.TokenHash,
-		arg.TenantID,
-		arg.AccountID,
-		arg.CsrfToken,
-		arg.ExpiresAt,
-	)
-	return err
+func (q *Queries) IAMCurrentContextRoleGrants(ctx context.Context, arg IAMCurrentContextRoleGrantsParams) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, iAMCurrentContextRoleGrants, arg.TenantID, arg.PrincipalID, arg.IdentityBindingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := [][]byte{}
+	for rows.Next() {
+		var grants []byte
+		if err := rows.Scan(&grants); err != nil {
+			return nil, err
+		}
+		items = append(items, grants)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const iAMDeleteAccount = `-- name: IAMDeleteAccount :one
-DELETE FROM iam_accounts WHERE iam_accounts.tenant_id=$1 AND iam_accounts.id=$2 AND ($3::boolean OR iam_accounts.id=$4::bigint OR iam_accounts.organization_id=ANY($5::bigint[]) OR iam_accounts.department_id=ANY($6::bigint[]) OR EXISTS (SELECT 1 FROM iam_department_memberships m WHERE m.tenant_id=iam_accounts.tenant_id AND m.account_id=iam_accounts.id AND (m.organization_id=ANY($5::bigint[]) OR m.department_id=ANY($6::bigint[])))) RETURNING iam_accounts.id
+DELETE FROM iam_accounts WHERE iam_accounts.tenant_id=$1 AND iam_accounts.id=$2 AND ($3::boolean OR iam_accounts.id=$4::bigint) RETURNING iam_accounts.id
 `
 
 type IAMDeleteAccountParams struct {
@@ -316,8 +435,6 @@ type IAMDeleteAccountParams struct {
 	ID       int64
 	AllData  bool
 	OwnID    int64
-	OrgIds   []int64
-	DeptIds  []int64
 }
 
 func (q *Queries) IAMDeleteAccount(ctx context.Context, arg IAMDeleteAccountParams) (int64, error) {
@@ -326,8 +443,6 @@ func (q *Queries) IAMDeleteAccount(ctx context.Context, arg IAMDeleteAccountPara
 		arg.ID,
 		arg.AllData,
 		arg.OwnID,
-		arg.OrgIds,
-		arg.DeptIds,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -335,7 +450,7 @@ func (q *Queries) IAMDeleteAccount(ctx context.Context, arg IAMDeleteAccountPara
 }
 
 const iAMDeleteDepartment = `-- name: IAMDeleteDepartment :one
-DELETE FROM iam_departments WHERE tenant_id=$1 AND id=$2 AND ($3::boolean OR organization_id=ANY($4::bigint[]) OR id=ANY($5::bigint[])) RETURNING id
+DELETE FROM identity_departments WHERE tenant_id=$1 AND id=$2 AND ($3::boolean OR organization_id=ANY($4::bigint[]) OR id=ANY($5::bigint[])) RETURNING id
 `
 
 type IAMDeleteDepartmentParams struct {
@@ -359,31 +474,8 @@ func (q *Queries) IAMDeleteDepartment(ctx context.Context, arg IAMDeleteDepartme
 	return id, err
 }
 
-const iAMDeleteOrganization = `-- name: IAMDeleteOrganization :one
-DELETE FROM iam_organizations WHERE tenant_id=$1 AND id=$2 AND ($3::boolean OR id=ANY($4::bigint[])) RETURNING id
-`
-
-type IAMDeleteOrganizationParams struct {
-	TenantID string
-	ID       int64
-	AllData  bool
-	OrgIds   []int64
-}
-
-func (q *Queries) IAMDeleteOrganization(ctx context.Context, arg IAMDeleteOrganizationParams) (int64, error) {
-	row := q.db.QueryRow(ctx, iAMDeleteOrganization,
-		arg.TenantID,
-		arg.ID,
-		arg.AllData,
-		arg.OrgIds,
-	)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
-}
-
 const iAMDeleteRole = `-- name: IAMDeleteRole :one
-DELETE FROM iam_roles WHERE tenant_id=$1 AND id=$2 AND $3::boolean RETURNING id
+DELETE FROM iam_roles WHERE tenant_id=$1 AND id=$2 AND $3::boolean AND template_key = 'custom' RETURNING id
 `
 
 type IAMDeleteRoleParams struct {
@@ -409,7 +501,7 @@ func (q *Queries) IAMDeleteSession(ctx context.Context, tokenHash string) error 
 }
 
 const iAMDepartmentTree = `-- name: IAMDepartmentTree :many
-WITH RECURSIVE tree AS (SELECT root.id FROM iam_departments root WHERE root.tenant_id=$1 AND root.id=$2 UNION SELECT d.id FROM iam_departments d JOIN tree t ON d.parent_id=t.id WHERE d.tenant_id=$1) SELECT id FROM tree
+WITH RECURSIVE tree AS (SELECT root.id FROM identity_department_directory root WHERE root.tenant_id=$1 AND root.id=$2 UNION SELECT d.id FROM identity_department_directory d JOIN tree t ON d.parent_id=t.id WHERE d.tenant_id=$1) SELECT id FROM tree
 `
 
 type IAMDepartmentTreeParams struct {
@@ -437,8 +529,17 @@ func (q *Queries) IAMDepartmentTree(ctx context.Context, arg IAMDepartmentTreePa
 	return items, nil
 }
 
+const iAMEnsureBootstrapTenant = `-- name: IAMEnsureBootstrapTenant :exec
+INSERT INTO iam_tenants (id) VALUES ($1) ON CONFLICT (id) DO NOTHING
+`
+
+func (q *Queries) IAMEnsureBootstrapTenant(ctx context.Context, tenantID string) error {
+	_, err := q.db.Exec(ctx, iAMEnsureBootstrapTenant, tenantID)
+	return err
+}
+
 const iAMGetAccount = `-- name: IAMGetAccount :one
-SELECT iam_accounts.id,username,full_name,email,status,organization_id,department_id,overrides,is_admin,created_at,last_login FROM iam_accounts WHERE iam_accounts.tenant_id=$1 AND iam_accounts.id=$2 AND ($3::boolean OR iam_accounts.id=$4::bigint OR iam_accounts.organization_id=ANY($5::bigint[]) OR iam_accounts.department_id=ANY($6::bigint[]) OR EXISTS (SELECT 1 FROM iam_department_memberships m WHERE m.tenant_id=iam_accounts.tenant_id AND m.account_id=iam_accounts.id AND (m.organization_id=ANY($5::bigint[]) OR m.department_id=ANY($6::bigint[]))))
+SELECT iam_accounts.id,username,full_name,email,status,overrides,is_admin,created_at,last_login FROM account_profile_directory iam_accounts WHERE iam_accounts.tenant_id=$1 AND iam_accounts.id=$2 AND ($3::boolean OR iam_accounts.id=$4::bigint)
 `
 
 type IAMGetAccountParams struct {
@@ -446,22 +547,18 @@ type IAMGetAccountParams struct {
 	ID       int64
 	AllData  bool
 	OwnID    int64
-	OrgIds   []int64
-	DeptIds  []int64
 }
 
 type IAMGetAccountRow struct {
-	ID             int64
-	Username       string
-	FullName       string
-	Email          string
-	Status         string
-	OrganizationID int64
-	DepartmentID   int64
-	Overrides      []byte
-	IsAdmin        bool
-	CreatedAt      pgtype.Timestamptz
-	LastLogin      pgtype.Timestamptz
+	ID        int64
+	Username  string
+	FullName  string
+	Email     string
+	Status    string
+	Overrides []byte
+	IsAdmin   bool
+	CreatedAt pgtype.Timestamptz
+	LastLogin pgtype.Timestamptz
 }
 
 func (q *Queries) IAMGetAccount(ctx context.Context, arg IAMGetAccountParams) (IAMGetAccountRow, error) {
@@ -470,8 +567,6 @@ func (q *Queries) IAMGetAccount(ctx context.Context, arg IAMGetAccountParams) (I
 		arg.ID,
 		arg.AllData,
 		arg.OwnID,
-		arg.OrgIds,
-		arg.DeptIds,
 	)
 	var i IAMGetAccountRow
 	err := row.Scan(
@@ -480,8 +575,6 @@ func (q *Queries) IAMGetAccount(ctx context.Context, arg IAMGetAccountParams) (I
 		&i.FullName,
 		&i.Email,
 		&i.Status,
-		&i.OrganizationID,
-		&i.DepartmentID,
 		&i.Overrides,
 		&i.IsAdmin,
 		&i.CreatedAt,
@@ -490,8 +583,45 @@ func (q *Queries) IAMGetAccount(ctx context.Context, arg IAMGetAccountParams) (I
 	return i, err
 }
 
+const iAMGetAuthorityAccount = `-- name: IAMGetAuthorityAccount :one
+SELECT id, username, status, is_admin, created_at, last_login,
+       CASE WHEN machine_principal_id IS NOT NULL THEN overrides ELSE '[]'::jsonb END AS machine_grants
+FROM iam_accounts
+WHERE tenant_id = $1 AND id = $2
+`
+
+type IAMGetAuthorityAccountParams struct {
+	TenantID string
+	ID       int64
+}
+
+type IAMGetAuthorityAccountRow struct {
+	ID            int64
+	Username      string
+	Status        string
+	IsAdmin       bool
+	CreatedAt     pgtype.Timestamptz
+	LastLogin     pgtype.Timestamptz
+	MachineGrants []byte
+}
+
+func (q *Queries) IAMGetAuthorityAccount(ctx context.Context, arg IAMGetAuthorityAccountParams) (IAMGetAuthorityAccountRow, error) {
+	row := q.db.QueryRow(ctx, iAMGetAuthorityAccount, arg.TenantID, arg.ID)
+	var i IAMGetAuthorityAccountRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Status,
+		&i.IsAdmin,
+		&i.CreatedAt,
+		&i.LastLogin,
+		&i.MachineGrants,
+	)
+	return i, err
+}
+
 const iAMGetDepartment = `-- name: IAMGetDepartment :one
-SELECT id,name,code,organization_id,COALESCE(parent_id,0)::bigint AS parent_id,manager,status,description,created_at FROM iam_departments WHERE tenant_id=$1 AND id=$2 AND ($3::boolean OR organization_id=ANY($4::bigint[]) OR id=ANY($5::bigint[]))
+SELECT id,name,code,organization_id,COALESCE(parent_id,0)::bigint AS parent_id,manager,status,description,created_at FROM identity_department_directory WHERE tenant_id=$1 AND id=$2 AND ($3::boolean OR organization_id=ANY($4::bigint[]) OR id=ANY($5::bigint[]))
 `
 
 type IAMGetDepartmentParams struct {
@@ -537,8 +667,32 @@ func (q *Queries) IAMGetDepartment(ctx context.Context, arg IAMGetDepartmentPara
 	return i, err
 }
 
+const iAMGetInteractiveAccount = `-- name: IAMGetInteractiveAccount :one
+SELECT account_id, membership_id
+FROM iam_active_account_subjects
+WHERE login_account_id = $1 AND principal_id = $2 AND tenant_id = $3
+`
+
+type IAMGetInteractiveAccountParams struct {
+	LoginAccountID pgtype.UUID
+	PrincipalID    pgtype.UUID
+	TenantID       string
+}
+
+type IAMGetInteractiveAccountRow struct {
+	AccountID    int64
+	MembershipID pgtype.UUID
+}
+
+func (q *Queries) IAMGetInteractiveAccount(ctx context.Context, arg IAMGetInteractiveAccountParams) (IAMGetInteractiveAccountRow, error) {
+	row := q.db.QueryRow(ctx, iAMGetInteractiveAccount, arg.LoginAccountID, arg.PrincipalID, arg.TenantID)
+	var i IAMGetInteractiveAccountRow
+	err := row.Scan(&i.AccountID, &i.MembershipID)
+	return i, err
+}
+
 const iAMGetOrganization = `-- name: IAMGetOrganization :one
-SELECT id,name,code,kind,COALESCE(parent_id,0)::bigint AS parent_id,status,description,created_at FROM iam_organizations WHERE tenant_id=$1 AND id=$2 AND ($3::boolean OR id=ANY($4::bigint[]))
+SELECT id,name,code,kind,COALESCE(parent_id,0)::bigint AS parent_id,status,description,created_at FROM identity_organizations WHERE tenant_id=$1 AND id=$2 AND ($3::boolean OR id=ANY($4::bigint[]))
 `
 
 type IAMGetOrganizationParams struct {
@@ -615,55 +769,56 @@ func (q *Queries) IAMGetRole(ctx context.Context, arg IAMGetRoleParams) (IAMGetR
 	return i, err
 }
 
-const iAMInvalidateDetachedTemporary = `-- name: IAMInvalidateDetachedTemporary :exec
-UPDATE iam_temporary_requests r SET status=CASE WHEN r.status='pending' THEN 'cancelled' ELSE 'revoked' END,cancelled_at=CASE WHEN r.status='pending' THEN now() ELSE r.cancelled_at END,revoked_at=CASE WHEN r.status='approved' THEN now() ELSE r.revoked_at END
-WHERE r.tenant_id=$1 AND r.applicant_id=$2 AND r.status IN ('pending','approved') AND NOT EXISTS (SELECT 1 FROM iam_accounts a WHERE a.tenant_id=r.tenant_id AND a.id=r.applicant_id AND a.department_id=r.department_id) AND NOT EXISTS (SELECT 1 FROM iam_department_memberships m WHERE m.tenant_id=r.tenant_id AND m.account_id=r.applicant_id AND m.department_id=r.department_id)
+const iAMGrantWriteLock = `-- name: IAMGrantWriteLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('iam:grants:' || $1::text, 0))
 `
 
-type IAMInvalidateDetachedTemporaryParams struct {
-	TenantID    string
-	ApplicantID int64
-}
-
-func (q *Queries) IAMInvalidateDetachedTemporary(ctx context.Context, arg IAMInvalidateDetachedTemporaryParams) error {
-	_, err := q.db.Exec(ctx, iAMInvalidateDetachedTemporary, arg.TenantID, arg.ApplicantID)
+func (q *Queries) IAMGrantWriteLock(ctx context.Context, tenantID string) error {
+	_, err := q.db.Exec(ctx, iAMGrantWriteLock, tenantID)
 	return err
 }
 
+const iAMHasTenantAccountAuthority = `-- name: IAMHasTenantAccountAuthority :one
+SELECT EXISTS (SELECT 1 FROM iam_tenant_account_authority access
+    WHERE access.tenant_id = $1 AND access.account_id = $2)::boolean
+`
+
+type IAMHasTenantAccountAuthorityParams struct {
+	TenantID  string
+	AccountID int64
+}
+
+func (q *Queries) IAMHasTenantAccountAuthority(ctx context.Context, arg IAMHasTenantAccountAuthorityParams) (bool, error) {
+	row := q.db.QueryRow(ctx, iAMHasTenantAccountAuthority, arg.TenantID, arg.AccountID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const iAMListAccounts = `-- name: IAMListAccounts :many
-SELECT iam_accounts.id,username,full_name,email,status,organization_id,department_id,overrides,is_admin,created_at,last_login FROM iam_accounts WHERE iam_accounts.tenant_id=$1 AND ($2::boolean OR iam_accounts.id=$3::bigint OR iam_accounts.organization_id=ANY($4::bigint[]) OR iam_accounts.department_id=ANY($5::bigint[]) OR EXISTS (SELECT 1 FROM iam_department_memberships m WHERE m.tenant_id=iam_accounts.tenant_id AND m.account_id=iam_accounts.id AND (m.organization_id=ANY($4::bigint[]) OR m.department_id=ANY($5::bigint[])))) ORDER BY iam_accounts.id
+SELECT iam_accounts.id,username,full_name,email,status,overrides,is_admin,created_at,last_login FROM account_profile_directory iam_accounts WHERE iam_accounts.tenant_id=$1 AND ($2::boolean OR iam_accounts.id=$3::bigint) ORDER BY iam_accounts.id
 `
 
 type IAMListAccountsParams struct {
 	TenantID string
 	AllData  bool
 	OwnID    int64
-	OrgIds   []int64
-	DeptIds  []int64
 }
 
 type IAMListAccountsRow struct {
-	ID             int64
-	Username       string
-	FullName       string
-	Email          string
-	Status         string
-	OrganizationID int64
-	DepartmentID   int64
-	Overrides      []byte
-	IsAdmin        bool
-	CreatedAt      pgtype.Timestamptz
-	LastLogin      pgtype.Timestamptz
+	ID        int64
+	Username  string
+	FullName  string
+	Email     string
+	Status    string
+	Overrides []byte
+	IsAdmin   bool
+	CreatedAt pgtype.Timestamptz
+	LastLogin pgtype.Timestamptz
 }
 
 func (q *Queries) IAMListAccounts(ctx context.Context, arg IAMListAccountsParams) ([]IAMListAccountsRow, error) {
-	rows, err := q.db.Query(ctx, iAMListAccounts,
-		arg.TenantID,
-		arg.AllData,
-		arg.OwnID,
-		arg.OrgIds,
-		arg.DeptIds,
-	)
+	rows, err := q.db.Query(ctx, iAMListAccounts, arg.TenantID, arg.AllData, arg.OwnID)
 	if err != nil {
 		return nil, err
 	}
@@ -677,8 +832,6 @@ func (q *Queries) IAMListAccounts(ctx context.Context, arg IAMListAccountsParams
 			&i.FullName,
 			&i.Email,
 			&i.Status,
-			&i.OrganizationID,
-			&i.DepartmentID,
 			&i.Overrides,
 			&i.IsAdmin,
 			&i.CreatedAt,
@@ -694,8 +847,94 @@ func (q *Queries) IAMListAccounts(ctx context.Context, arg IAMListAccountsParams
 	return items, nil
 }
 
+const iAMListAuthorityAccounts = `-- name: IAMListAuthorityAccounts :many
+SELECT id, username, status
+FROM iam_accounts
+WHERE tenant_id = $1 AND ($2::boolean OR id = $3::bigint)
+ORDER BY id
+`
+
+type IAMListAuthorityAccountsParams struct {
+	TenantID string
+	AllData  bool
+	OwnID    int64
+}
+
+type IAMListAuthorityAccountsRow struct {
+	ID       int64
+	Username string
+	Status   string
+}
+
+func (q *Queries) IAMListAuthorityAccounts(ctx context.Context, arg IAMListAuthorityAccountsParams) ([]IAMListAuthorityAccountsRow, error) {
+	rows, err := q.db.Query(ctx, iAMListAuthorityAccounts, arg.TenantID, arg.AllData, arg.OwnID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []IAMListAuthorityAccountsRow{}
+	for rows.Next() {
+		var i IAMListAuthorityAccountsRow
+		if err := rows.Scan(&i.ID, &i.Username, &i.Status); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const iAMListContextRoleGrants = `-- name: IAMListContextRoleGrants :many
+SELECT id, principal_id, identity_binding_id, role_id, granted_by, reason, created_at, expires_at, revoked_at
+FROM iam_context_role_grants WHERE tenant_id = $1 ORDER BY created_at DESC, id LIMIT 100
+`
+
+type IAMListContextRoleGrantsRow struct {
+	ID                pgtype.UUID
+	PrincipalID       pgtype.UUID
+	IdentityBindingID pgtype.UUID
+	RoleID            int64
+	GrantedBy         int64
+	Reason            string
+	CreatedAt         pgtype.Timestamptz
+	ExpiresAt         pgtype.Timestamptz
+	RevokedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) IAMListContextRoleGrants(ctx context.Context, tenantID string) ([]IAMListContextRoleGrantsRow, error) {
+	rows, err := q.db.Query(ctx, iAMListContextRoleGrants, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []IAMListContextRoleGrantsRow{}
+	for rows.Next() {
+		var i IAMListContextRoleGrantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PrincipalID,
+			&i.IdentityBindingID,
+			&i.RoleID,
+			&i.GrantedBy,
+			&i.Reason,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.RevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const iAMListDepartments = `-- name: IAMListDepartments :many
-SELECT id,name,code,organization_id,COALESCE(parent_id,0)::bigint AS parent_id,manager,status,description,created_at FROM iam_departments WHERE tenant_id=$1 AND ($2::boolean OR organization_id=ANY($3::bigint[]) OR id=ANY($4::bigint[])) ORDER BY id
+SELECT id,name,code,organization_id,COALESCE(parent_id,0)::bigint AS parent_id,manager,status,description,created_at FROM identity_department_directory WHERE tenant_id=$1 AND ($2::boolean OR organization_id=ANY($3::bigint[]) OR id=ANY($4::bigint[])) ORDER BY id
 `
 
 type IAMListDepartmentsParams struct {
@@ -752,8 +991,98 @@ func (q *Queries) IAMListDepartments(ctx context.Context, arg IAMListDepartments
 	return items, nil
 }
 
+const iAMListDeviceSessions = `-- name: IAMListDeviceSessions :many
+SELECT session.public_id, session.device_label, session.tenant_id, session.created_at, session.last_seen_at, session.expires_at,
+       (session.token_hash = $1::text)::boolean AS current_device
+FROM iam_sessions session
+JOIN iam_accounts placement ON placement.tenant_id = session.tenant_id AND placement.id = session.account_id
+WHERE placement.login_account_id = $2 AND session.expires_at > now()
+ORDER BY current_device DESC, session.last_seen_at DESC, session.public_id
+LIMIT 100
+`
+
+type IAMListDeviceSessionsParams struct {
+	CurrentToken   string
+	LoginAccountID pgtype.UUID
+}
+
+type IAMListDeviceSessionsRow struct {
+	PublicID      pgtype.UUID
+	DeviceLabel   string
+	TenantID      string
+	CreatedAt     pgtype.Timestamptz
+	LastSeenAt    pgtype.Timestamptz
+	ExpiresAt     pgtype.Timestamptz
+	CurrentDevice bool
+}
+
+func (q *Queries) IAMListDeviceSessions(ctx context.Context, arg IAMListDeviceSessionsParams) ([]IAMListDeviceSessionsRow, error) {
+	rows, err := q.db.Query(ctx, iAMListDeviceSessions, arg.CurrentToken, arg.LoginAccountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []IAMListDeviceSessionsRow{}
+	for rows.Next() {
+		var i IAMListDeviceSessionsRow
+		if err := rows.Scan(
+			&i.PublicID,
+			&i.DeviceLabel,
+			&i.TenantID,
+			&i.CreatedAt,
+			&i.LastSeenAt,
+			&i.ExpiresAt,
+			&i.CurrentDevice,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const iAMListIdentityBindings = `-- name: IAMListIdentityBindings :many
+SELECT id, tenant_id, identity_type, identity_version FROM iam_active_identity_bindings
+WHERE principal_id = $1 ORDER BY tenant_id, identity_type, id
+`
+
+type IAMListIdentityBindingsRow struct {
+	ID              pgtype.UUID
+	TenantID        string
+	IdentityType    string
+	IdentityVersion string
+}
+
+func (q *Queries) IAMListIdentityBindings(ctx context.Context, principalID pgtype.UUID) ([]IAMListIdentityBindingsRow, error) {
+	rows, err := q.db.Query(ctx, iAMListIdentityBindings, principalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []IAMListIdentityBindingsRow{}
+	for rows.Next() {
+		var i IAMListIdentityBindingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.IdentityType,
+			&i.IdentityVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const iAMListOrganizations = `-- name: IAMListOrganizations :many
-SELECT id,name,code,kind,COALESCE(parent_id,0)::bigint AS parent_id,status,description,created_at FROM iam_organizations WHERE tenant_id=$1 AND ($2::boolean OR id=ANY($3::bigint[])) ORDER BY id
+SELECT id,name,code,kind,COALESCE(parent_id,0)::bigint AS parent_id,status,description,created_at FROM identity_organizations WHERE tenant_id=$1 AND ($2::boolean OR id=ANY($3::bigint[])) ORDER BY id
 `
 
 type IAMListOrganizationsParams struct {
@@ -849,25 +1178,85 @@ func (q *Queries) IAMListRoles(ctx context.Context, arg IAMListRolesParams) ([]I
 	return items, nil
 }
 
-const iAMLogin = `-- name: IAMLogin :one
-SELECT a.id,a.tenant_id,a.password_hash,a.status FROM iam_accounts a WHERE a.username=$1
+const iAMLockManagedLogin = `-- name: IAMLockManagedLogin :one
+SELECT login.id FROM iam_login_accounts login
+JOIN iam_accounts placement ON placement.login_account_id = login.id
+WHERE placement.tenant_id = $1 AND placement.id = $2
+AND NOT placement.is_admin AND login.id <> $3::uuid
+FOR UPDATE OF login
 `
 
-type IAMLoginRow struct {
-	ID           int64
+type IAMLockManagedLoginParams struct {
 	TenantID     string
-	PasswordHash string
-	Status       string
+	AccountID    int64
+	ActorLoginID pgtype.UUID
 }
 
-func (q *Queries) IAMLogin(ctx context.Context, username string) (IAMLoginRow, error) {
-	row := q.db.QueryRow(ctx, iAMLogin, username)
-	var i IAMLoginRow
+func (q *Queries) IAMLockManagedLogin(ctx context.Context, arg IAMLockManagedLoginParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, iAMLockManagedLogin, arg.TenantID, arg.AccountID, arg.ActorLoginID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const iAMLockMembershipInvitation = `-- name: IAMLockMembershipInvitation :one
+SELECT invite.id, invite.tenant_id, invite.inviter_account_id
+FROM iam_membership_invitations invite
+JOIN iam_login_accounts login ON login.username = invite.username AND login.realm = invite.recipient_realm AND login.id = $1 AND login.status = 'active'
+JOIN iam_principals principal ON principal.id = login.principal_id AND principal.kind = 'human' AND principal.status = 'active'
+WHERE invite.token_hash = $2 AND invite.expires_at > now() AND invite.accepted_at IS NULL
+FOR UPDATE OF invite
+`
+
+type IAMLockMembershipInvitationParams struct {
+	LoginAccountID pgtype.UUID
+	TokenHash      string
+}
+
+type IAMLockMembershipInvitationRow struct {
+	ID               pgtype.UUID
+	TenantID         string
+	InviterAccountID int64
+}
+
+func (q *Queries) IAMLockMembershipInvitation(ctx context.Context, arg IAMLockMembershipInvitationParams) (IAMLockMembershipInvitationRow, error) {
+	row := q.db.QueryRow(ctx, iAMLockMembershipInvitation, arg.LoginAccountID, arg.TokenHash)
+	var i IAMLockMembershipInvitationRow
+	err := row.Scan(&i.ID, &i.TenantID, &i.InviterAccountID)
+	return i, err
+}
+
+const iAMLockRefreshSession = `-- name: IAMLockRefreshSession :one
+SELECT session.public_id, COALESCE(session.refreshed_at, session.created_at)::timestamptz AS authenticated_at,
+    session.expires_at, session.last_seen_at
+FROM iam_sessions session
+JOIN iam_active_account_subjects subject ON subject.tenant_id = session.tenant_id AND subject.account_id = session.account_id
+WHERE session.token_hash = $1 AND session.csrf_token = $2
+    AND subject.login_account_id = $3 AND session.expires_at > clock_timestamp()
+FOR UPDATE OF session
+`
+
+type IAMLockRefreshSessionParams struct {
+	TokenHash    string
+	ExpectedCsrf string
+	LoginID      pgtype.UUID
+}
+
+type IAMLockRefreshSessionRow struct {
+	PublicID        pgtype.UUID
+	AuthenticatedAt pgtype.Timestamptz
+	ExpiresAt       pgtype.Timestamptz
+	LastSeenAt      pgtype.Timestamptz
+}
+
+func (q *Queries) IAMLockRefreshSession(ctx context.Context, arg IAMLockRefreshSessionParams) (IAMLockRefreshSessionRow, error) {
+	row := q.db.QueryRow(ctx, iAMLockRefreshSession, arg.TokenHash, arg.ExpectedCsrf, arg.LoginID)
+	var i IAMLockRefreshSessionRow
 	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.PasswordHash,
-		&i.Status,
+		&i.PublicID,
+		&i.AuthenticatedAt,
+		&i.ExpiresAt,
+		&i.LastSeenAt,
 	)
 	return i, err
 }
@@ -920,134 +1309,173 @@ func (q *Queries) IAMMarkAdmin(ctx context.Context, arg IAMMarkAdminParams) erro
 	return err
 }
 
-const iAMMembershipRoleGrants = `-- name: IAMMembershipRoleGrants :many
-SELECT r.grants FROM iam_roles r JOIN iam_department_membership_roles m ON m.tenant_id=r.tenant_id AND m.role_id=r.id WHERE m.tenant_id=$1 AND m.account_id=$2 AND m.department_id=$3 AND r.status='active'
+const iAMProtectedRole = `-- name: IAMProtectedRole :one
+SELECT (template_key <> 'custom')::boolean AS protected FROM iam_roles WHERE tenant_id = $1 AND id = $2
 `
 
-type IAMMembershipRoleGrantsParams struct {
-	TenantID     string
-	AccountID    int64
-	DepartmentID int64
-}
-
-func (q *Queries) IAMMembershipRoleGrants(ctx context.Context, arg IAMMembershipRoleGrantsParams) ([][]byte, error) {
-	rows, err := q.db.Query(ctx, iAMMembershipRoleGrants, arg.TenantID, arg.AccountID, arg.DepartmentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := [][]byte{}
-	for rows.Next() {
-		var grants []byte
-		if err := rows.Scan(&grants); err != nil {
-			return nil, err
-		}
-		items = append(items, grants)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const iAMMembershipRoles = `-- name: IAMMembershipRoles :many
-SELECT role_id FROM iam_department_membership_roles WHERE tenant_id=$1 AND account_id=$2 AND department_id=$3 ORDER BY role_id
-`
-
-type IAMMembershipRolesParams struct {
-	TenantID     string
-	AccountID    int64
-	DepartmentID int64
-}
-
-func (q *Queries) IAMMembershipRoles(ctx context.Context, arg IAMMembershipRolesParams) ([]int64, error) {
-	rows, err := q.db.Query(ctx, iAMMembershipRoles, arg.TenantID, arg.AccountID, arg.DepartmentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []int64{}
-	for rows.Next() {
-		var role_id int64
-		if err := rows.Scan(&role_id); err != nil {
-			return nil, err
-		}
-		items = append(items, role_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const iAMMemberships = `-- name: IAMMemberships :many
-SELECT m.organization_id,m.department_id,d.name AS department_name,m.overrides FROM iam_department_memberships m JOIN iam_departments d ON d.tenant_id=m.tenant_id AND d.id=m.department_id WHERE m.tenant_id=$1 AND m.account_id=$2 ORDER BY m.department_id
-`
-
-type IAMMembershipsParams struct {
-	TenantID  string
-	AccountID int64
-}
-
-type IAMMembershipsRow struct {
-	OrganizationID int64
-	DepartmentID   int64
-	DepartmentName string
-	Overrides      []byte
-}
-
-func (q *Queries) IAMMemberships(ctx context.Context, arg IAMMembershipsParams) ([]IAMMembershipsRow, error) {
-	rows, err := q.db.Query(ctx, iAMMemberships, arg.TenantID, arg.AccountID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []IAMMembershipsRow{}
-	for rows.Next() {
-		var i IAMMembershipsRow
-		if err := rows.Scan(
-			&i.OrganizationID,
-			&i.DepartmentID,
-			&i.DepartmentName,
-			&i.Overrides,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const iAMOrganizationTree = `-- name: IAMOrganizationTree :many
-WITH RECURSIVE tree AS (SELECT root.id FROM iam_organizations root WHERE root.tenant_id=$1 AND root.id=$2 UNION SELECT o.id FROM iam_organizations o JOIN tree t ON o.parent_id=t.id WHERE o.tenant_id=$1) SELECT id FROM tree
-`
-
-type IAMOrganizationTreeParams struct {
+type IAMProtectedRoleParams struct {
 	TenantID string
 	ID       int64
 }
 
-func (q *Queries) IAMOrganizationTree(ctx context.Context, arg IAMOrganizationTreeParams) ([]int64, error) {
-	rows, err := q.db.Query(ctx, iAMOrganizationTree, arg.TenantID, arg.ID)
+func (q *Queries) IAMProtectedRole(ctx context.Context, arg IAMProtectedRoleParams) (bool, error) {
+	row := q.db.QueryRow(ctx, iAMProtectedRole, arg.TenantID, arg.ID)
+	var protected bool
+	err := row.Scan(&protected)
+	return protected, err
+}
+
+const iAMReadIdentityBinding = `-- name: IAMReadIdentityBinding :one
+SELECT identity_type, identity_version, entity_id FROM iam_active_identity_bindings
+WHERE tenant_id = $1 AND principal_id = $2 AND id = $3
+`
+
+type IAMReadIdentityBindingParams struct {
+	TenantID    string
+	PrincipalID pgtype.UUID
+	ID          pgtype.UUID
+}
+
+type IAMReadIdentityBindingRow struct {
+	IdentityType    string
+	IdentityVersion string
+	EntityID        int64
+}
+
+func (q *Queries) IAMReadIdentityBinding(ctx context.Context, arg IAMReadIdentityBindingParams) (IAMReadIdentityBindingRow, error) {
+	row := q.db.QueryRow(ctx, iAMReadIdentityBinding, arg.TenantID, arg.PrincipalID, arg.ID)
+	var i IAMReadIdentityBindingRow
+	err := row.Scan(&i.IdentityType, &i.IdentityVersion, &i.EntityID)
+	return i, err
+}
+
+const iAMReconcileIdentityBindingRevocations = `-- name: IAMReconcileIdentityBindingRevocations :execrows
+WITH stale AS (
+    SELECT binding.id FROM iam_identity_bindings binding
+    WHERE binding.status IN ('active', 'pending', 'suspended', 'expired') AND EXISTS (
+        SELECT 1 FROM cap_outbox event WHERE event.tenant_id = binding.tenant_id
+            AND event.event_type = binding.revocation_event AND event.aggregate_id = binding.entity_id::text
+    )
+    ORDER BY binding.id LIMIT 500 FOR UPDATE OF binding SKIP LOCKED
+)
+UPDATE iam_identity_bindings binding SET status = 'revoked', revoked_at = now()
+FROM stale WHERE binding.id = stale.id AND binding.status IN ('active', 'pending', 'suspended', 'expired')
+`
+
+func (q *Queries) IAMReconcileIdentityBindingRevocations(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, iAMReconcileIdentityBindingRevocations)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	defer rows.Close()
-	items := []int64{}
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+	return result.RowsAffected(), nil
+}
+
+const iAMRevokeChangedContextRoles = `-- name: IAMRevokeChangedContextRoles :exec
+UPDATE iam_context_role_grants SET revoked_at = now()
+WHERE tenant_id = $1 AND role_id = $2 AND revoked_at IS NULL AND expires_at > now()
+`
+
+type IAMRevokeChangedContextRolesParams struct {
+	TenantID string
+	RoleID   int64
+}
+
+func (q *Queries) IAMRevokeChangedContextRoles(ctx context.Context, arg IAMRevokeChangedContextRolesParams) error {
+	_, err := q.db.Exec(ctx, iAMRevokeChangedContextRoles, arg.TenantID, arg.RoleID)
+	return err
+}
+
+const iAMRevokeContextRoleGrant = `-- name: IAMRevokeContextRoleGrant :one
+UPDATE iam_context_role_grants SET revoked_at = now()
+WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL AND expires_at > now() RETURNING id
+`
+
+type IAMRevokeContextRoleGrantParams struct {
+	TenantID string
+	ID       pgtype.UUID
+}
+
+func (q *Queries) IAMRevokeContextRoleGrant(ctx context.Context, arg IAMRevokeContextRoleGrantParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, iAMRevokeContextRoleGrant, arg.TenantID, arg.ID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const iAMRevokeDeviceSession = `-- name: IAMRevokeDeviceSession :one
+DELETE FROM iam_sessions target USING iam_accounts placement
+WHERE target.tenant_id = placement.tenant_id AND target.account_id = placement.id
+AND placement.login_account_id = $1 AND target.public_id = $2
+AND EXISTS (
+    SELECT 1 FROM iam_sessions present
+    JOIN iam_active_account_subjects subject ON subject.tenant_id = present.tenant_id AND subject.account_id = present.account_id
+    WHERE present.token_hash = $3 AND present.csrf_token = $4
+    AND present.expires_at > now() AND subject.login_account_id = $1
+    AND (present.identity_binding_id IS NULL OR EXISTS (
+        SELECT 1 FROM iam_active_identity_bindings binding WHERE binding.id = present.identity_binding_id
+            AND binding.tenant_id = present.tenant_id AND binding.principal_id = subject.principal_id
+    ))
+)
+RETURNING target.public_id
+`
+
+type IAMRevokeDeviceSessionParams struct {
+	LoginAccountID pgtype.UUID
+	PublicID       pgtype.UUID
+	CurrentToken   string
+	CurrentContext string
+}
+
+func (q *Queries) IAMRevokeDeviceSession(ctx context.Context, arg IAMRevokeDeviceSessionParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, iAMRevokeDeviceSession,
+		arg.LoginAccountID,
+		arg.PublicID,
+		arg.CurrentToken,
+		arg.CurrentContext,
+	)
+	var public_id pgtype.UUID
+	err := row.Scan(&public_id)
+	return public_id, err
+}
+
+const iAMRevokeIdentityBindingsForEntity = `-- name: IAMRevokeIdentityBindingsForEntity :exec
+UPDATE iam_identity_bindings SET status = 'revoked', revoked_at = now()
+WHERE tenant_id = $1 AND identity_type = $2 AND identity_version = $3 AND entity_id = $4 AND status IN ('active', 'pending', 'suspended', 'expired')
+`
+
+type IAMRevokeIdentityBindingsForEntityParams struct {
+	TenantID        string
+	IdentityType    string
+	IdentityVersion string
+	EntityID        int64
+}
+
+func (q *Queries) IAMRevokeIdentityBindingsForEntity(ctx context.Context, arg IAMRevokeIdentityBindingsForEntityParams) error {
+	_, err := q.db.Exec(ctx, iAMRevokeIdentityBindingsForEntity,
+		arg.TenantID,
+		arg.IdentityType,
+		arg.IdentityVersion,
+		arg.EntityID,
+	)
+	return err
+}
+
+const iAMRevokeOwnIdentityBinding = `-- name: IAMRevokeOwnIdentityBinding :one
+UPDATE iam_identity_bindings SET status = 'revoked', revoked_at = now()
+WHERE tenant_id = $1 AND principal_id = $2 AND id = $3 AND status IN ('active', 'pending', 'suspended', 'expired') RETURNING id
+`
+
+type IAMRevokeOwnIdentityBindingParams struct {
+	TenantID    string
+	PrincipalID pgtype.UUID
+	ID          pgtype.UUID
+}
+
+func (q *Queries) IAMRevokeOwnIdentityBinding(ctx context.Context, arg IAMRevokeOwnIdentityBindingParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, iAMRevokeOwnIdentityBinding, arg.TenantID, arg.PrincipalID, arg.ID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const iAMRevokeSessions = `-- name: IAMRevokeSessions :exec
@@ -1064,37 +1492,54 @@ func (q *Queries) IAMRevokeSessions(ctx context.Context, arg IAMRevokeSessionsPa
 	return err
 }
 
-const iAMRoleGrants = `-- name: IAMRoleGrants :many
-SELECT r.grants FROM iam_roles r JOIN iam_account_roles ar ON ar.tenant_id=r.tenant_id AND ar.role_id=r.id WHERE ar.tenant_id=$1 AND ar.account_id=$2 AND r.status='active'
+const iAMRevokeTenantMembership = `-- name: IAMRevokeTenantMembership :one
+UPDATE iam_tenant_memberships member SET status = 'revoked'
+FROM iam_accounts placement LEFT JOIN iam_login_accounts login ON login.id = placement.login_account_id
+WHERE placement.id = $1 AND placement.tenant_id = $2
+    AND member.tenant_id = placement.tenant_id AND member.principal_id = COALESCE(login.principal_id, placement.machine_principal_id)
+    AND member.status <> 'revoked'
+    AND NOT EXISTS (
+        SELECT 1 FROM iam_accounts protected JOIN iam_login_accounts protected_login ON protected_login.id = protected.login_account_id
+        WHERE protected.tenant_id = member.tenant_id AND protected.is_admin AND protected_login.principal_id = member.principal_id
+    )
+RETURNING member.id
 `
 
-type IAMRoleGrantsParams struct {
-	TenantID  string
+type IAMRevokeTenantMembershipParams struct {
 	AccountID int64
+	TenantID  string
 }
 
-func (q *Queries) IAMRoleGrants(ctx context.Context, arg IAMRoleGrantsParams) ([][]byte, error) {
-	rows, err := q.db.Query(ctx, iAMRoleGrants, arg.TenantID, arg.AccountID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := [][]byte{}
-	for rows.Next() {
-		var grants []byte
-		if err := rows.Scan(&grants); err != nil {
-			return nil, err
-		}
-		items = append(items, grants)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) IAMRevokeTenantMembership(ctx context.Context, arg IAMRevokeTenantMembershipParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, iAMRevokeTenantMembership, arg.AccountID, arg.TenantID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const iAMRoleMemberCount = `-- name: IAMRoleMemberCount :one
-SELECT count(DISTINCT account_id) FROM (SELECT account_id FROM iam_account_roles WHERE iam_account_roles.tenant_id=$1 AND iam_account_roles.role_id=$2 UNION SELECT account_id FROM iam_department_membership_roles WHERE iam_department_membership_roles.tenant_id=$1 AND iam_department_membership_roles.role_id=$2) members
+SELECT count(DISTINCT member.principal_id) FROM (
+    SELECT grant_row.principal_id
+    FROM iam_context_role_grants grant_row
+    JOIN iam_active_account_subjects subject ON subject.tenant_id = grant_row.tenant_id
+        AND subject.principal_id = grant_row.principal_id
+    WHERE grant_row.tenant_id = $1 AND grant_row.role_id = $2
+      AND grant_row.revoked_at IS NULL AND grant_row.expires_at > now()
+      AND (grant_row.identity_binding_id IS NULL OR EXISTS (
+          SELECT 1 FROM iam_active_identity_bindings binding
+          WHERE binding.tenant_id = grant_row.tenant_id AND binding.id = grant_row.identity_binding_id
+            AND binding.principal_id = grant_row.principal_id
+      ))
+    UNION ALL
+    SELECT subject.principal_id FROM iam_account_roles grant_row
+    JOIN iam_roles role ON role.tenant_id = grant_row.tenant_id AND role.id = grant_row.role_id
+        AND role.template_key = 'tenant-admin' AND role.status = 'active'
+    JOIN iam_tenant_account_authority access ON access.tenant_id = grant_row.tenant_id
+        AND access.account_id = grant_row.account_id AND access.is_admin
+    JOIN iam_active_account_subjects subject ON subject.tenant_id = access.tenant_id
+        AND subject.account_id = access.account_id
+    WHERE grant_row.tenant_id = $1 AND grant_row.role_id = $2
+) member
 `
 
 type IAMRoleMemberCountParams struct {
@@ -1110,7 +1555,10 @@ func (q *Queries) IAMRoleMemberCount(ctx context.Context, arg IAMRoleMemberCount
 }
 
 const iAMRootAnchors = `-- name: IAMRootAnchors :many
-SELECT organization_id,department_id FROM iam_accounts WHERE iam_accounts.tenant_id=$1 AND is_admin=true
+SELECT member.organization_id, member.department_id
+FROM identity_department_memberships member
+JOIN iam_accounts account ON account.tenant_id = member.tenant_id AND account.id = member.account_id
+WHERE account.tenant_id = $1 AND account.is_admin
 `
 
 type IAMRootAnchorsRow struct {
@@ -1138,15 +1586,110 @@ func (q *Queries) IAMRootAnchors(ctx context.Context, tenantID string) ([]IAMRoo
 	return items, nil
 }
 
+const iAMRotateBrowserSession = `-- name: IAMRotateBrowserSession :one
+WITH removed AS (
+    DELETE FROM iam_sessions old_session WHERE old_session.token_hash = $4 AND old_session.csrf_token = $5
+        AND old_session.expires_at > clock_timestamp()
+    RETURNING old_session.token_hash, old_session.tenant_id, old_session.account_id, old_session.csrf_token, old_session.expires_at, old_session.created_at, old_session.last_seen_at, old_session.identity_binding_id, old_session.public_id, old_session.device_label, old_session.external_identity_id, old_session.refreshed_at
+)
+INSERT INTO iam_sessions(token_hash, tenant_id, account_id, csrf_token,
+    created_at, expires_at, public_id, device_label, last_seen_at, identity_binding_id, external_identity_id, refreshed_at)
+SELECT $1, tenant_id, account_id, $2, created_at,
+    statement_timestamp() + make_interval(mins => $3::int), public_id, device_label,
+    statement_timestamp(), identity_binding_id, external_identity_id, statement_timestamp()
+FROM removed RETURNING public_id
+`
+
+type IAMRotateBrowserSessionParams struct {
+	NewToken     string
+	NewCsrf      string
+	Minutes      int32
+	OldToken     string
+	ExpectedCsrf string
+}
+
+func (q *Queries) IAMRotateBrowserSession(ctx context.Context, arg IAMRotateBrowserSessionParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, iAMRotateBrowserSession,
+		arg.NewToken,
+		arg.NewCsrf,
+		arg.Minutes,
+		arg.OldToken,
+		arg.ExpectedCsrf,
+	)
+	var public_id pgtype.UUID
+	err := row.Scan(&public_id)
+	return public_id, err
+}
+
+const iAMSelectBrowserIdentity = `-- name: IAMSelectBrowserIdentity :one
+UPDATE iam_sessions session SET csrf_token = $1,
+    identity_binding_id = $2,
+    expires_at = LEAST(session.expires_at, COALESCE(session.refreshed_at, session.created_at) + make_interval(mins => $3::int))
+FROM iam_active_account_subjects target
+WHERE session.token_hash = $4 AND session.csrf_token = $5
+    AND session.expires_at > now() AND target.tenant_id = $6
+    AND session.tenant_id = target.tenant_id AND session.account_id = target.account_id
+    AND target.membership_id = $7
+    AND ($2::uuid IS NOT NULL OR EXISTS (
+        SELECT 1 FROM iam_tenant_account_authority access
+        WHERE access.tenant_id = target.tenant_id AND access.account_id = target.account_id
+    ))
+    AND ($2::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM iam_active_identity_bindings binding WHERE binding.id = $2
+            AND binding.tenant_id = target.tenant_id AND binding.principal_id = target.principal_id
+    ))
+RETURNING session.token_hash
+`
+
+type IAMSelectBrowserIdentityParams struct {
+	NewCsrfToken      string
+	IdentityBindingID pgtype.UUID
+	MaxMinutes        int32
+	TokenHash         string
+	ExpectedCsrfToken string
+	TenantID          string
+	MembershipID      pgtype.UUID
+}
+
+func (q *Queries) IAMSelectBrowserIdentity(ctx context.Context, arg IAMSelectBrowserIdentityParams) (string, error) {
+	row := q.db.QueryRow(ctx, iAMSelectBrowserIdentity,
+		arg.NewCsrfToken,
+		arg.IdentityBindingID,
+		arg.MaxMinutes,
+		arg.TokenHash,
+		arg.ExpectedCsrfToken,
+		arg.TenantID,
+		arg.MembershipID,
+	)
+	var token_hash string
+	err := row.Scan(&token_hash)
+	return token_hash, err
+}
+
 const iAMSession = `-- name: IAMSession :one
-SELECT s.tenant_id,s.account_id,s.csrf_token,COALESCE(s.active_department_id,a.department_id)::bigint AS active_department_id FROM iam_sessions s JOIN iam_accounts a ON a.tenant_id=s.tenant_id AND a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='active'
+SELECT s.tenant_id, s.account_id, s.csrf_token,
+       subject.principal_id, subject.login_account_id, subject.membership_id, s.identity_binding_id
+FROM iam_sessions s
+JOIN iam_active_account_subjects subject ON subject.tenant_id = s.tenant_id AND subject.account_id = s.account_id
+WHERE s.token_hash = $1 AND s.expires_at > now()
+AND (s.external_identity_id IS NULL OR EXISTS (
+    SELECT 1 FROM iam_external_identities external WHERE external.id = s.external_identity_id
+        AND external.login_account_id = subject.login_account_id AND external.revoked_at IS NULL
+))
+AND (s.identity_binding_id IS NULL OR EXISTS (
+    SELECT 1 FROM iam_active_identity_bindings binding WHERE binding.id = s.identity_binding_id
+        AND binding.tenant_id = s.tenant_id AND binding.principal_id = subject.principal_id
+))
 `
 
 type IAMSessionRow struct {
-	TenantID           string
-	AccountID          int64
-	CsrfToken          string
-	ActiveDepartmentID int64
+	TenantID          string
+	AccountID         int64
+	CsrfToken         string
+	PrincipalID       pgtype.UUID
+	LoginAccountID    pgtype.UUID
+	MembershipID      pgtype.UUID
+	IdentityBindingID pgtype.UUID
 }
 
 func (q *Queries) IAMSession(ctx context.Context, tokenHash string) (IAMSessionRow, error) {
@@ -1156,41 +1699,53 @@ func (q *Queries) IAMSession(ctx context.Context, tokenHash string) (IAMSessionR
 		&i.TenantID,
 		&i.AccountID,
 		&i.CsrfToken,
-		&i.ActiveDepartmentID,
+		&i.PrincipalID,
+		&i.LoginAccountID,
+		&i.MembershipID,
+		&i.IdentityBindingID,
 	)
 	return i, err
 }
 
-const iAMSetPassword = `-- name: IAMSetPassword :exec
-UPDATE iam_accounts SET password_hash=$3 WHERE tenant_id=$1 AND id=$2
+const iAMSetPassword = `-- name: IAMSetPassword :one
+INSERT INTO iam_password_credentials(login_account_id, password_hash)
+SELECT placement.login_account_id, $1::text FROM iam_accounts placement
+WHERE placement.tenant_id = $2 AND placement.id = $3
+AND placement.login_account_id IS NOT NULL
+AND NOT EXISTS (SELECT 1 FROM iam_accounts other WHERE other.login_account_id = placement.login_account_id AND other.id <> placement.id)
+ON CONFLICT (login_account_id) DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = now()
+RETURNING login_account_id
 `
 
 type IAMSetPasswordParams struct {
+	PasswordHash string
 	TenantID     string
 	ID           int64
-	PasswordHash string
 }
 
-func (q *Queries) IAMSetPassword(ctx context.Context, arg IAMSetPasswordParams) error {
-	_, err := q.db.Exec(ctx, iAMSetPassword, arg.TenantID, arg.ID, arg.PasswordHash)
-	return err
+func (q *Queries) IAMSetPassword(ctx context.Context, arg IAMSetPasswordParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, iAMSetPassword, arg.PasswordHash, arg.TenantID, arg.ID)
+	var login_account_id pgtype.UUID
+	err := row.Scan(&login_account_id)
+	return login_account_id, err
 }
 
-const iAMSwitchDepartment = `-- name: IAMSwitchDepartment :one
-UPDATE iam_sessions SET active_department_id=$2,csrf_token=$3 WHERE token_hash=$1 AND expires_at>now() RETURNING token_hash
+const iAMTenantAccountAuthority = `-- name: IAMTenantAccountAuthority :one
+SELECT COALESCE(access.is_admin, false)::boolean AS is_admin
+FROM iam_tenant_account_authority access
+WHERE access.tenant_id = $1 AND access.account_id = $2
 `
 
-type IAMSwitchDepartmentParams struct {
-	TokenHash          string
-	ActiveDepartmentID pgtype.Int8
-	CsrfToken          string
+type IAMTenantAccountAuthorityParams struct {
+	TenantID  string
+	AccountID int64
 }
 
-func (q *Queries) IAMSwitchDepartment(ctx context.Context, arg IAMSwitchDepartmentParams) (string, error) {
-	row := q.db.QueryRow(ctx, iAMSwitchDepartment, arg.TokenHash, arg.ActiveDepartmentID, arg.CsrfToken)
-	var token_hash string
-	err := row.Scan(&token_hash)
-	return token_hash, err
+func (q *Queries) IAMTenantAccountAuthority(ctx context.Context, arg IAMTenantAccountAuthorityParams) (bool, error) {
+	row := q.db.QueryRow(ctx, iAMTenantAccountAuthority, arg.TenantID, arg.AccountID)
+	var is_admin bool
+	err := row.Scan(&is_admin)
+	return is_admin, err
 }
 
 const iAMTouchLogin = `-- name: IAMTouchLogin :exec
@@ -1207,41 +1762,38 @@ func (q *Queries) IAMTouchLogin(ctx context.Context, arg IAMTouchLoginParams) er
 	return err
 }
 
-const iAMUpdateAccount = `-- name: IAMUpdateAccount :one
-UPDATE iam_accounts SET username=$1,full_name=$2,email=$3,status=$4,organization_id=$5,department_id=$6,overrides=$7 WHERE iam_accounts.tenant_id=$8 AND iam_accounts.id=$9 AND ($10::boolean OR iam_accounts.id=$11::bigint OR iam_accounts.organization_id=ANY($12::bigint[]) OR iam_accounts.department_id=ANY($13::bigint[]) OR EXISTS (SELECT 1 FROM iam_department_memberships m WHERE m.tenant_id=iam_accounts.tenant_id AND m.account_id=iam_accounts.id AND (m.organization_id=ANY($12::bigint[]) OR m.department_id=ANY($13::bigint[])))) RETURNING iam_accounts.id
+const iAMUpdateAccountLogin = `-- name: IAMUpdateAccountLogin :one
+WITH placement AS (
+    UPDATE iam_accounts SET username = $1, status = $2
+    WHERE iam_accounts.tenant_id = $3 AND iam_accounts.id = $4
+        AND iam_accounts.status = $5
+        AND machine_principal_id IS NULL
+        AND (iam_accounts.username = $1 OR NOT EXISTS (
+            SELECT 1 FROM iam_accounts other WHERE other.login_account_id = iam_accounts.login_account_id AND other.id <> iam_accounts.id
+        ))
+    RETURNING id, login_account_id, username
+), renamed AS (
+    UPDATE iam_login_accounts login SET username = placement.username FROM placement
+    WHERE login.id = placement.login_account_id AND login.username <> placement.username
+)
+SELECT id FROM placement
 `
 
-type IAMUpdateAccountParams struct {
+type IAMUpdateAccountLoginParams struct {
 	Username       string
-	FullName       string
-	Email          string
 	Status         string
-	OrganizationID int64
-	DepartmentID   int64
-	Overrides      []byte
 	TenantID       string
 	ID             int64
-	AllData        bool
-	OwnID          int64
-	OrgIds         []int64
-	DeptIds        []int64
+	ExpectedStatus string
 }
 
-func (q *Queries) IAMUpdateAccount(ctx context.Context, arg IAMUpdateAccountParams) (int64, error) {
-	row := q.db.QueryRow(ctx, iAMUpdateAccount,
+func (q *Queries) IAMUpdateAccountLogin(ctx context.Context, arg IAMUpdateAccountLoginParams) (int64, error) {
+	row := q.db.QueryRow(ctx, iAMUpdateAccountLogin,
 		arg.Username,
-		arg.FullName,
-		arg.Email,
 		arg.Status,
-		arg.OrganizationID,
-		arg.DepartmentID,
-		arg.Overrides,
 		arg.TenantID,
 		arg.ID,
-		arg.AllData,
-		arg.OwnID,
-		arg.OrgIds,
-		arg.DeptIds,
+		arg.ExpectedStatus,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -1249,7 +1801,7 @@ func (q *Queries) IAMUpdateAccount(ctx context.Context, arg IAMUpdateAccountPara
 }
 
 const iAMUpdateDepartment = `-- name: IAMUpdateDepartment :one
-UPDATE iam_departments SET name=$1,code=$2,organization_id=$3,parent_id=NULLIF($4::bigint,0),manager=$5,status=$6,description=$7 WHERE tenant_id=$8 AND id=$9 AND ($10::boolean OR organization_id=ANY($11::bigint[]) OR id=ANY($12::bigint[])) RETURNING id
+UPDATE identity_departments SET name=$1,code=$2,organization_id=$3,parent_id=NULLIF($4::bigint,0),manager=$5,status=$6,description=$7 WHERE tenant_id=$8 AND id=$9 AND ($10::boolean OR organization_id=ANY($11::bigint[]) OR id=ANY($12::bigint[])) RETURNING id
 `
 
 type IAMUpdateDepartmentParams struct {
@@ -1288,15 +1840,12 @@ func (q *Queries) IAMUpdateDepartment(ctx context.Context, arg IAMUpdateDepartme
 }
 
 const iAMUpdateOrganization = `-- name: IAMUpdateOrganization :one
-UPDATE iam_organizations SET name=$1,code=$2,kind=$3,parent_id=NULLIF($4::bigint,0),status=$5,description=$6 WHERE tenant_id=$7 AND id=$8 AND ($9::boolean OR id=ANY($10::bigint[])) RETURNING id
+UPDATE identity_organizations SET name=$1,code=$2,description=$3 WHERE tenant_id=$4 AND id=$5 AND ($6::boolean OR id=ANY($7::bigint[])) RETURNING id
 `
 
 type IAMUpdateOrganizationParams struct {
 	Name        string
 	Code        string
-	Kind        string
-	ParentID    int64
-	Status      string
 	Description string
 	TenantID    string
 	ID          int64
@@ -1308,9 +1857,6 @@ func (q *Queries) IAMUpdateOrganization(ctx context.Context, arg IAMUpdateOrgani
 	row := q.db.QueryRow(ctx, iAMUpdateOrganization,
 		arg.Name,
 		arg.Code,
-		arg.Kind,
-		arg.ParentID,
-		arg.Status,
 		arg.Description,
 		arg.TenantID,
 		arg.ID,
@@ -1323,7 +1869,7 @@ func (q *Queries) IAMUpdateOrganization(ctx context.Context, arg IAMUpdateOrgani
 }
 
 const iAMUpdateRole = `-- name: IAMUpdateRole :one
-UPDATE iam_roles SET name=$1,code=$2,description=$3,status=$4,grants=$5 WHERE tenant_id=$6 AND id=$7 AND $8::boolean RETURNING id
+UPDATE iam_roles SET name=$1,code=$2,description=$3,status=$4,grants=$5 WHERE tenant_id=$6 AND id=$7 AND $8::boolean AND template_key = 'custom' RETURNING id
 `
 
 type IAMUpdateRoleParams struct {

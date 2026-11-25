@@ -39,6 +39,7 @@ type Run struct {
 	TenantID           string
 	AccountID          int64
 	DepartmentID       int64
+	IdentityBindingID  string
 	SessionID          string
 	Agent              string
 	Model              string

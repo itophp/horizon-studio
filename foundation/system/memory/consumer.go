@@ -98,7 +98,7 @@ func (c *Consumer) consume(ctx context.Context) (bool, error) {
 		actor = canonical.Actor{ID: strconv.FormatInt(row.AccountID, 10), Type: "user"}
 	}
 	e := canonical.Envelope{EventID: row.EventID, EventType: row.EventType, OccurredAt: row.CreatedAt.Time,
-		TenantID: row.TenantID, DepartmentID: row.DepartmentID, Actor: actor, Source: canonical.Source{Type: "domain_event"},
+		TenantID: row.TenantID, Actor: actor, Source: canonical.Source{Type: "domain_event"},
 		Resource:     canonical.Resource{Type: row.AggregateType, ID: row.AggregateID},
 		InvocationID: row.InvocationID, CorrelationID: row.CorrelationID, CausationID: row.CausationID, Depth: int(row.TriggerDepth), Sensitivity: "internal"}
 	// The durable event log is trusted as a source of event metadata only.

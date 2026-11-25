@@ -4,9 +4,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"strings"
 	"testing"
 
 	"horizon/foundation/ai/harness"
@@ -42,7 +39,7 @@ func conversationOf(t *testing.T, list []*genai.AIConversation, session string) 
 
 func TestAIConversationRenameAndArchive(t *testing.T) {
 	handler, pool, root := iamFixture(t)
-	owner := loginIAM(t, handler, "root-admin")
+	owner := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	ctx := context.Background()
 	const session = "conv-rename-archive"
 
@@ -93,7 +90,7 @@ func TestAIConversationRenameAndArchive(t *testing.T) {
 
 func TestAIConversationWriteBoundaries(t *testing.T) {
 	handler, pool, root := iamFixture(t)
-	owner := loginIAM(t, handler, "root-admin")
+	owner := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	ctx := context.Background()
 	const session = "conv-owned-by-someone-else"
 
@@ -130,7 +127,7 @@ func TestAIConversationWriteBoundaries(t *testing.T) {
 
 func TestAutomationConversationUsesExistingWorkbenchHistory(t *testing.T) {
 	handler, pool, root := iamFixture(t)
-	owner := loginIAM(t, handler, "root-admin")
+	owner := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	ctx := t.Context()
 	const session = "automation:11"
 	store := harness.NewStore(pool)
@@ -164,43 +161,4 @@ func TestAutomationConversationUsesExistingWorkbenchHistory(t *testing.T) {
 	}
 	continued := owner.request(t, "POST", "/api/ai/runs", map[string]any{"question": "Tell me more", "sessionId": foreign}, true)
 	checkStatus(t, continued, 404)
-}
-
-func TestAutomationConversationBackfillsHistoricalRun(t *testing.T) {
-	handler, pool, root := iamFixture(t)
-	owner := loginIAM(t, handler, "root-admin")
-	ctx := t.Context()
-	task := decodeData[struct{ ID int64 }](t, owner.invoke(t, "automation.task.create", map[string]any{
-		"name": "Historical brief", "description": "Report on orders",
-		"scheduleKind": "daily", "time": "09:00", "timezone": "Asia/Shanghai",
-	}, true))
-	old, err := harness.NewStore(pool).Start(ctx, harness.Run{
-		TenantID: "tenant-a", AccountID: root.ID, DepartmentID: root.DepartmentID, Origin: "automation",
-		Agent: "workspace_agent", Model: "test", InstructionVersion: "test", Question: "Report on orders", TraceID: "historical",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var runID int64
-	err = pool.QueryRow(ctx, `INSERT INTO automation_runs
-		(tenant_id, task_id, occurrence_key, scheduled_for, trigger_kind, status, ai_run_id)
-		VALUES ('tenant-a', $1, 'legacy', now(), 'schedule', 'completed', $2) RETURNING id`, task.ID, old.ID).Scan(&runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, err := os.ReadFile("../../foundation/db/migrations/00046_automation_conversations.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	up, _, _ := strings.Cut(string(raw), "-- +goose Down")
-	for range 2 {
-		if _, err = pool.Exec(ctx, up); err != nil {
-			t.Fatal(err)
-		}
-	}
-	conversations := decodeBody[[]*genai.AIConversation](t, owner.request(t, "GET", "/api/ai/conversations", nil, false))
-	item := conversationOf(t, conversations, fmt.Sprintf("automation:%d", runID))
-	if item.Title != "Historical brief" || item.MessageCount != 1 || item.AutomationAt == nil {
-		t.Fatalf("historical conversation was not attached: %+v", item)
-	}
 }

@@ -1248,7 +1248,6 @@ func (q *Queries) MailOutboundStart(ctx context.Context, arg MailOutboundStartPa
 
 const mailReceiveDue = `-- name: MailReceiveDue :many
 SELECT m.id AS mailbox_id,m.tenant_id,m.owner_account_id,m.email_address,c.id AS channel_id,
- a.organization_id AS owner_organization_id,a.department_id AS owner_department_id,
  c.host,c.port,c.username,cr.ciphertext,cr.version
 FROM mail_channels c JOIN mail_mailboxes m ON m.tenant_id=c.tenant_id AND m.id=c.mailbox_id
 JOIN iam_accounts a ON a.tenant_id=m.tenant_id AND a.id=m.owner_account_id
@@ -1264,18 +1263,16 @@ type MailReceiveDueParams struct {
 }
 
 type MailReceiveDueRow struct {
-	MailboxID           int64
-	TenantID            string
-	OwnerAccountID      int64
-	EmailAddress        string
-	ChannelID           int64
-	OwnerOrganizationID int64
-	OwnerDepartmentID   int64
-	Host                string
-	Port                int32
-	Username            string
-	Ciphertext          string
-	Version             int32
+	MailboxID      int64
+	TenantID       string
+	OwnerAccountID int64
+	EmailAddress   string
+	ChannelID      int64
+	Host           string
+	Port           int32
+	Username       string
+	Ciphertext     string
+	Version        int32
 }
 
 func (q *Queries) MailReceiveDue(ctx context.Context, arg MailReceiveDueParams) ([]MailReceiveDueRow, error) {
@@ -1293,8 +1290,6 @@ func (q *Queries) MailReceiveDue(ctx context.Context, arg MailReceiveDueParams) 
 			&i.OwnerAccountID,
 			&i.EmailAddress,
 			&i.ChannelID,
-			&i.OwnerOrganizationID,
-			&i.OwnerDepartmentID,
 			&i.Host,
 			&i.Port,
 			&i.Username,

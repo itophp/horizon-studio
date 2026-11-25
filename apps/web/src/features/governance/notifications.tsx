@@ -12,7 +12,7 @@ import {
   notificationsRetry,
   notificationsTest,
 } from "@/lib/capabilities";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   PageHeading,
   DataTable,
@@ -20,7 +20,7 @@ import {
   ErrorBanner,
   Loading,
   type AdminColumn,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import type { DeliveryRecord } from "@/api/types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useGovKey, useGovTask } from "./shared";

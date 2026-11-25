@@ -9,8 +9,8 @@ const defaultRoot = fileURLToPath(new URL("../", import.meta.url));
 // reported instead of silently growing into the whole browser suite.
 const routes = [
   {
-    prefix: "apps/web/src/features/administration/",
-    specs: ["administration"],
+    prefix: "apps/web/src/features/identity/",
+    specs: ["identity"],
   },
   { prefix: "apps/web/src/features/governance/", specs: ["governance"] },
   { prefix: "apps/web/src/features/capabilities/", specs: ["capabilities"] },
@@ -48,15 +48,15 @@ const routes = [
     specs: ["capabilities"],
   },
   { prefix: "foundation/ai/", specs: ["ai"] },
+  { prefix: "applications/identity/", specs: ["identity"] },
   { prefix: "applications/", specs: ["capabilities"] },
   { prefix: "foundation/db/query/capability.sql", specs: ["capabilities"] },
-  { prefix: "foundation/db/migrations/00015_", specs: ["capabilities"] },
   {
     prefix: "foundation/system/identity/",
-    specs: ["administration"],
+    specs: ["identity"],
   },
 
-  { prefix: "foundation/runtime/transport/", specs: ["administration"] },
+  { prefix: "foundation/runtime/transport/", specs: ["identity"] },
   { prefix: "foundation/db/query/mcp.sql", specs: ["mcp"] },
   { prefix: "foundation/db/query/governance", specs: ["governance"] },
   {

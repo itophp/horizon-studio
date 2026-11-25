@@ -100,7 +100,7 @@ func TestExampleLifecycle(t *testing.T) {
 		engine.AgentModel = func(context.Context) (model.ToolCallingChatModel, error) { return &workflowModel{}, nil }
 	}
 	attach()
-	principal, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	principal, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

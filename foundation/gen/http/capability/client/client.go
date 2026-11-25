@@ -24,6 +24,10 @@ type Client struct {
 	// Invoke Doer is the HTTP client used to make requests to the invoke endpoint.
 	InvokeDoer goahttp.Doer
 
+	// InvokeMachine Doer is the HTTP client used to make requests to the
+	// invoke_machine endpoint.
+	InvokeMachineDoer goahttp.Doer
+
 	// Invocations Doer is the HTTP client used to make requests to the invocations
 	// endpoint.
 	InvocationsDoer goahttp.Doer
@@ -64,6 +68,7 @@ func NewClient(
 	return &Client{
 		DefinitionsDoer:     doer,
 		InvokeDoer:          doer,
+		InvokeMachineDoer:   doer,
 		InvocationsDoer:     doer,
 		InvocationDoer:      doer,
 		ApprovalsDoer:       doer,
@@ -120,6 +125,30 @@ func (c *Client) Invoke() goa.Endpoint {
 		resp, err := c.InvokeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("capability", "invoke", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// InvokeMachine returns an endpoint that makes HTTP requests to the capability
+// service invoke_machine server.
+func (c *Client) InvokeMachine() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeInvokeMachineRequest(c.encoder)
+		decodeResponse = DecodeInvokeMachineResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildInvokeMachineRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.InvokeMachineDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("capability", "invoke_machine", err)
 		}
 		return decodeResponse(resp)
 	}

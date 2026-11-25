@@ -60,12 +60,12 @@ AI 任务 SSE 契约在 design/ai.go，传输复用既有 harness.Run 的 Princi
 - 数据层错误映射为稳定服务错误，不回传堆栈/SQL/凭证。context 传到数据库，事务不跨池误用，失败不吞异常或默认全量访问。
 - 新增安全能力须有允许/拒绝、跨租户与范围外 ID 测试；适用时覆盖更新/删除、关联/聚合/批量/导出和撤销。运行 ./horizon-cli test-security。
 
-正式后台位于 system/identity（含 `Entries()` 身份管理能力）：Service 管用例和不变量、policy.go 管 Casbin/可信范围、Repository 调用生成的 dbgen、`runtime/transport/identity.go` 校验会话与 Origin/CSRF。旧 auth/authorization/dataaccess 为独立技术 demo，不要把 demo token 接到后台或复制第二套登录。身份变更参考 docs/decisions/002-identity-access.md，保留账号覆盖替换范围、内置管理员保护、授权管理独立门禁及即时撤销。
+`system/identity.Entries()` 注册身份能力，Casbin 校验授权与范围，Repository 使用 dbgen，transport 校验会话与 Origin/CSRF。按 [身份决策](../docs/decisions/002-identity-access.md) 保留覆盖替换、管理员保护与即时撤销。资源停用、审计导出、异主体发布和授权复核遵循 [IAM 安全边界](../docs/security.md#iam-上下文机器凭据与外部认证)。风险报告要求人工基身份与正式 ALL。
 
 临时权限与两级目录遵循 [ADR 003](../docs/decisions/003-temporary-access.md)：目录由 `system/identity/catalog.go` 定义并通过 Goa 输出；请求默认只能读取本人记录，独立正式 temporary:approve 才能审批他人。审批不能超出本人正式权限/数据范围，不能自批或再委托临时范围；原始申请和最终批准分开存储。范围在批准时固定解析，每次认证用数据库时间排除过期/撤销记录，deny 优先。修改这些行为必须覆盖 tests/temporary_access_test.go 的负向与并发用例。
 
 
-多部门授权遵循 [ADR 004](../docs/decisions/004-department-memberships.md)：一个 Principal 只解析当前已验证部门归属的角色/覆盖/范围，禁止跨部门合并。持久授权修改及多部门账号全局敏感变更必须覆盖所有原有和目标部门；临时申请与生效绑定申请部门。任何认证、权限控制或数据范围行为变更，必须同步维护权限控制相关的 Skill、目录 AGENTS.md 和安全/架构规则，并补齐受影响的允许与拒绝测试；交付说明列出同步位置，不允许只改代码。
+IAM 上下文为租户和可选组织绑定。身份应用持有名片和部门。组织专属能力在数据层按可信组织实施范围，`ALL` 限于当前组织。临时授权只用租户和本人范围。授权变更补齐允许与拒绝测试。
 
 系统治理遵循 [ADR 005](../docs/decisions/005-system-governance.md)：共享 Core 复用 identity 正式授权，配置拥有范围不套用账号任意归属可见；设置/字典发布必须版本锁和同事务快照/审计，敏感发布及回退消费单次绑定重新认证。秘密不进 DTO/历史/导出；字典动态来源只用受控提供器。文件绑定不可变存储配置、仅受控品牌 Logo 公开；通知投递前重查接收上下文及正式审批能力。相关权限变更同步 Skill/规则并覆盖 governance/SMTP/范围负向测试。
 
@@ -78,9 +78,9 @@ AI 任务 SSE 契约在 design/ai.go，传输复用既有 harness.Run 的 Princi
 
 账号级远程 MCP 见 [需求与实现方案](../docs/mcp-service-plan.md)（首阶段开发实现，验收状态见交付记录）。功能变动核对能力的暴露及授权范围；账号 Token 与本机 WebMCP 配对分离。实施复用可信 Principal、Casbin、SQL 范围及字段投影，Token 固化工具集合与当前正式权限取交集，撤销/禁用实时生效，秘密仅一次显示且不进入日志/配置包。实现入口为 integrations/mcp；协议端点 `/mcp` 保留，令牌管理已改为 `mcp.token.*` 能力。
 
-账号远程 MCP 按 [ADR 011](../docs/decisions/011-remote-mcp.md)：工具复用原授权用例，凭证绑定本人/部门和固化集合；敏感管理操作重新认证，身份变更撤销与延迟归属检查、客户端配对/备份及协议专项测试同步维护。禁止将安装状态当连接成功。
+账号远程 MCP 按 [ADR 011](../docs/decisions/011-remote-mcp.md)：工具复用原授权用例，凭证绑定当前租户、本人账号和可选身份绑定；敏感管理操作重新认证，身份变更撤销与延迟归属检查、客户端配对/备份及协议专项测试同步维护。禁止将安装状态当连接成功。
 
-内嵌助手按 [ADR 012](../docs/decisions/012-embedded-assistant.md)：页面工具在浏览器执行，模型/端点/Token 只在服务端解析。浮动面板统一使用 Eino 工作区 Agent；浏览器工具使用原生中断和加密检查点交接结果，恢复必须绑定租户、账号、部门及单次凭证。业务动作一律经 Gateway，不信任浏览器工具结果授予权限。
+内嵌助手按 [ADR 012](../docs/decisions/012-embedded-assistant.md)：页面工具在浏览器执行，模型/端点/Token 只在服务端解析。浮动面板统一使用 Eino Agent；浏览器工具使用原生中断和加密检查点交接结果，恢复必须绑定租户、账号、部门及单次凭证。业务动作一律经 Gateway，不信任浏览器工具结果授予权限。
 
 Capability-Centric 平台按 [ADR 015](../docs/decisions/015-capability-centric-platform.md)：
 
@@ -122,7 +122,7 @@ Runtime 定义存储见 [数据库版本实施记录](../docs/application-runtim
 
 ## 远程 MCP 动态能力目录（现行）
 
-远程 MCP 与 AI 助手共享自动化能力发现；Token 绑定账号和部门，每次请求按当前正式权限重建目录，历史固化工具集合不再限制能力。业务调用必须经 Gateway，并保持来源、数据范围、审批和幂等检查；手动和内部专用能力不进入自动化目录。权限变更须覆盖发现、猜测调用和撤权后的拒绝。详见 docs/security.md 和 docs/decisions/011-remote-mcp.md（从仓库根解析）。
+远程 MCP 与 AI 助手共享自动化能力发现；Token 绑定租户、账号和可选身份绑定，每次请求按当前正式权限重建目录，历史固化工具集合不再限制能力。业务调用必须经 Gateway，并保持来源、数据范围、审批和幂等检查；手动和内部专用能力不进入自动化目录。权限变更须覆盖发现、猜测调用和撤权后的拒绝。详见 docs/security.md 和 docs/decisions/011-remote-mcp.md（从仓库根解析）。
 
 
 ## 执行方案管理

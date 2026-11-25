@@ -16,15 +16,27 @@ import (
 
 // Endpoints wraps the "identity" service endpoints.
 type Endpoints struct {
+	SamlCallback           goa.Endpoint
+	CompleteSaml           goa.Endpoint
+	FederationProviders    goa.Endpoint
+	StartFederation        goa.Endpoint
+	CompleteFederation     goa.Endpoint
 	TemporaryAccess        goa.Endpoint
 	RequestTemporaryAccess goa.Endpoint
 	ReviewTemporaryAccess  goa.Endpoint
 	CancelTemporaryAccess  goa.Endpoint
 	RevokeTemporaryAccess  goa.Endpoint
-	SwitchDepartment       goa.Endpoint
+	ListSignInIdentities   goa.Endpoint
+	SelectSignInIdentity   goa.Endpoint
+	RedeemSignInInvitation goa.Endpoint
 	Login                  goa.Endpoint
+	RequestRegistration    goa.Endpoint
+	CompleteRegistration   goa.Endpoint
+	RequestPasswordReset   goa.Endpoint
+	CompletePasswordReset  goa.Endpoint
 	Me                     goa.Endpoint
 	Logout                 goa.Endpoint
+	RefreshSession         goa.Endpoint
 	Snapshot               goa.Endpoint
 }
 
@@ -33,31 +45,99 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		SamlCallback:           NewSamlCallbackEndpoint(s),
+		CompleteSaml:           NewCompleteSamlEndpoint(s),
+		FederationProviders:    NewFederationProvidersEndpoint(s),
+		StartFederation:        NewStartFederationEndpoint(s),
+		CompleteFederation:     NewCompleteFederationEndpoint(s),
 		TemporaryAccess:        NewTemporaryAccessEndpoint(s, a.APIKeyAuth),
 		RequestTemporaryAccess: NewRequestTemporaryAccessEndpoint(s, a.APIKeyAuth),
 		ReviewTemporaryAccess:  NewReviewTemporaryAccessEndpoint(s, a.APIKeyAuth),
 		CancelTemporaryAccess:  NewCancelTemporaryAccessEndpoint(s, a.APIKeyAuth),
 		RevokeTemporaryAccess:  NewRevokeTemporaryAccessEndpoint(s, a.APIKeyAuth),
-		SwitchDepartment:       NewSwitchDepartmentEndpoint(s, a.APIKeyAuth),
+		ListSignInIdentities:   NewListSignInIdentitiesEndpoint(s, a.APIKeyAuth),
+		SelectSignInIdentity:   NewSelectSignInIdentityEndpoint(s, a.APIKeyAuth),
+		RedeemSignInInvitation: NewRedeemSignInInvitationEndpoint(s, a.APIKeyAuth),
 		Login:                  NewLoginEndpoint(s),
+		RequestRegistration:    NewRequestRegistrationEndpoint(s),
+		CompleteRegistration:   NewCompleteRegistrationEndpoint(s),
+		RequestPasswordReset:   NewRequestPasswordResetEndpoint(s),
+		CompletePasswordReset:  NewCompletePasswordResetEndpoint(s),
 		Me:                     NewMeEndpoint(s, a.APIKeyAuth),
 		Logout:                 NewLogoutEndpoint(s, a.APIKeyAuth),
+		RefreshSession:         NewRefreshSessionEndpoint(s, a.APIKeyAuth),
 		Snapshot:               NewSnapshotEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "identity" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.SamlCallback = m(e.SamlCallback)
+	e.CompleteSaml = m(e.CompleteSaml)
+	e.FederationProviders = m(e.FederationProviders)
+	e.StartFederation = m(e.StartFederation)
+	e.CompleteFederation = m(e.CompleteFederation)
 	e.TemporaryAccess = m(e.TemporaryAccess)
 	e.RequestTemporaryAccess = m(e.RequestTemporaryAccess)
 	e.ReviewTemporaryAccess = m(e.ReviewTemporaryAccess)
 	e.CancelTemporaryAccess = m(e.CancelTemporaryAccess)
 	e.RevokeTemporaryAccess = m(e.RevokeTemporaryAccess)
-	e.SwitchDepartment = m(e.SwitchDepartment)
+	e.ListSignInIdentities = m(e.ListSignInIdentities)
+	e.SelectSignInIdentity = m(e.SelectSignInIdentity)
+	e.RedeemSignInInvitation = m(e.RedeemSignInInvitation)
 	e.Login = m(e.Login)
+	e.RequestRegistration = m(e.RequestRegistration)
+	e.CompleteRegistration = m(e.CompleteRegistration)
+	e.RequestPasswordReset = m(e.RequestPasswordReset)
+	e.CompletePasswordReset = m(e.CompletePasswordReset)
 	e.Me = m(e.Me)
 	e.Logout = m(e.Logout)
+	e.RefreshSession = m(e.RefreshSession)
 	e.Snapshot = m(e.Snapshot)
+}
+
+// NewSamlCallbackEndpoint returns an endpoint function that calls the method
+// "saml_callback" of service "identity".
+func NewSamlCallbackEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SamlCallbackPayload)
+		return s.SamlCallback(ctx, p)
+	}
+}
+
+// NewCompleteSamlEndpoint returns an endpoint function that calls the method
+// "complete_saml" of service "identity".
+func NewCompleteSamlEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CompleteSamlPayload)
+		return s.CompleteSaml(ctx, p)
+	}
+}
+
+// NewFederationProvidersEndpoint returns an endpoint function that calls the
+// method "federation_providers" of service "identity".
+func NewFederationProvidersEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.FederationProviders(ctx)
+	}
+}
+
+// NewStartFederationEndpoint returns an endpoint function that calls the
+// method "start_federation" of service "identity".
+func NewStartFederationEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*StartFederationPayload)
+		return s.StartFederation(ctx, p)
+	}
+}
+
+// NewCompleteFederationEndpoint returns an endpoint function that calls the
+// method "complete_federation" of service "identity".
+func NewCompleteFederationEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CompleteFederationPayload)
+		return s.CompleteFederation(ctx, p)
+	}
 }
 
 // NewTemporaryAccessEndpoint returns an endpoint function that calls the
@@ -155,11 +235,11 @@ func NewRevokeTemporaryAccessEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 	}
 }
 
-// NewSwitchDepartmentEndpoint returns an endpoint function that calls the
-// method "switch_department" of service "identity".
-func NewSwitchDepartmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewListSignInIdentitiesEndpoint returns an endpoint function that calls the
+// method "list_sign_in_identities" of service "identity".
+func NewListSignInIdentitiesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*SwitchDepartmentPayload)
+		p := req.(*ListSignInIdentitiesPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "browser_session",
@@ -170,7 +250,45 @@ func NewSwitchDepartmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		if err != nil {
 			return nil, err
 		}
-		return s.SwitchDepartment(ctx, p)
+		return s.ListSignInIdentities(ctx, p)
+	}
+}
+
+// NewSelectSignInIdentityEndpoint returns an endpoint function that calls the
+// method "select_sign_in_identity" of service "identity".
+func NewSelectSignInIdentityEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SelectSignInIdentityPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "browser_session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		ctx, err = authAPIKeyFn(ctx, string(p.Cookie), &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SelectSignInIdentity(ctx, p)
+	}
+}
+
+// NewRedeemSignInInvitationEndpoint returns an endpoint function that calls
+// the method "redeem_sign_in_invitation" of service "identity".
+func NewRedeemSignInInvitationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RedeemSignInInvitationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "browser_session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		ctx, err = authAPIKeyFn(ctx, string(p.Cookie), &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.RedeemSignInInvitation(ctx, p)
 	}
 }
 
@@ -180,6 +298,42 @@ func NewLoginEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*LoginPayload)
 		return s.Login(ctx, p)
+	}
+}
+
+// NewRequestRegistrationEndpoint returns an endpoint function that calls the
+// method "request_registration" of service "identity".
+func NewRequestRegistrationEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RequestRegistrationPayload)
+		return nil, s.RequestRegistration(ctx, p)
+	}
+}
+
+// NewCompleteRegistrationEndpoint returns an endpoint function that calls the
+// method "complete_registration" of service "identity".
+func NewCompleteRegistrationEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CompleteRegistrationPayload)
+		return nil, s.CompleteRegistration(ctx, p)
+	}
+}
+
+// NewRequestPasswordResetEndpoint returns an endpoint function that calls the
+// method "request_password_reset" of service "identity".
+func NewRequestPasswordResetEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RequestPasswordResetPayload)
+		return nil, s.RequestPasswordReset(ctx, p)
+	}
+}
+
+// NewCompletePasswordResetEndpoint returns an endpoint function that calls the
+// method "complete_password_reset" of service "identity".
+func NewCompletePasswordResetEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CompletePasswordResetPayload)
+		return nil, s.CompletePasswordReset(ctx, p)
 	}
 }
 
@@ -218,6 +372,25 @@ func NewLogoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return s.Logout(ctx, p)
+	}
+}
+
+// NewRefreshSessionEndpoint returns an endpoint function that calls the method
+// "refresh_session" of service "identity".
+func NewRefreshSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RefreshSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "browser_session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		ctx, err = authAPIKeyFn(ctx, string(p.Cookie), &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RefreshSession(ctx, p)
 	}
 }
 

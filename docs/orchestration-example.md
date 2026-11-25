@@ -81,7 +81,7 @@ TEST_DATABASE_URL='<本机隔离 PostgreSQL URL>' ./horizon-cli test-orchestrati
 
 ## 条件分叉参考：article-publish
 
-`article-publish@1.0.0` 演示条件分叉，源文件同为 `spec/examples.go` 的 ArticlePublish，导出见 `docs/generated/workflows/article-publish.workflow.json`。
+`article-publish@1.0.0` 是保留在 `applications/articles/workflows.go` 的条件分叉参考。文章应用已下线，该流程仅由隔离测试显式装配。
 
 ```text
 save: article.submit（草稿 → 审核中，清空旧结论）

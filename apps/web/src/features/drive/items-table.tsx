@@ -6,7 +6,7 @@ import {
   DataTable,
   RowActions,
   type AdminColumn,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import { type DriveFile } from "@/lib/capabilities";
 import { downloadDriveFile } from "./transfer";
 export type Item = {

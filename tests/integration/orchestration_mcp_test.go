@@ -25,9 +25,9 @@ func (b workflowBearer) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 func TestOrchestrationMCPProtocolAndApproval(t *testing.T) {
-	handler, _, root := iamFixture(t)
-	owner := loginIAM(t, handler, "root-admin")
-	token := decodeData[businessmcp.MCPTokenCreated](t, owner.invoke(t, "mcp.token.create", map[string]any{"name": "workflow client", "password": "TestOnly!2026Secure", "days": 1, "departmentId": root.DepartmentID, "tools": []string{"orchestration_workflow_list", "orchestration_workflow_get", "orchestration_workflow_run", "orchestration_workflow_cancel"}}, true))
+	handler, _, _ := iamFixture(t)
+	owner := loginTenantIAM(t, handler, "root-admin", "tenant-a")
+	token := decodeData[businessmcp.MCPTokenCreated](t, owner.invoke(t, "mcp.token.create", map[string]any{"name": "workflow client", "password": "TestOnly!2026Secure", "days": 1}, true))
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

@@ -11,6 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const automationCancelQueuedServiceRuns = `-- name: AutomationCancelQueuedServiceRuns :exec
+UPDATE automation_runs SET status='cancelled', error_code='task_disabled', finished_at=now()
+WHERE tenant_id=$1 AND task_id=$2 AND status='queued' AND service_execution IS NOT NULL
+`
+
+type AutomationCancelQueuedServiceRunsParams struct {
+	TenantID string
+	TaskID   int64
+}
+
+func (q *Queries) AutomationCancelQueuedServiceRuns(ctx context.Context, arg AutomationCancelQueuedServiceRunsParams) error {
+	_, err := q.db.Exec(ctx, automationCancelQueuedServiceRuns, arg.TenantID, arg.TaskID)
+	return err
+}
+
 const automationDueTasks = `-- name: AutomationDueTasks :many
 SELECT id,tenant_id,owner_id,department_id,name,description,schedule_kind,run_at,timezone,schedule_day,next_run_at
 FROM automation_tasks
@@ -64,6 +79,22 @@ func (q *Queries) AutomationDueTasks(ctx context.Context, maxRows int32) ([]Auto
 	return items, nil
 }
 
+const automationOwnerTaskCount = `-- name: AutomationOwnerTaskCount :one
+SELECT count(*) FROM automation_tasks WHERE tenant_id=$1 AND owner_id=$2
+`
+
+type AutomationOwnerTaskCountParams struct {
+	TenantID string
+	OwnerID  int64
+}
+
+func (q *Queries) AutomationOwnerTaskCount(ctx context.Context, arg AutomationOwnerTaskCountParams) (int64, error) {
+	row := q.db.QueryRow(ctx, automationOwnerTaskCount, arg.TenantID, arg.OwnerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const automationRunActive = `-- name: AutomationRunActive :one
 SELECT EXISTS(
  SELECT 1 FROM automation_runs
@@ -104,18 +135,27 @@ func (q *Queries) AutomationRunByKey(ctx context.Context, arg AutomationRunByKey
 const automationRunCount = `-- name: AutomationRunCount :one
 SELECT count(*)
 FROM automation_runs r JOIN automation_tasks t ON t.tenant_id=r.tenant_id AND t.id=r.task_id
-WHERE r.tenant_id=$1 AND t.owner_id=$2
-AND ($3::bigint = 0 OR r.task_id = $3)
+WHERE r.tenant_id=$1 AND t.owner_id=$2 AND t.department_id=$3
+AND t.identity_binding_id IS NOT DISTINCT FROM NULLIF($4::text, '')::uuid
+AND ($5::bigint = 0 OR r.task_id = $5)
 `
 
 type AutomationRunCountParams struct {
-	TenantID string
-	OwnerID  int64
-	TaskID   int64
+	TenantID     string
+	OwnerID      int64
+	DepartmentID int64
+	BindingID    string
+	TaskID       int64
 }
 
 func (q *Queries) AutomationRunCount(ctx context.Context, arg AutomationRunCountParams) (int64, error) {
-	row := q.db.QueryRow(ctx, automationRunCount, arg.TenantID, arg.OwnerID, arg.TaskID)
+	row := q.db.QueryRow(ctx, automationRunCount,
+		arg.TenantID,
+		arg.OwnerID,
+		arg.DepartmentID,
+		arg.BindingID,
+		arg.TaskID,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -154,13 +194,16 @@ SELECT r.id,r.task_id,r.occurrence_key,r.scheduled_for,r.trigger_kind,r.status,r
  COALESCE(a.answer,'') AS answer, COALESCE(a.tool_calls,0) AS tool_calls, COALESCE(a.status,'') AS ai_status
 FROM automation_runs r JOIN automation_tasks t ON t.tenant_id=r.tenant_id AND t.id=r.task_id
 LEFT JOIN ai_runs a ON a.tenant_id=r.tenant_id AND a.id=r.ai_run_id
-WHERE r.tenant_id=$1 AND t.owner_id=$2 AND r.id=$3
+WHERE r.tenant_id=$1 AND t.owner_id=$2 AND r.id=$3 AND t.department_id=$4
+AND t.identity_binding_id IS NOT DISTINCT FROM NULLIF($5::text, '')::uuid
 `
 
 type AutomationRunGetParams struct {
-	TenantID string
-	OwnerID  int64
-	ID       int64
+	TenantID     string
+	OwnerID      int64
+	ID           int64
+	DepartmentID int64
+	BindingID    string
 }
 
 type AutomationRunGetRow struct {
@@ -181,7 +224,13 @@ type AutomationRunGetRow struct {
 }
 
 func (q *Queries) AutomationRunGet(ctx context.Context, arg AutomationRunGetParams) (AutomationRunGetRow, error) {
-	row := q.db.QueryRow(ctx, automationRunGet, arg.TenantID, arg.OwnerID, arg.ID)
+	row := q.db.QueryRow(ctx, automationRunGet,
+		arg.TenantID,
+		arg.OwnerID,
+		arg.ID,
+		arg.DepartmentID,
+		arg.BindingID,
+	)
 	var i AutomationRunGetRow
 	err := row.Scan(
 		&i.ID,
@@ -219,17 +268,20 @@ func (q *Queries) AutomationRunInterrupted(ctx context.Context) (int64, error) {
 const automationRunList = `-- name: AutomationRunList :many
 SELECT r.id,r.task_id,r.occurrence_key,r.scheduled_for,r.trigger_kind,r.status,r.error_code,r.ai_run_id,r.created_at,r.started_at,r.finished_at
 FROM automation_runs r JOIN automation_tasks t ON t.tenant_id=r.tenant_id AND t.id=r.task_id
-WHERE r.tenant_id=$1 AND t.owner_id=$2
-AND ($3::bigint = 0 OR r.task_id = $3)
-ORDER BY r.id DESC LIMIT $5 OFFSET $4
+WHERE r.tenant_id=$1 AND t.owner_id=$2 AND t.department_id=$3
+AND t.identity_binding_id IS NOT DISTINCT FROM NULLIF($4::text, '')::uuid
+AND ($5::bigint = 0 OR r.task_id = $5)
+ORDER BY r.id DESC LIMIT $7 OFFSET $6
 `
 
 type AutomationRunListParams struct {
-	TenantID   string
-	OwnerID    int64
-	TaskID     int64
-	PageOffset int32
-	PageLimit  int32
+	TenantID     string
+	OwnerID      int64
+	DepartmentID int64
+	BindingID    string
+	TaskID       int64
+	PageOffset   int32
+	PageLimit    int32
 }
 
 type AutomationRunListRow struct {
@@ -250,6 +302,8 @@ func (q *Queries) AutomationRunList(ctx context.Context, arg AutomationRunListPa
 	rows, err := q.db.Query(ctx, automationRunList,
 		arg.TenantID,
 		arg.OwnerID,
+		arg.DepartmentID,
+		arg.BindingID,
 		arg.TaskID,
 		arg.PageOffset,
 		arg.PageLimit,
@@ -285,8 +339,11 @@ func (q *Queries) AutomationRunList(ctx context.Context, arg AutomationRunListPa
 }
 
 const automationRunQueue = `-- name: AutomationRunQueue :one
-INSERT INTO automation_runs(tenant_id,task_id,occurrence_key,scheduled_for,trigger_kind,status,error_code)
-VALUES($1,$2,$3,$4,$5,$6,$7)
+INSERT INTO automation_runs(tenant_id,task_id,occurrence_key,scheduled_for,trigger_kind,status,error_code,service_execution)
+SELECT $1::text, $2::bigint, $3::text,
+    $4::timestamptz, $5::text, $6::text,
+    $7::text, task.service_execution
+FROM automation_tasks task WHERE task.tenant_id=$1 AND task.id=$2
 ON CONFLICT (tenant_id,task_id,occurrence_key) DO NOTHING
 RETURNING id
 `
@@ -320,24 +377,27 @@ const automationRunsClaim = `-- name: AutomationRunsClaim :many
 UPDATE automation_runs AS r SET status='running',started_at=now()
 FROM (SELECT id FROM automation_runs WHERE status='queued' ORDER BY id LIMIT $1 FOR UPDATE SKIP LOCKED) AS queued
 WHERE r.id=queued.id
-RETURNING r.id,r.tenant_id,r.task_id,r.occurrence_key,r.scheduled_for,r.trigger_kind,
+RETURNING r.id,r.tenant_id,r.task_id,r.occurrence_key,r.scheduled_for,r.trigger_kind,r.service_execution,
  (SELECT owner_id FROM automation_tasks t WHERE t.tenant_id=r.tenant_id AND t.id=r.task_id) AS owner_id,
  (SELECT department_id FROM automation_tasks t WHERE t.tenant_id=r.tenant_id AND t.id=r.task_id) AS department_id,
+ (SELECT identity_binding_id FROM automation_tasks t WHERE t.tenant_id=r.tenant_id AND t.id=r.task_id) AS identity_binding_id,
  (SELECT name FROM automation_tasks t WHERE t.tenant_id=r.tenant_id AND t.id=r.task_id) AS task_name,
  (SELECT description FROM automation_tasks t WHERE t.tenant_id=r.tenant_id AND t.id=r.task_id) AS task_description
 `
 
 type AutomationRunsClaimRow struct {
-	ID              int64
-	TenantID        string
-	TaskID          int64
-	OccurrenceKey   string
-	ScheduledFor    pgtype.Timestamptz
-	TriggerKind     string
-	OwnerID         int64
-	DepartmentID    int64
-	TaskName        string
-	TaskDescription string
+	ID                int64
+	TenantID          string
+	TaskID            int64
+	OccurrenceKey     string
+	ScheduledFor      pgtype.Timestamptz
+	TriggerKind       string
+	ServiceExecution  pgtype.Text
+	OwnerID           int64
+	DepartmentID      int64
+	IdentityBindingID pgtype.UUID
+	TaskName          string
+	TaskDescription   string
 }
 
 func (q *Queries) AutomationRunsClaim(ctx context.Context, maxRows int32) ([]AutomationRunsClaimRow, error) {
@@ -356,8 +416,10 @@ func (q *Queries) AutomationRunsClaim(ctx context.Context, maxRows int32) ([]Aut
 			&i.OccurrenceKey,
 			&i.ScheduledFor,
 			&i.TriggerKind,
+			&i.ServiceExecution,
 			&i.OwnerID,
 			&i.DepartmentID,
+			&i.IdentityBindingID,
 			&i.TaskName,
 			&i.TaskDescription,
 		); err != nil {
@@ -401,18 +463,27 @@ func (q *Queries) AutomationTaskAdvance(ctx context.Context, arg AutomationTaskA
 
 const automationTaskCount = `-- name: AutomationTaskCount :one
 SELECT count(*) FROM automation_tasks
-WHERE tenant_id=$1 AND owner_id=$2
-AND ($3::text = '' OR strpos(lower(name),lower($3)) > 0)
+WHERE tenant_id=$1 AND owner_id=$2 AND department_id=$3
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF($4::text, '')::uuid
+AND ($5::text = '' OR strpos(lower(name),lower($5)) > 0)
 `
 
 type AutomationTaskCountParams struct {
-	TenantID string
-	OwnerID  int64
-	Keyword  string
+	TenantID     string
+	OwnerID      int64
+	DepartmentID int64
+	BindingID    string
+	Keyword      string
 }
 
 func (q *Queries) AutomationTaskCount(ctx context.Context, arg AutomationTaskCountParams) (int64, error) {
-	row := q.db.QueryRow(ctx, automationTaskCount, arg.TenantID, arg.OwnerID, arg.Keyword)
+	row := q.db.QueryRow(ctx, automationTaskCount,
+		arg.TenantID,
+		arg.OwnerID,
+		arg.DepartmentID,
+		arg.BindingID,
+		arg.Keyword,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -420,8 +491,8 @@ func (q *Queries) AutomationTaskCount(ctx context.Context, arg AutomationTaskCou
 
 const automationTaskCreate = `-- name: AutomationTaskCreate :one
 
-INSERT INTO automation_tasks(tenant_id,owner_id,department_id,name,description,schedule_kind,run_at,timezone,next_run_at,schedule_day)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id
+INSERT INTO automation_tasks(tenant_id,owner_id,department_id,name,description,schedule_kind,run_at,timezone,next_run_at,schedule_day,identity_binding_id)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULLIF($11::text, '')::uuid) RETURNING id
 `
 
 type AutomationTaskCreateParams struct {
@@ -435,6 +506,7 @@ type AutomationTaskCreateParams struct {
 	Timezone     string
 	NextRunAt    pgtype.Timestamptz
 	ScheduleDay  pgtype.Int4
+	BindingID    string
 }
 
 // Automation queries. Every statement is tenant scoped and owner scoped: an
@@ -454,6 +526,7 @@ func (q *Queries) AutomationTaskCreate(ctx context.Context, arg AutomationTaskCr
 		arg.Timezone,
 		arg.NextRunAt,
 		arg.ScheduleDay,
+		arg.BindingID,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -461,17 +534,26 @@ func (q *Queries) AutomationTaskCreate(ctx context.Context, arg AutomationTaskCr
 }
 
 const automationTaskDelete = `-- name: AutomationTaskDelete :execrows
-DELETE FROM automation_tasks WHERE tenant_id=$1 AND owner_id=$2 AND id=$3
+DELETE FROM automation_tasks WHERE tenant_id=$1 AND owner_id=$2 AND id=$3 AND department_id=$4
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF($5::text, '')::uuid
 `
 
 type AutomationTaskDeleteParams struct {
-	TenantID string
-	OwnerID  int64
-	ID       int64
+	TenantID     string
+	OwnerID      int64
+	ID           int64
+	DepartmentID int64
+	BindingID    string
 }
 
 func (q *Queries) AutomationTaskDelete(ctx context.Context, arg AutomationTaskDeleteParams) (int64, error) {
-	result, err := q.db.Exec(ctx, automationTaskDelete, arg.TenantID, arg.OwnerID, arg.ID)
+	result, err := q.db.Exec(ctx, automationTaskDelete,
+		arg.TenantID,
+		arg.OwnerID,
+		arg.ID,
+		arg.DepartmentID,
+		arg.BindingID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -479,35 +561,45 @@ func (q *Queries) AutomationTaskDelete(ctx context.Context, arg AutomationTaskDe
 }
 
 const automationTaskGet = `-- name: AutomationTaskGet :one
-SELECT id,name,description,schedule_kind,run_at,timezone,schedule_day,enabled,next_run_at,last_run_at,failure_count,created_at,updated_at
+SELECT id,name,description,schedule_kind,run_at,timezone,schedule_day,enabled,next_run_at,last_run_at,failure_count,created_at,updated_at,(service_execution IS NOT NULL)::boolean AS runs_as_service
 FROM automation_tasks
-WHERE tenant_id=$1 AND owner_id=$2 AND id=$3
+WHERE tenant_id=$1 AND owner_id=$2 AND id=$3 AND department_id=$4
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF($5::text, '')::uuid
 `
 
 type AutomationTaskGetParams struct {
-	TenantID string
-	OwnerID  int64
-	ID       int64
+	TenantID     string
+	OwnerID      int64
+	ID           int64
+	DepartmentID int64
+	BindingID    string
 }
 
 type AutomationTaskGetRow struct {
-	ID           int64
-	Name         string
-	Description  string
-	ScheduleKind string
-	RunAt        pgtype.Timestamptz
-	Timezone     string
-	ScheduleDay  pgtype.Int4
-	Enabled      bool
-	NextRunAt    pgtype.Timestamptz
-	LastRunAt    pgtype.Timestamptz
-	FailureCount int32
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
+	ID            int64
+	Name          string
+	Description   string
+	ScheduleKind  string
+	RunAt         pgtype.Timestamptz
+	Timezone      string
+	ScheduleDay   pgtype.Int4
+	Enabled       bool
+	NextRunAt     pgtype.Timestamptz
+	LastRunAt     pgtype.Timestamptz
+	FailureCount  int32
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	RunsAsService bool
 }
 
 func (q *Queries) AutomationTaskGet(ctx context.Context, arg AutomationTaskGetParams) (AutomationTaskGetRow, error) {
-	row := q.db.QueryRow(ctx, automationTaskGet, arg.TenantID, arg.OwnerID, arg.ID)
+	row := q.db.QueryRow(ctx, automationTaskGet,
+		arg.TenantID,
+		arg.OwnerID,
+		arg.ID,
+		arg.DepartmentID,
+		arg.BindingID,
+	)
 	var i AutomationTaskGetRow
 	err := row.Scan(
 		&i.ID,
@@ -523,46 +615,53 @@ func (q *Queries) AutomationTaskGet(ctx context.Context, arg AutomationTaskGetPa
 		&i.FailureCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RunsAsService,
 	)
 	return i, err
 }
 
 const automationTaskList = `-- name: AutomationTaskList :many
-SELECT id,name,description,schedule_kind,run_at,timezone,schedule_day,enabled,next_run_at,last_run_at,failure_count,created_at,updated_at
+SELECT id,name,description,schedule_kind,run_at,timezone,schedule_day,enabled,next_run_at,last_run_at,failure_count,created_at,updated_at,(service_execution IS NOT NULL)::boolean AS runs_as_service
 FROM automation_tasks
-WHERE tenant_id=$1 AND owner_id=$2
-AND ($3::text = '' OR strpos(lower(name),lower($3)) > 0)
-ORDER BY id DESC LIMIT $5 OFFSET $4
+WHERE tenant_id=$1 AND owner_id=$2 AND department_id=$3
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF($4::text, '')::uuid
+AND ($5::text = '' OR strpos(lower(name),lower($5)) > 0)
+ORDER BY id DESC LIMIT $7 OFFSET $6
 `
 
 type AutomationTaskListParams struct {
-	TenantID   string
-	OwnerID    int64
-	Keyword    string
-	PageOffset int32
-	PageLimit  int32
+	TenantID     string
+	OwnerID      int64
+	DepartmentID int64
+	BindingID    string
+	Keyword      string
+	PageOffset   int32
+	PageLimit    int32
 }
 
 type AutomationTaskListRow struct {
-	ID           int64
-	Name         string
-	Description  string
-	ScheduleKind string
-	RunAt        pgtype.Timestamptz
-	Timezone     string
-	ScheduleDay  pgtype.Int4
-	Enabled      bool
-	NextRunAt    pgtype.Timestamptz
-	LastRunAt    pgtype.Timestamptz
-	FailureCount int32
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
+	ID            int64
+	Name          string
+	Description   string
+	ScheduleKind  string
+	RunAt         pgtype.Timestamptz
+	Timezone      string
+	ScheduleDay   pgtype.Int4
+	Enabled       bool
+	NextRunAt     pgtype.Timestamptz
+	LastRunAt     pgtype.Timestamptz
+	FailureCount  int32
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	RunsAsService bool
 }
 
 func (q *Queries) AutomationTaskList(ctx context.Context, arg AutomationTaskListParams) ([]AutomationTaskListRow, error) {
 	rows, err := q.db.Query(ctx, automationTaskList,
 		arg.TenantID,
 		arg.OwnerID,
+		arg.DepartmentID,
+		arg.BindingID,
 		arg.Keyword,
 		arg.PageOffset,
 		arg.PageLimit,
@@ -588,6 +687,7 @@ func (q *Queries) AutomationTaskList(ctx context.Context, arg AutomationTaskList
 			&i.FailureCount,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.RunsAsService,
 		); err != nil {
 			return nil, err
 		}
@@ -621,15 +721,18 @@ func (q *Queries) AutomationTaskRecordRun(ctx context.Context, arg AutomationTas
 const automationTaskSetEnabled = `-- name: AutomationTaskSetEnabled :execrows
 UPDATE automation_tasks
 SET enabled=$4,next_run_at=$5,updated_at=now()
-WHERE tenant_id=$1 AND owner_id=$2 AND id=$3
+WHERE tenant_id=$1 AND owner_id=$2 AND id=$3 AND department_id=$6
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF($7::text, '')::uuid
 `
 
 type AutomationTaskSetEnabledParams struct {
-	TenantID  string
-	OwnerID   int64
-	ID        int64
-	Enabled   bool
-	NextRunAt pgtype.Timestamptz
+	TenantID     string
+	OwnerID      int64
+	ID           int64
+	Enabled      bool
+	NextRunAt    pgtype.Timestamptz
+	DepartmentID int64
+	BindingID    string
 }
 
 func (q *Queries) AutomationTaskSetEnabled(ctx context.Context, arg AutomationTaskSetEnabledParams) (int64, error) {
@@ -639,6 +742,8 @@ func (q *Queries) AutomationTaskSetEnabled(ctx context.Context, arg AutomationTa
 		arg.ID,
 		arg.Enabled,
 		arg.NextRunAt,
+		arg.DepartmentID,
+		arg.BindingID,
 	)
 	if err != nil {
 		return 0, err
@@ -646,10 +751,33 @@ func (q *Queries) AutomationTaskSetEnabled(ctx context.Context, arg AutomationTa
 	return result.RowsAffected(), nil
 }
 
+const automationTaskSetServiceExecution = `-- name: AutomationTaskSetServiceExecution :exec
+UPDATE automation_tasks SET service_execution=$4
+WHERE tenant_id=$1 AND owner_id=$2 AND id=$3 AND service_execution IS NULL
+`
+
+type AutomationTaskSetServiceExecutionParams struct {
+	TenantID         string
+	OwnerID          int64
+	ID               int64
+	ServiceExecution pgtype.Text
+}
+
+func (q *Queries) AutomationTaskSetServiceExecution(ctx context.Context, arg AutomationTaskSetServiceExecutionParams) error {
+	_, err := q.db.Exec(ctx, automationTaskSetServiceExecution,
+		arg.TenantID,
+		arg.OwnerID,
+		arg.ID,
+		arg.ServiceExecution,
+	)
+	return err
+}
+
 const automationTaskUpdate = `-- name: AutomationTaskUpdate :execrows
 UPDATE automation_tasks
 SET name=$4,description=$5,schedule_kind=$6,run_at=$7,timezone=$8,next_run_at=$9,schedule_day=$10,updated_at=now()
-WHERE tenant_id=$1 AND owner_id=$2 AND id=$3
+WHERE tenant_id=$1 AND owner_id=$2 AND id=$3 AND department_id=$11
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF($12::text, '')::uuid
 `
 
 type AutomationTaskUpdateParams struct {
@@ -663,6 +791,8 @@ type AutomationTaskUpdateParams struct {
 	Timezone     string
 	NextRunAt    pgtype.Timestamptz
 	ScheduleDay  pgtype.Int4
+	DepartmentID int64
+	BindingID    string
 }
 
 func (q *Queries) AutomationTaskUpdate(ctx context.Context, arg AutomationTaskUpdateParams) (int64, error) {
@@ -677,6 +807,8 @@ func (q *Queries) AutomationTaskUpdate(ctx context.Context, arg AutomationTaskUp
 		arg.Timezone,
 		arg.NextRunAt,
 		arg.ScheduleDay,
+		arg.DepartmentID,
+		arg.BindingID,
 	)
 	if err != nil {
 		return 0, err

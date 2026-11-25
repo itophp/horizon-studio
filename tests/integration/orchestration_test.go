@@ -29,6 +29,7 @@ import (
 type workflowModel struct {
 	tools         []*schema.ToolInfo
 	preferredTool string
+	answer        string
 }
 
 type workflowObservations struct {
@@ -43,11 +44,14 @@ func (o *workflowObservations) Submit(event canonical.Envelope) {
 }
 
 func (m *workflowModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
-	return &workflowModel{tools: tools, preferredTool: m.preferredTool}, nil
+	return &workflowModel{tools: tools, preferredTool: m.preferredTool, answer: m.answer}, nil
 }
 func (m *workflowModel) Generate(_ context.Context, in []*schema.Message, opts ...model.Option) (*schema.Message, error) {
 	for _, msg := range in {
 		if msg.Role == schema.Tool {
+			if m.answer != "" {
+				return schema.AssistantMessage(m.answer, nil), nil
+			}
 			return schema.AssistantMessage("Reviewed.", nil), nil
 		}
 	}
@@ -110,7 +114,7 @@ func TestOrchestrationDurableApprovalGraphAndADK(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.AgentModel = func(context.Context) (model.ToolCallingChatModel, error) { return &workflowModel{}, nil }
-	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,7 +369,7 @@ func TestOrchestrationRetryLimitsAndCompensation(t *testing.T) {
 	if err := e.Attach(g, catalog); err != nil {
 		t.Fatal(err)
 	}
-	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

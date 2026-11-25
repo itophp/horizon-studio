@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DataTable, type AdminColumn } from "@/features/administration/shared";
+import { DataTable, type AdminColumn } from "@/features/identity/shared";
 import type { RuntimeFieldV2 } from "@/api/generated/runtime";
 import { RegisteredControl } from "../components";
 import type { Json } from "../expression";

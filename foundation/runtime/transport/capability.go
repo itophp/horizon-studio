@@ -29,9 +29,12 @@ func newCapability(g *gateway.Gateway, r *registry.Registry) *capabilityAdapter 
 	return &capabilityAdapter{gateway: g, registry: r}
 }
 
-func (a *capabilityAdapter) APIKeyAuth(ctx context.Context, _ string, _ *security.APIKeyScheme) (context.Context, error) {
-	_, err := identity.Current(ctx)
-	return ctx, err
+func (a *capabilityAdapter) APIKeyAuth(ctx context.Context, _ string, scheme *security.APIKeyScheme) (context.Context, error) {
+	principal, err := identity.Current(ctx)
+	if err != nil || (principal.MachineCredentialID() != "") != (scheme.Name == "machine_credential") {
+		return ctx, capabilityProblem(contracts.Problem("unauthenticated"))
+	}
+	return ctx, nil
 }
 
 func capabilityProblem(err error) error {
@@ -128,6 +131,34 @@ func (a *capabilityAdapter) Invoke(ctx context.Context, payload *gen.InvokePaylo
 		Runtime: runtimeRef,
 		Name:    payload.Name, Version: version, Input: input, IdempotencyKey: key,
 		Origin: contracts.OriginHumanUI, CorrelationID: correlation, CausationID: causation,
+	})
+	if err != nil {
+		return nil, capabilityProblem(err)
+	}
+	return resultProjection(result), nil
+}
+
+func (a *capabilityAdapter) InvokeMachine(ctx context.Context, payload *gen.InvokeMachinePayload) (*gen.CapabilityResult, error) {
+	input, ok := payload.Input.(map[string]any)
+	if !ok {
+		return nil, capabilityProblem(contracts.Problem("invalid"))
+	}
+	key := ""
+	if payload.IdempotencyKey != nil {
+		key = *payload.IdempotencyKey
+	}
+	correlation, _ := ctx.Value(requestCorrelationKey{}).(string)
+	principal, err := identity.Current(ctx)
+	if err != nil || principal.MachineCredentialID() == "" {
+		return nil, capabilityProblem(contracts.Problem("unauthenticated"))
+	}
+	origin := contracts.OriginAPI
+	if principal.AgentDelegationID() != "" {
+		origin = contracts.OriginAgent
+	}
+	result, err := a.gateway.Invoke(ctx, gateway.Request{
+		Name: payload.Name, Version: payload.Version, Input: input, IdempotencyKey: key,
+		Origin: origin, CorrelationID: correlation,
 	})
 	if err != nil {
 		return nil, capabilityProblem(err)

@@ -34,6 +34,16 @@
       "type": "boolean",
       "description": "Marks the contributed application as deployment-baseline managed for every tenant."
     },
+    "signIn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "namespace"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$"},
+        "namespace": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$"},
+        "default": {"type": "boolean"}
+      }
+    },
     "extensions": {
       "type": "array",
       "uniqueItems": true,
@@ -56,8 +66,29 @@
           "shell",
           "theme",
           "locale",
-          "settings"
+          "settings",
+          "identity-type"
         ]
+      }
+    },
+    "identityTypes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "version", "verify", "verifyVersion", "revocationEvent"],
+        "properties": {
+          "code": {"type": "string"},
+          "version": {"type": "string"},
+          "verify": {"type": "string"},
+          "verifyVersion": {"type": "string"},
+          "revocationEvent": {"type": "string"},
+          "displayName": {"type": "string", "maxLength": 100},
+          "subjectScope": {"const": "tenant"},
+          "reviewRequired": {"type": "boolean"},
+          "validForMinutes": {"type": "integer", "minimum": 1, "maximum": 525600},
+          "organizationContext": {"type": "boolean"}
+        }
       }
     },
     "permissions": {

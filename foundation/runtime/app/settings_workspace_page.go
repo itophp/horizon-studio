@@ -41,8 +41,10 @@ func workspaceSettingsEditor(active ar.Expression, version string) ar.Node {
 			return !slices.Contains([]string{"aiModels.glm.type", "aiModels.glm.providerId", "aiModels.custom.type"}, definition.Key)
 		case "1.0.3":
 			return !governance.IsAIModelSetting(definition.Key)
-		default:
+		case "1.0.4":
 			return !governance.IsAISetting(definition.Key)
+		default:
+			return !governance.IsAISetting(definition.Key) && definition.Group != "smtp" && definition.Group != "templates"
 		}
 	})
 }
@@ -135,6 +137,26 @@ func workspaceSettingField(definition governance.Definition) viewProps {
 const workspaceActionData = "_workspaceAction"
 
 func workspaceSettingsContent(active ar.Expression, version string) ar.Node {
+	children := []ar.Node{
+		workspaceSettingsEditor(active, version), workspaceDrafts(), workspaceHistory(),
+		workspaceScheduleQueue(), workspaceActionDialog("publish"), workspaceActionDialog("rollback"),
+		workspaceActionDialog("schedule"),
+	}
+	if version == "1.0.1" || version == "1.0.2" || version == "1.0.3" || version == "1.0.4" {
+		children = append([]ar.Node{workspaceSettingsToolbar()}, children...)
+	}
+	root := layoutNode("workspace-config-content", ar.LayoutProps{Gap: "16px"}, children...)
+	allowed := permits("settings:read")
+	root.Layout.Visible = &allowed
+	root.Layout.Data = []ar.DataSpec{
+		{ID: workspaceSettingsData, Provider: "workspace-settings", EnabledWhen: &active, NonBlocking: true, PollMs: 5000},
+		{ID: workspaceSchedulesData, Provider: "workspace-schedules", EnabledWhen: &active, NonBlocking: true, PollMs: 5000},
+		{ID: workspaceActionData},
+	}
+	return root
+}
+
+func workspaceSettingsToolbar() ar.Node {
 	revision := componentNode("workspace-settings-revision", "text", "$"+workspaceSettingsData, viewProps{"textKey": "governance:revision", "className": "muted-text"})
 	componentOf(revision).Bindings = []ar.Mapping{mapping("values", objectValue(
 		mapping("version", fieldPath("record.revision")),
@@ -147,22 +169,9 @@ func workspaceSettingsContent(active ar.Expression, version string) ar.Node {
 		Payload: objectValue(workspaceInputs()...),
 	})
 	componentOf(export).Visible = &exportAllowed
-	toolbar := layoutNode("workspace-settings-toolbar", ar.LayoutProps{
+	return layoutNode("workspace-settings-toolbar", ar.LayoutProps{
 		ClassName: "gov-toolbar", Columns: "1fr max-content", Gap: "8px",
 	}, revision, export)
-	root := layoutNode("workspace-config-content", ar.LayoutProps{Gap: "16px"},
-		toolbar, workspaceSettingsEditor(active, version), workspaceDrafts(), workspaceHistory(),
-		workspaceScheduleQueue(), workspaceActionDialog("publish"), workspaceActionDialog("rollback"),
-		workspaceActionDialog("schedule"),
-	)
-	allowed := permits("settings:read")
-	root.Layout.Visible = &allowed
-	root.Layout.Data = []ar.DataSpec{
-		{ID: workspaceSettingsData, Provider: "workspace-settings", EnabledWhen: &active, NonBlocking: true, PollMs: 5000},
-		{ID: workspaceSchedulesData, Provider: "workspace-schedules", EnabledWhen: &active, NonBlocking: true, PollMs: 5000},
-		{ID: workspaceActionData},
-	}
-	return root
 }
 
 func workspaceDrafts() ar.Node {

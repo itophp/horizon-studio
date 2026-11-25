@@ -16,12 +16,8 @@ import {
   runtimeDefinitionListSchema,
   runtimeDefinitionViewSchema,
 } from "@/api/generated/runtime";
-import { useSession } from "@/features/administration/auth";
-import {
-  PageHeading,
-  ErrorBanner,
-  Loading,
-} from "@/features/administration/shared";
+import { useSession } from "@/features/identity/auth";
+import { PageHeading, ErrorBanner, Loading } from "@/features/identity/shared";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TaskPanel } from "./task-panel";
@@ -44,7 +40,7 @@ export function ApplicationDesignPage() {
   const identity = JSON.stringify([
     session.tenantId,
     session.account.id,
-    session.activeDepartmentId,
+    session.identityBindingId,
     session.authorizationVersion,
   ]);
   const canDesign = session.permissions.includes("applications:design");

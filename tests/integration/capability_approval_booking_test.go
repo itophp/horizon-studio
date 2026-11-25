@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	genidentity "horizon/foundation/gen/identity"
 	"horizon/foundation/kernel/approval"
 	"horizon/foundation/kernel/audit"
 	"horizon/foundation/kernel/capability/contracts"
@@ -15,6 +16,7 @@ import (
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
 	"horizon/foundation/system/notifications"
+	"horizon/internal/repository/dbgen"
 )
 
 // TestAutomationApprovalBooking proves that an automation origin can book an
@@ -39,7 +41,7 @@ func TestAutomationApprovalBooking(t *testing.T) {
 		Registry: catalog, Identity: iam, Pool: pool,
 		Approvals: approval.NewStore(pool), Audit: audit.NewStore(pool), Events: eventhub.NewStore(pool),
 	})
-	principal, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	principal, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +87,19 @@ func TestAutomationApprovalBooking(t *testing.T) {
 		t.Fatalf("same payload must reuse the open card: %d vs %d", again.ApprovalID, booked.ApprovalID)
 	}
 
-	executed, err := dispatcher.Decide(callCtx, booked.ApprovalID, true, "approve")
+	reviewerID, err := dbgen.New(pool).IAMCreateAccount(ctx, dbgen.IAMCreateAccountParams{
+		TenantID: "tenant-a", Username: "notification-approver", Status: "active", PasswordHash: "unusable",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedTenantRole(t, pool, "tenant-a", "notification-approver", root.ID, reviewerID,
+		[]*genidentity.PermissionGrant{{Permission: "capability:approve", Effect: "allow", Scope: "ALL"}})
+	reviewer, err := iam.PrincipalForTask(ctx, "tenant-a", reviewerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	executed, err := dispatcher.Decide(identity.WithPrincipal(ctx, reviewer), booked.ApprovalID, true, "approve")
 	if err != nil {
 		t.Fatalf("approving the card failed: %v", err)
 	}

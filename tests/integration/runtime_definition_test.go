@@ -5,7 +5,6 @@ package tests
 import (
 	"encoding/json"
 	"fmt"
-	"horizon/foundation/db/migrations"
 	gencap "horizon/foundation/gen/capability"
 	"horizon/foundation/runtime/app"
 	"horizon/foundation/system/governance"
@@ -14,14 +13,11 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 )
 
 func TestRuntimeDefinitionPublishPersistsAndRejectsStaleVersion(t *testing.T) {
 	handler, pool, _ := iamFixture(t)
-	client := loginIAM(t, handler, "root-admin")
+	client := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	call := func(name string, input map[string]any) map[string]any {
 		t.Helper()
 		r := invokeCapability(t, client, name, map[string]any{"input": input, "idempotencyKey": fmt.Sprintf("definition-%s-%d", name, time.Now().UnixNano())})
@@ -63,7 +59,7 @@ func TestRuntimeDefinitionPublishPersistsAndRejectsStaleVersion(t *testing.T) {
 	// reconciliation must retain the published customization and version count.
 	iam := identity.New(pool, false)
 	restarted := deploymentHandler(app.System{}, governance.New(pool, iam, governance.Options{EncryptionKey: []byte("01234567890123456789012345678901")}), iam)
-	again := loginIAM(t, restarted, "root-admin")
+	again := loginTenantIAM(t, restarted, "root-admin", "tenant-a")
 	restored := invokeCapability(t, again, "application.runtime.resolve", map[string]any{"input": map[string]any{"applicationId": "projects"}})
 	if restored.Status != "succeeded" || restored.Data.(map[string]any)["applicationVersion"] != "2.0.0.1" {
 		t.Fatal(restored)
@@ -99,7 +95,7 @@ func TestRuntimeDefinitionPublishPersistsAndRejectsStaleVersion(t *testing.T) {
 
 func TestRuntimeDynamicApplicationStartsDisabled(t *testing.T) {
 	handler, pool, _ := iamFixture(t)
-	client := loginIAM(t, handler, "root-admin")
+	client := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	call := func(name string, input map[string]any) map[string]any {
 		t.Helper()
 		r := invokeCapability(t, client, name, map[string]any{"input": input, "idempotencyKey": fmt.Sprintf("dynamic-%d", time.Now().UnixNano())})
@@ -154,7 +150,7 @@ func TestRuntimeDynamicApplicationStartsDisabled(t *testing.T) {
 
 func TestRuntimeDefinitionIdempotencyAndInvalidChanges(t *testing.T) {
 	handler, pool, _ := iamFixture(t)
-	client := loginIAM(t, handler, "root-admin")
+	client := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	base := invokeCapability(t, client, "application.runtime.definition.get", map[string]any{"input": map[string]any{"applicationId": "projects"}}).Data.(map[string]any)
 	input := map[string]any{"applicationId": "projects", "baseVersion": base["version"], "revision": base["revision"], "changes": []any{map[string]any{"section": "navigation", "id": "project.list", "operation": "upsert", "value": `{"pageId":"project.list","labelKey":"projects:heading","icon":"layers"}`}}}
 	first := invokeCapability(t, client, "application.runtime.definition.propose", map[string]any{"input": input, "idempotencyKey": "stable-proposal"})
@@ -185,7 +181,7 @@ func TestRuntimeDefinitionIdempotencyAndInvalidChanges(t *testing.T) {
 
 func TestRuntimeDefinitionConcurrentProposals(t *testing.T) {
 	handler, pool, _ := iamFixture(t)
-	client := loginIAM(t, handler, "root-admin")
+	client := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	base := invokeCapability(t, client, "application.runtime.definition.get", map[string]any{"input": map[string]any{"applicationId": "projects"}}).Data.(map[string]any)
 	input := map[string]any{"applicationId": "projects", "baseVersion": base["version"], "revision": base["revision"], "changes": []any{map[string]any{"section": "navigation", "id": "project.list", "operation": "upsert", "value": `{"pageId":"project.list","labelKey":"projects:heading","icon":"layers"}`}}}
 	start := make(chan struct{})
@@ -222,7 +218,7 @@ func TestRuntimeDefinitionConcurrentProposals(t *testing.T) {
 
 func TestRuntimeDesignContractDiscovery(t *testing.T) {
 	handler, _, _ := iamFixture(t)
-	client := loginIAM(t, handler, "root-admin")
+	client := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	get := func(input map[string]any) gencap.CapabilityResult {
 		return invokeCapability(t, client, "application.runtime.definition.contracts", map[string]any{"input": input})
 	}
@@ -242,7 +238,7 @@ func TestRuntimeDesignContractDiscovery(t *testing.T) {
 
 func TestCapabilityConsoleRuntimeDeployment(t *testing.T) {
 	handler, pool, _ := iamFixture(t)
-	client := loginIAM(t, handler, "root-admin")
+	client := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	resolved := invokeCapability(t, client, "application.runtime.resolve", map[string]any{
 		"input": map[string]any{"applicationId": "capabilities"},
 	})
@@ -288,23 +284,13 @@ func TestCapabilityConsoleRuntimeDeployment(t *testing.T) {
 		t.Fatal(published, err)
 	}
 
-	db := stdlib.OpenDB(*pool.Config().ConnConfig)
-	defer db.Close()
-	migrator, err := goose.NewProvider(goose.DialectPostgres, db, migrations.Files)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = migrator.DownTo(t.Context(), 30); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = identity.Bootstrap(t.Context(), pool, "tenant-console-existing", "existing-console-admin", "TestOnly!2026Secure"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = identity.Bootstrap(t.Context(), pool, "tenant-console-upgrade", "upgrade-console-admin", "TestOnly!2026Secure"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = migrator.Up(t.Context()); err != nil {
-		t.Fatal(err)
+	for tenant, username := range map[string]string{
+		"tenant-console-existing": "existing-console-admin",
+		"tenant-console-upgrade":  "upgrade-console-admin",
+	} {
+		if _, err := identity.Bootstrap(t.Context(), pool, tenant, username, "TestOnly!2026Secure"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	// Simulate an immutable snapshot registered from an earlier build.
 	if _, err = pool.Exec(t.Context(), `INSERT INTO runtime_deployment_snapshots
@@ -318,9 +304,10 @@ func TestCapabilityConsoleRuntimeDeployment(t *testing.T) {
 		UPDATE runtime_installations SET version='1.0.0', status='installed'
 		WHERE tenant_id='tenant-console-upgrade' AND plugin_id='builtin:capabilities';
 		INSERT INTO runtime_application_states(tenant_id,application_id,plugin_id,enabled)
-		VALUES ('tenant-console-upgrade','capabilities','builtin:capabilities',true);
+		VALUES ('tenant-console-upgrade','capabilities','builtin:capabilities',true) ON CONFLICT DO NOTHING;
 		INSERT INTO runtime_application_heads(tenant_id,application_id,plugin_id,base_digest,route_root)
-		VALUES ('tenant-console-upgrade','capabilities','builtin:capabilities','legacy-capability-snapshot','/capabilities');
+		VALUES ('tenant-console-upgrade','capabilities','builtin:capabilities','legacy-capability-snapshot','/capabilities')
+        ON CONFLICT (tenant_id, application_id) DO UPDATE SET base_digest = EXCLUDED.base_digest;
 		INSERT INTO runtime_application_versions(tenant_id,application_id,version,base_digest,definition,digest,source,created_by)
 		SELECT 'tenant-console-upgrade', application_id, '1.0.0.0', 'legacy-capability-snapshot',
 		       definition || '{"version":"1.0.0","pluginVersion":"1.0.0","applicationVersion":"1.0.0.0"}'::jsonb,
@@ -352,7 +339,7 @@ func TestCapabilityConsoleRuntimeDeployment(t *testing.T) {
 	if err != nil || !strings.HasPrefix(published, "1.1.0.") {
 		t.Fatal(published, err)
 	}
-	upgradeClient := loginIAM(t, restarted, "upgrade-console-admin")
+	upgradeClient := loginTenantIAM(t, restarted, "upgrade-console-admin", "tenant-console-upgrade")
 	var revision int64
 	if err := pool.QueryRow(t.Context(), `SELECT revision FROM runtime_installations
 		WHERE tenant_id='tenant-console-upgrade' AND plugin_id='builtin:capabilities'`).Scan(&revision); err != nil {

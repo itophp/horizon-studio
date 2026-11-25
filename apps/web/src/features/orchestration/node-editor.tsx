@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { capabilityDefinitions } from "@/api/generated/baseline";
 import { useCapabilityKey } from "@/features/capabilities/shared";
-import { EditorDialog, ErrorBanner } from "@/features/administration/shared";
+import { EditorDialog, ErrorBanner } from "@/features/identity/shared";
 import type { Diagram } from "./graph";
 import {
   ancestors,

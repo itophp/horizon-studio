@@ -13,7 +13,7 @@ import {
   Upload,
   Users,
 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RuntimeTabs, TabsContent } from "./runtime-tabs";
 import { useConfiguration } from "@/features/governance/runtime";
 import { evaluate } from "../expression";
 import {
@@ -370,8 +370,7 @@ export function LayoutTabs({
 
   if (!current) return <p role="alert">{t("runtime:denied")}</p>;
   return (
-    <Tabs
-      className="protocol-layout-tabs"
+    <RuntimeTabs
       value={current.id}
       onValueChange={(value) => {
         if (!tabs.some(({ id }) => id === value)) return;
@@ -392,30 +391,28 @@ export function LayoutTabs({
           { replace: Boolean(storageKey) },
         );
       }}
+      label={props.labelKey ? t(String(props.labelKey)) : undefined}
+      tabs={tabs.map((tab) => {
+        const Icon = tab.icon && tabIcons[tab.icon];
+        const label = t(tab.labelKey);
+        return {
+          id: tab.id,
+          label: (
+            <>
+              {Icon && <Icon size={15} aria-hidden />}
+              {tab.webMcpCount && !readOnly ? (
+                <WebMcpTabLabel label={label} />
+              ) : (
+                label
+              )}
+            </>
+          ),
+        };
+      })}
+      hideSingleTab={Boolean(props.hideSingleTab)}
     >
-      {(!props.hideSingleTab || tabs.length > 1) && (
-        <TabsList
-          className="overview-tabs"
-          aria-label={props.labelKey ? t(String(props.labelKey)) : undefined}
-        >
-          {tabs.map((tab) => {
-            const Icon = tab.icon && tabIcons[tab.icon];
-            const label = t(tab.labelKey);
-            return (
-              <TabsTrigger key={tab.id} value={tab.id}>
-                {Icon && <Icon size={15} aria-hidden />}
-                {tab.webMcpCount && !readOnly ? (
-                  <WebMcpTabLabel label={label} />
-                ) : (
-                  label
-                )}
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
-      )}
       {children}
-    </Tabs>
+    </RuntimeTabs>
   );
 }
 

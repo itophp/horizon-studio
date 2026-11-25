@@ -1,5 +1,5 @@
 id: com.horizon.mail
-version: 1.1.0
+version: 1.1.11
 apiVersion: "1.0"
 mode: builtin
 # The runtime installation key predates the plugin id; installed tenants keep

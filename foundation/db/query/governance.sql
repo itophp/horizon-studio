@@ -49,23 +49,46 @@ INSERT INTO gov_versions(tenant_id,domain,resource_key,scope_key,entity_id,revis
 -- name: GovAudit :exec
 INSERT INTO gov_audit(tenant_id,scope_key,actor_id,action,resource_key,revision,detail) VALUES($1,$2,$3,$4,$5,$6,$7);
 
--- name: GovCreateProof :exec
-INSERT INTO gov_reauth(token_hash,tenant_id,session_hash,department_id,operation,resource_id,revision,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,now()+interval '5 minutes');
+-- name: GovCreateProof :one
+INSERT INTO iam_reauthentication_proofs(token_hash, tenant_id, session_hash, context_hash, operation, resource_id, revision, expires_at)
+SELECT sqlc.arg(token_hash), session.tenant_id, session.token_hash,
+       sha256(convert_to(session.csrf_token, 'UTF8')),
+       sqlc.arg(operation), sqlc.arg(resource_id), sqlc.arg(revision), now() + interval '5 minutes'
+FROM iam_sessions session
+WHERE session.token_hash = sqlc.arg(session_hash) AND session.tenant_id = sqlc.arg(tenant_id)
+  AND session.csrf_token = sqlc.arg(expected_csrf) AND session.expires_at > now()
+FOR SHARE OF session
+RETURNING token_hash;
 
 -- name: GovConsumeProof :one
-DELETE FROM gov_reauth WHERE token_hash=$1 AND tenant_id=$2 AND session_hash=$3 AND department_id=$4 AND operation=$5 AND resource_id=$6 AND revision=$7 AND expires_at>now() RETURNING token_hash;
+WITH live_context AS (
+    SELECT session.token_hash, session.tenant_id, sha256(convert_to(session.csrf_token, 'UTF8')) AS context_hash
+    FROM iam_sessions session
+    WHERE session.token_hash = sqlc.arg(session_hash) AND session.tenant_id = sqlc.arg(tenant_id)
+      AND session.csrf_token = sqlc.arg(expected_csrf) AND session.expires_at > now()
+    FOR SHARE OF session
+)
+DELETE FROM iam_reauthentication_proofs proof USING live_context session
+WHERE proof.token_hash = sqlc.arg(token_hash)
+  AND proof.session_hash = session.token_hash AND proof.tenant_id = session.tenant_id
+  AND proof.context_hash = session.context_hash
+  AND proof.operation = sqlc.arg(operation) AND proof.resource_id = sqlc.arg(resource_id)
+  AND proof.revision = sqlc.arg(revision) AND proof.expires_at > now()
+RETURNING proof.token_hash;
 
 -- name: GovDepartmentPath :many
-WITH RECURSIVE path AS (SELECT d.id,d.parent_id,d.organization_id,0 AS depth FROM iam_departments d WHERE d.tenant_id=$1 AND d.id=$2 UNION ALL SELECT d.id,d.parent_id,d.organization_id,p.depth+1 FROM iam_departments d JOIN path p ON p.parent_id=d.id WHERE d.tenant_id=$1 AND p.depth<100) SELECT id,organization_id,depth FROM path ORDER BY depth DESC;
+WITH RECURSIVE path AS (SELECT d.id,d.parent_id,d.organization_id,0 AS depth FROM identity_departments d WHERE d.tenant_id=$1 AND d.id=$2 UNION ALL SELECT d.id,d.parent_id,d.organization_id,p.depth+1 FROM identity_departments d JOIN path p ON p.parent_id=d.id WHERE d.tenant_id=$1 AND p.depth<100) SELECT id,organization_id,depth FROM path ORDER BY depth DESC;
 
 -- name: GovSessionTiming :one
-SELECT created_at,expires_at,last_seen_at FROM iam_sessions WHERE token_hash=$1;
+SELECT COALESCE(refreshed_at, created_at)::timestamptz AS created_at,expires_at,last_seen_at FROM iam_sessions WHERE token_hash=$1;
 
 -- name: GovTouchSession :exec
 UPDATE iam_sessions SET last_seen_at=now() WHERE token_hash=$1 AND last_seen_at<now()-interval '1 minute';
 
 -- name: GovAccountPassword :one
-SELECT password_hash FROM iam_accounts WHERE tenant_id=$1 AND id=$2 AND status='active';
+SELECT credential.password_hash FROM iam_active_account_subjects subject
+JOIN iam_password_credentials credential ON credential.login_account_id = subject.login_account_id
+WHERE subject.tenant_id = $1 AND subject.account_id = $2;
 
 -- name: GovDictionaryList :many
 SELECT id,scope_key,code,spec,revision FROM gov_dictionaries WHERE scope_key='workspace:0' AND tenant_id=$1 AND scope_key=ANY($2::text[]) AND (scope_key=sqlc.arg(view_scope) OR (revision>0 AND (sqlc.arg(all_data)::boolean OR spec->>'Visibility'='shared'))) ORDER BY code LIMIT 1000;
@@ -143,19 +166,27 @@ UPDATE gov_events SET lease_until=now()+interval '1 minute',attempts=attempts+1 
 UPDATE gov_events SET processed=true,lease_until=NULL WHERE tenant_id=$1 AND id=$2;
 
 -- name: GovEventRequest :one
-SELECT r.applicant_id,r.department_id,r.status,r.revoked_by,a.full_name,d.name AS department_name FROM iam_temporary_requests r JOIN iam_accounts a ON a.tenant_id=r.tenant_id AND a.id=r.applicant_id JOIN iam_departments d ON d.tenant_id=r.tenant_id AND d.id=r.department_id WHERE r.tenant_id=$1 AND r.id=$2;
+SELECT r.applicant_id, r.revoked_by, a.full_name
+FROM iam_temporary_requests r JOIN account_profile_directory a ON a.tenant_id=r.tenant_id AND a.id=r.applicant_id
+WHERE r.tenant_id=$1 AND r.id=$2;
 
--- name: GovCandidateMemberships :many
-SELECT a.id AS account_id,a.department_id FROM iam_accounts a WHERE a.tenant_id=$1 AND a.status='active' UNION SELECT m.account_id,m.department_id FROM iam_department_memberships m JOIN iam_accounts a ON a.tenant_id=m.tenant_id AND a.id=m.account_id WHERE m.tenant_id=$1 AND a.status='active';
+-- name: GovTemporaryNotificationCandidates :many
+SELECT account_id FROM iam_tenant_account_authority WHERE tenant_id=$1;
 
 -- name: GovAddNotification :one
-INSERT INTO gov_notifications(tenant_id,event_id,recipient_id,department_id,payload) VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_id,event_id,recipient_id,department_id) DO UPDATE SET event_id=EXCLUDED.event_id RETURNING id;
+INSERT INTO gov_notifications(tenant_id,event_id,recipient_id,payload) VALUES($1,$2,$3,$4)
+ON CONFLICT (tenant_id,event_id,recipient_id) WHERE event_id IS NOT NULL AND department_id IS NULL
+DO UPDATE SET event_id=EXCLUDED.event_id RETURNING id;
 
 -- name: GovInbox :many
-SELECT n.id,n.payload,n.read_at,n.created_at FROM gov_notifications n WHERE n.tenant_id=$1 AND n.recipient_id=$2 AND (n.department_id=$3 OR (n.announcement_id IS NOT NULL AND EXISTS(SELECT 1 FROM gov_notification_members m WHERE m.tenant_id=n.tenant_id AND m.account_id=n.recipient_id AND m.department_id=n.department_id))) ORDER BY n.id DESC LIMIT 500;
+SELECT n.id,n.payload,n.read_at,n.created_at FROM gov_notifications n WHERE n.tenant_id=$1 AND n.recipient_id=$2 AND (n.department_id = sqlc.arg(department_id)::bigint
+    OR (n.department_id IS NULL AND sqlc.arg(tenant_base)::boolean) OR (n.announcement_id IS NOT NULL AND EXISTS(SELECT 1 FROM gov_notification_members m WHERE m.tenant_id=n.tenant_id AND m.account_id=n.recipient_id AND m.department_id=n.department_id)))
+AND (COALESCE(n.payload->>'event','') <> 'requested' OR sqlc.arg(can_review)::boolean) ORDER BY n.id DESC LIMIT 500;
 
 -- name: GovReadNotification :one
-UPDATE gov_notifications n SET read_at=now() WHERE n.tenant_id=$1 AND n.id=$2 AND n.recipient_id=$3 AND (n.department_id=$4 OR (n.announcement_id IS NOT NULL AND EXISTS(SELECT 1 FROM gov_notification_members m WHERE m.tenant_id=n.tenant_id AND m.account_id=n.recipient_id AND m.department_id=n.department_id))) RETURNING n.id;
+UPDATE gov_notifications n SET read_at=now() WHERE n.tenant_id=$1 AND n.id=$2 AND n.recipient_id=$3 AND (n.department_id = sqlc.arg(department_id)::bigint
+    OR (n.department_id IS NULL AND sqlc.arg(tenant_base)::boolean) OR (n.announcement_id IS NOT NULL AND EXISTS(SELECT 1 FROM gov_notification_members m WHERE m.tenant_id=n.tenant_id AND m.account_id=n.recipient_id AND m.department_id=n.department_id)))
+AND (COALESCE(n.payload->>'event','') <> 'requested' OR sqlc.arg(can_review)::boolean) RETURNING n.id;
 
 -- name: GovAddDelivery :exec
 INSERT INTO gov_deliveries(tenant_id,message_id,status,error_code) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING;
@@ -164,22 +195,22 @@ INSERT INTO gov_deliveries(tenant_id,message_id,status,error_code) VALUES($1,$2,
 UPDATE gov_deliveries SET status='processing',lease_until=now()+interval '1 minute',attempts=attempts+1 WHERE id=(SELECT id FROM gov_deliveries WHERE ((status='pending' AND next_attempt_at<=now()) OR (status='processing' AND lease_until<now())) AND attempts<5 ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING id,tenant_id,message_id,attempts;
 
 -- name: GovDeliveryMessage :one
-SELECT n.recipient_id,n.department_id,n.payload,a.email FROM gov_notifications n JOIN iam_accounts a ON a.tenant_id=n.tenant_id AND a.id=n.recipient_id WHERE n.tenant_id=$1 AND n.id=$2;
+SELECT n.recipient_id,COALESCE(n.department_id,0)::bigint AS department_id,n.payload,a.email FROM gov_notifications n JOIN account_profile_directory a ON a.tenant_id=n.tenant_id AND a.id=n.recipient_id WHERE n.tenant_id=$1 AND n.id=$2;
 
 -- name: GovFinishDelivery :exec
 UPDATE gov_deliveries SET status=$3,error_code=$4,next_attempt_at=now()+make_interval(secs=>$5::int),lease_until=NULL WHERE tenant_id=$1 AND id=$2;
 
 -- name: GovDeliveries :many
-SELECT d.id,d.message_id,d.channel,d.status,d.attempts,d.error_code,d.created_at,d.next_attempt_at,COALESCE(n.payload->>'title','')::text AS title,a.full_name AS recipient_name FROM gov_deliveries d JOIN gov_notifications n ON n.tenant_id=d.tenant_id AND n.id=d.message_id JOIN iam_accounts a ON a.tenant_id=n.tenant_id AND a.id=n.recipient_id JOIN iam_departments dept ON dept.tenant_id=n.tenant_id AND dept.id=n.department_id WHERE d.tenant_id=sqlc.arg(tenant_id) AND (sqlc.arg(all_data)::boolean OR n.recipient_id=sqlc.arg(own_id)::bigint OR n.department_id=ANY(sqlc.arg(dept_ids)::bigint[]) OR dept.organization_id=ANY(sqlc.arg(org_ids)::bigint[])) ORDER BY d.id DESC LIMIT 500;
+SELECT d.id,d.message_id,d.channel,d.status,d.attempts,d.error_code,d.created_at,d.next_attempt_at,COALESCE(n.payload->>'title','')::text AS title,a.full_name AS recipient_name FROM gov_deliveries d JOIN gov_notifications n ON n.tenant_id=d.tenant_id AND n.id=d.message_id JOIN account_profile_directory a ON a.tenant_id=n.tenant_id AND a.id=n.recipient_id LEFT JOIN identity_departments dept ON dept.tenant_id=n.tenant_id AND dept.id=n.department_id WHERE d.tenant_id=sqlc.arg(tenant_id) AND (sqlc.arg(all_data)::boolean OR n.recipient_id=sqlc.arg(own_id)::bigint OR n.department_id=ANY(sqlc.arg(dept_ids)::bigint[]) OR dept.organization_id=ANY(sqlc.arg(org_ids)::bigint[])) ORDER BY d.id DESC LIMIT 500;
 
 -- name: GovRetryDelivery :one
-UPDATE gov_deliveries d SET status='pending',attempts=0,next_attempt_at=now(),lease_until=NULL FROM gov_notifications n JOIN iam_departments dept ON dept.tenant_id=n.tenant_id AND dept.id=n.department_id WHERE n.tenant_id=d.tenant_id AND n.id=d.message_id AND d.tenant_id=sqlc.arg(tenant_id) AND (sqlc.arg(all_data)::boolean OR n.recipient_id=sqlc.arg(own_id)::bigint OR n.department_id=ANY(sqlc.arg(dept_ids)::bigint[]) OR dept.organization_id=ANY(sqlc.arg(org_ids)::bigint[])) AND d.id=sqlc.arg(id) AND d.channel='smtp' AND d.status IN('failed','skipped') RETURNING d.id;
+UPDATE gov_deliveries d SET status='pending',attempts=0,next_attempt_at=now(),lease_until=NULL FROM gov_notifications n LEFT JOIN identity_departments dept ON dept.tenant_id=n.tenant_id AND dept.id=n.department_id WHERE n.tenant_id=d.tenant_id AND n.id=d.message_id AND d.tenant_id=sqlc.arg(tenant_id) AND (sqlc.arg(all_data)::boolean OR n.recipient_id=sqlc.arg(own_id)::bigint OR n.department_id=ANY(sqlc.arg(dept_ids)::bigint[]) OR dept.organization_id=ANY(sqlc.arg(org_ids)::bigint[])) AND d.id=sqlc.arg(id) AND d.channel='smtp' AND d.status IN('failed','skipped') RETURNING d.id;
 
 -- name: GovAccountEmail :one
-SELECT email FROM iam_accounts WHERE tenant_id=$1 AND id=$2 AND status='active';
+SELECT email FROM account_profile_directory WHERE tenant_id=$1 AND id=$2 AND status='active';
 
 -- name: GovAuthorizedScopes :many
-SELECT s.scope_key FROM gov_scopes s LEFT JOIN iam_departments d ON d.tenant_id=s.tenant_id AND d.id=s.department_id WHERE s.tenant_id=sqlc.arg(tenant_id) AND (sqlc.arg(all_data)::boolean OR s.account_id=sqlc.arg(own_id)::bigint OR s.organization_id=ANY(sqlc.arg(org_ids)::bigint[]) OR s.department_id=ANY(sqlc.arg(dept_ids)::bigint[]) OR d.organization_id=ANY(sqlc.arg(org_ids)::bigint[]));
+SELECT s.scope_key FROM gov_scopes s LEFT JOIN identity_departments d ON d.tenant_id=s.tenant_id AND d.id=s.department_id WHERE s.tenant_id=sqlc.arg(tenant_id) AND (sqlc.arg(all_data)::boolean OR s.account_id=sqlc.arg(own_id)::bigint OR s.organization_id=ANY(sqlc.arg(org_ids)::bigint[]) OR s.department_id=ANY(sqlc.arg(dept_ids)::bigint[]) OR d.organization_id=ANY(sqlc.arg(org_ids)::bigint[]));
 
 -- name: GovLoginFailure :exec
 INSERT INTO iam_login_attempts(attempt_key,failures,locked_until) VALUES(sqlc.arg(attempt_key),1,now()) ON CONFLICT(attempt_key) DO UPDATE SET
@@ -196,7 +227,7 @@ SELECT id,scope_key,code,spec,revision FROM gov_dictionaries WHERE scope_key='wo
 UPDATE gov_deliveries SET status='failed',error_code='lease_expired',lease_until=NULL WHERE status='processing' AND lease_until<now() AND attempts>=5;
 
 -- name: GovClampSessions :exec
-UPDATE iam_sessions SET expires_at=LEAST(expires_at,created_at+make_interval(mins=>sqlc.arg(maximum_minutes)::int)) WHERE tenant_id=sqlc.arg(tenant_id);
+UPDATE iam_sessions SET expires_at=LEAST(expires_at,COALESCE(refreshed_at,created_at)+make_interval(mins=>sqlc.arg(maximum_minutes)::int)) WHERE tenant_id=sqlc.arg(tenant_id);
 
 -- name: GovExpireIdleSessions :exec
 DELETE FROM iam_sessions WHERE tenant_id=sqlc.arg(tenant_id) AND sqlc.arg(idle_minutes)::int>0 AND last_seen_at+make_interval(mins=>sqlc.arg(idle_minutes)::int)<=now();
@@ -204,7 +235,8 @@ DELETE FROM iam_sessions WHERE tenant_id=sqlc.arg(tenant_id) AND sqlc.arg(idle_m
 -- name: GovInboxPage :many
 SELECT n.id,n.payload,n.read_at,n.created_at FROM gov_notifications n
 WHERE n.tenant_id=$1 AND n.recipient_id=$2
-AND (n.department_id=$3 OR (n.announcement_id IS NOT NULL AND EXISTS(SELECT 1 FROM gov_notification_members m WHERE m.tenant_id=n.tenant_id AND m.account_id=n.recipient_id AND m.department_id=n.department_id)))
+AND (n.department_id = sqlc.arg(department_id)::bigint
+    OR (n.department_id IS NULL AND sqlc.arg(tenant_base)::boolean) OR (n.announcement_id IS NOT NULL AND EXISTS(SELECT 1 FROM gov_notification_members m WHERE m.tenant_id=n.tenant_id AND m.account_id=n.recipient_id AND m.department_id=n.department_id)))
 AND n.payload->>'inApp'='true'
 AND (COALESCE(n.payload->>'event','')<>'requested' OR sqlc.arg(can_review)::boolean)
 ORDER BY n.id DESC LIMIT sqlc.arg(page_limit)::int OFFSET sqlc.arg(page_offset)::int;

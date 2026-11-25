@@ -620,7 +620,7 @@ func (s *Service) Reauthenticate(ctx context.Context, payload *ReauthenticatePay
 	if err != nil {
 		return nil, err
 	}
-	err = s.Q.GovCreateProof(ctx, dbgen.GovCreateProofParams{TokenHash: governance.Hash(token), TenantID: p.TenantID, SessionHash: p.TokenHash, DepartmentID: p.Account.DepartmentID, Operation: payload.Operation, ResourceID: payload.ResourceID, Revision: payload.Revision})
+	_, err = s.Q.GovCreateProof(ctx, dbgen.GovCreateProofParams{TokenHash: governance.Hash(token), TenantID: p.TenantID, SessionHash: p.TokenHash, ExpectedCsrf: p.CSRF, Operation: payload.Operation, ResourceID: payload.ResourceID, Revision: payload.Revision})
 	if err != nil {
 		return nil, err
 	}

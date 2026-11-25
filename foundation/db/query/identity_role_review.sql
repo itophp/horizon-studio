@@ -1,0 +1,30 @@
+-- name: IAMRoleImpact :one
+WITH assigned AS (
+    SELECT placement.id, COALESCE(login.principal_id, placement.machine_principal_id) AS subject_id
+    FROM iam_accounts placement
+    LEFT JOIN iam_login_accounts login ON login.id = placement.login_account_id
+    WHERE placement.tenant_id = sqlc.arg(tenant_id)
+      AND (EXISTS (SELECT 1 FROM iam_account_roles r WHERE r.tenant_id = placement.tenant_id AND r.account_id = placement.id AND r.role_id = sqlc.arg(role_id))
+        OR EXISTS (SELECT 1 FROM identity_department_membership_roles r WHERE r.tenant_id = placement.tenant_id AND r.account_id = placement.id AND r.role_id = sqlc.arg(role_id))
+        OR EXISTS (SELECT 1 FROM iam_context_role_grants r WHERE r.tenant_id = placement.tenant_id
+            AND r.principal_id = COALESCE(login.principal_id, placement.machine_principal_id) AND r.role_id = sqlc.arg(role_id)
+            AND r.revoked_at IS NULL AND r.expires_at > now()))
+)
+SELECT (SELECT count(DISTINCT subject_id) FROM assigned)::bigint AS principals,
+    (SELECT count(*) FROM iam_sessions s JOIN assigned ON assigned.id = s.account_id
+        WHERE s.tenant_id = sqlc.arg(tenant_id) AND s.expires_at > now())::bigint AS sessions,
+    (SELECT count(*) FROM automation_tasks t JOIN assigned ON assigned.id = t.owner_id
+        WHERE t.tenant_id = sqlc.arg(tenant_id) AND t.enabled)::bigint AS tasks;
+
+-- name: IAMContextRoleImpact :one
+SELECT 1::bigint AS principals,
+    (SELECT count(*) FROM iam_sessions s
+      JOIN iam_active_account_subjects a ON a.tenant_id = s.tenant_id AND a.account_id = s.account_id
+      WHERE s.tenant_id = g.tenant_id AND a.principal_id = g.principal_id AND s.expires_at > now()
+        AND (g.identity_binding_id IS NULL OR s.identity_binding_id = g.identity_binding_id))::bigint AS sessions,
+    (SELECT count(*) FROM automation_tasks t
+      JOIN iam_active_account_subjects a ON a.tenant_id = t.tenant_id AND a.account_id = t.owner_id
+      WHERE t.tenant_id = g.tenant_id AND a.principal_id = g.principal_id AND t.enabled
+        AND (g.identity_binding_id IS NULL OR t.identity_binding_id = g.identity_binding_id))::bigint AS tasks
+FROM iam_context_role_grants g WHERE g.tenant_id = sqlc.arg(tenant_id) AND g.id = sqlc.arg(grant_id)
+    AND g.revoked_at IS NULL AND g.expires_at > now();

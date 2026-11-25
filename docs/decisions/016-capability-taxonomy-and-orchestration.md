@@ -1,6 +1,6 @@
 # ADR 016：能力分类与持久化编排
 
-日期：2026-11-01。状态：核心实现已加入工作区；验证结果见 [编排方案](../orchestration-plan.md)。继承 [ADR 015](015-capability-centric-platform.md)，能力组合硬边界见 [能力组合规范](../capability-composition.md)。
+日期：2026-11-01。状态：核心实现已加入租户；验证结果见 [编排方案](../orchestration-plan.md)。继承 [ADR 015](015-capability-centric-platform.md)，能力组合硬边界见 [能力组合规范](../capability-composition.md)。
 
 ## 1. 决策与架构
 

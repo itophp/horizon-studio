@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -48,7 +49,9 @@ func (m *Module) publishedCatalogWith(ctx context.Context, q *dbgen.Queries, ten
 		if err = json.Unmarshal(row.Definition, &app); err != nil {
 			return nil, contracts.Problem("invalid")
 		}
-		if app.Protocol == nil {
+		// A published snapshot can outlive the deployment that provided it.
+		// Keep its history, but exclude it from the current Runtime catalog.
+		if app.Protocol == nil || !m.hasDefinitionSource(app) {
 			continue
 		}
 		m.supplyPublishedImportTemplates(&app)
@@ -59,6 +62,13 @@ func (m *Module) publishedCatalogWith(ctx context.Context, q *dbgen.Queries, ten
 		apps = append(apps, app)
 	}
 	return apps, nil
+}
+
+func (m *Module) hasDefinitionSource(app ar.ApplicationV2) bool {
+	return (app.Source == runtimeHost && app.PluginVersion == "1.0.0") ||
+		slices.ContainsFunc(m.contributions(), func(source ar.ApplicationV2) bool {
+			return source.ID == app.ID && source.Source == app.Source && source.PluginVersion == app.PluginVersion
+		})
 }
 
 // Published snapshots can predate the templatePath requirement. Use the

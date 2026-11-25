@@ -2,7 +2,7 @@ import { FolderPlus, Upload } from "lucide-react";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { ListSearch } from "@/features/administration/shared";
+import { ListSearch } from "@/features/identity/shared";
 import { DriveSelect } from "./select";
 export function DriveToolbar({
   search,

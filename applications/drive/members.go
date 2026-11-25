@@ -121,7 +121,7 @@ func (m *Module) requireEffectiveAdmin(ctx context.Context, tx pgx.Tx, q *dbgen.
 	}
 	iam := m.identities
 	for _, candidate := range candidates {
-		principal, err := iam.PrincipalForTaskInTx(ctx, tx, tenant, candidate.AccountID, candidate.DepartmentID)
+		principal, err := iam.PrincipalForTaskInTx(ctx, tx, tenant, candidate.AccountID)
 		if err == nil && principal.Can("drive:use") {
 			return nil
 		}

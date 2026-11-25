@@ -58,10 +58,18 @@ func TestExampleRecordsColumns(t *testing.T) {
 
 func TestMultiColumnLineIsSplit(t *testing.T) {
 	table := mustTable(t, loadTables(t), "iam_accounts")
-	for _, name := range []string{"id", "tenant_id", "username", "full_name", "password_hash", "is_admin"} {
+	for _, name := range []string{"id", "tenant_id", "username", "login_account_id", "is_admin", "created_at", "last_login"} {
 		if _, ok := table.Column(name); !ok {
 			t.Fatalf("column %q missing from iam_accounts (%v)", name, table.Names())
 		}
+	}
+	for _, name := range []string{"password_hash", "full_name", "email", "organization_id", "department_id"} {
+		if _, ok := table.Column(name); ok {
+			t.Fatalf("retired column %q remains on the IAM account", name)
+		}
+	}
+	if _, ok := mustTable(t, loadTables(t), "iam_password_credentials").Column("password_hash"); !ok {
+		t.Fatal("password credential column is missing")
 	}
 	status, _ := table.Column("status")
 	if strings.Join(status.Enum, ",") != "active,inactive" {
@@ -204,8 +212,7 @@ ALTER TABLE demo ALTER COLUMN amount DROP NOT NULL;
 }
 
 func TestViewsAreNotTables(t *testing.T) {
-	// 00008 defines two reporting views next to the tables it creates. They are
-	// not base tables and must not be offered as entity targets.
+	// Reporting views are not base tables and cannot serve as entity targets.
 	index := loadTables(t)
 	for _, name := range []string{"gov_notification_members", "gov_notification_targets"} {
 		if _, ok := index[name]; ok {
@@ -217,10 +224,9 @@ func TestViewsAreNotTables(t *testing.T) {
 func TestCompositeForeignKeyResolvesPointerNotScopeColumn(t *testing.T) {
 	index := loadTables(t)
 
-	// iam_accounts references iam_organizations on (tenant_id, organization_id).
 	accounts := mustTable(t, index, "iam_accounts")
-	if target, ok := accounts.ParentOf("organization_id"); !ok || target != "iam_organizations" {
-		t.Fatalf("ParentOf(organization_id) = %q, %v", target, ok)
+	if target, ok := accounts.ParentOf("organization_id"); ok {
+		t.Fatalf("retired account organization key resolved to %q", target)
 	}
 
 	// gov_files carries organization_id only as a guard inside the department
@@ -229,17 +235,16 @@ func TestCompositeForeignKeyResolvesPointerNotScopeColumn(t *testing.T) {
 	if target, ok := files.ParentOf("organization_id"); ok {
 		t.Fatalf("organization_id should only guard the key, got %q", target)
 	}
-	if target, ok := files.ScopeTarget("organization_id"); !ok || target != "iam_departments" {
+	if target, ok := files.ScopeTarget("organization_id"); !ok || target != "identity_departments" {
 		t.Fatalf("ScopeTarget(organization_id) = %q, %v", target, ok)
 	}
-	if target, ok := files.ParentOf("department_id"); !ok || target != "iam_departments" {
+	if target, ok := files.ParentOf("department_id"); !ok || target != "identity_departments" {
 		t.Fatalf("ParentOf(department_id) = %q, %v", target, ok)
 	}
 }
 
 func TestAlterAddForeignKeyIsApplied(t *testing.T) {
-	// gov_notifications gains announcement_id in 00008 with ALTER TABLE ... ADD
-	// FOREIGN KEY, not inside CREATE TABLE.
+	// The baseline adds the announcement foreign key after creating the table.
 	notifications := mustTable(t, loadTables(t), "gov_notifications")
 	if target, ok := notifications.ParentOf("announcement_id"); !ok || target != "gov_announcements" {
 		t.Fatalf("ParentOf(announcement_id) = %q, %v", target, ok)
@@ -353,5 +358,60 @@ func TestConstraintKeywordRequiresTokenBoundary(t *testing.T) {
 		if !isConstraint(constraint) {
 			t.Fatalf("constraint parsed as column: %s", constraint)
 		}
+	}
+}
+
+func TestAlterAddColumnPreservesInlineForeignKey(t *testing.T) {
+	tables, err := Parse(fstest.MapFS{"001.sql": {Data: []byte(`
+CREATE TABLE parents (id uuid PRIMARY KEY);
+CREATE TABLE children (id uuid PRIMARY KEY);
+ALTER TABLE children ADD COLUMN parent_id uuid REFERENCES parents(id);
+ALTER TABLE children ADD COLUMN IF NOT EXISTS parent_id uuid REFERENCES parents(id);
+`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	children := tables[1]
+	if len(children.ForeignKeys) != 1 || children.ForeignKeys[0].Name != "children_parent_id_fkey" {
+		t.Fatalf("inline key was lost or duplicated: %+v", children.ForeignKeys)
+	}
+	if target, found := children.ParentOf("parent_id"); !found || target != "parents" {
+		t.Fatal("ALTER-added reference missing from schema model")
+	}
+}
+
+func TestAlterAppliesEveryTopLevelAction(t *testing.T) {
+	tables, err := Parse(fstest.MapFS{"001.sql": {Data: []byte(`
+CREATE TABLE parents (id uuid PRIMARY KEY);
+CREATE TABLE children (id uuid PRIMARY KEY, obsolete text);
+ALTER TABLE children
+ ADD COLUMN purpose text NOT NULL DEFAULT 'link' CHECK (purpose IN ('login', 'link')),
+ ADD COLUMN completion boolean NOT NULL DEFAULT false,
+ ADD COLUMN parent_id uuid REFERENCES parents(id),
+ DROP COLUMN obsolete,
+ ADD CONSTRAINT children_completion_check CHECK (completion IN (true, false));
+ALTER TABLE children ALTER COLUMN purpose DROP NOT NULL, ALTER COLUMN parent_id SET NOT NULL;
+`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	children := tables[1]
+	purpose, found := children.Column("purpose")
+	if !found || purpose.NotNull || strings.Join(purpose.Enum, ",") != "login,link" {
+		t.Fatalf("purpose action lost or merged: %+v", purpose)
+	}
+	completion, found := children.Column("completion")
+	if !found || completion.SQLType != "boolean" || !completion.NotNull || completion.Default != "false" {
+		t.Fatalf("second column lost: %+v", completion)
+	}
+	if _, found := children.Column("obsolete"); found {
+		t.Fatal("DROP after ADD was ignored")
+	}
+	parent, found := children.Column("parent_id")
+	if !found || !parent.NotNull {
+		t.Fatalf("later ALTER COLUMN ignored: %+v", parent)
+	}
+	if target, found := children.ParentOf("parent_id"); !found || target != "parents" {
+		t.Fatal("inline foreign key lost in multi-action ALTER")
 	}
 }

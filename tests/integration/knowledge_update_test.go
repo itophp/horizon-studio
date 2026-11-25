@@ -18,10 +18,10 @@ import (
 
 func TestKnowledgeUpdatePermissionsAndFailedIndex(t *testing.T) {
 	handler, pool, admin := iamFixture(t)
-	root := loginIAM(t, handler, "root-admin")
+	root := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	checkSucceeded(t, root.invoke(t, "identity.account.create", map[string]any{
 		"username": "reader", "fullName": "Reader", "organizationId": admin.OrganizationID,
-		"departmentId": admin.DepartmentID, "status": "active", "roleIds": []int64{},
+		"departmentId": admin.DepartmentID, "initialStatus": "active", "roleIds": []int64{},
 		"overrides": []map[string]any{{"permission": "knowledge:read", "effect": "allow", "scope": "ALL"}},
 		"password":  "TestOnly!2026Secure",
 	}, true))
@@ -83,7 +83,7 @@ func TestKnowledgeUpdateReplacesIndex(t *testing.T) {
 	}))
 	defer model.Close()
 	handler, pool, _ := iamFixture(t)
-	root := loginIAM(t, handler, "root-admin")
+	root := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	saveAIConfig(t, root, 0, map[string]any{
 		"knowledge.embedding.profile": "custom-vector", "knowledge.vector.url": redisURL,
 		"aiModels.custom-vector.type": "embedding", "aiModels.custom-vector.protocol": "openai-embedding",

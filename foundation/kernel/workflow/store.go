@@ -20,15 +20,18 @@ type execution struct {
 	AgentTools bool
 }
 type manifest struct {
-	PlanResult     string         `json:"planResult,omitempty"`
-	AuthorityStamp string         `json:"authorityStamp,omitempty"`
-	Format         int            `json:"format"`
-	Definition     Definition     `json:"definition"`
-	Hash           string         `json:"hash"`
-	Input          map[string]any `json:"input"`
-	Correlation    string         `json:"correlation"`
-	Parent         string         `json:"parent"`
-	Depth          int            `json:"depth"`
+	PlanResult          string         `json:"planResult,omitempty"`
+	PlanCapability      string         `json:"planCapability,omitempty"`
+	AuthorityStamp      string         `json:"authorityStamp,omitempty"`
+	Format              int            `json:"format"`
+	Definition          Definition     `json:"definition"`
+	Hash                string         `json:"hash"`
+	Input               map[string]any `json:"input"`
+	Correlation         string         `json:"correlation"`
+	Parent              string         `json:"parent"`
+	Depth               int            `json:"depth"`
+	MachineCredentialID string         `json:"machineCredentialId,omitempty"`
+	AgentDelegationID   string         `json:"agentDelegationId,omitempty"`
 }
 type checkpointStore struct {
 	core   *governance.Core

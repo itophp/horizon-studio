@@ -55,9 +55,9 @@
     "id": "Enter a valid token ID."
   },
   "failure": {
-    "forbidden": "The password is wrong, or this department may not issue tokens.",
+    "forbidden": "The password is wrong, or the current identity cannot issue tokens.",
     "unauthenticated": "Your session expired. Sign in again and retry.",
-    "invalid": "The server rejected this submission. Check the validity and the selected tools.",
+    "invalid": "The server rejected this request. Check the token name and expiry.",
     "unavailable": "The service is unavailable. Confirm the API is running and migrations are applied.",
     "rate_limited": "Too many attempts. Wait and try again.",
     "internal": "The server failed to process the request. Check the API logs.",
@@ -114,9 +114,9 @@
   "emergencyRevoke": "Emergency revoke",
   "emergencyTitle": "Emergency token revoke",
   "emergencySubmit": "Revoke immediately",
-  "emergencyHelp": "With the dedicated management permission, revoke a specified token in this workspace. Ask the owner for its Token ID.",
+  "emergencyHelp": "With the dedicated management permission, revoke a specified token in this tenant. Ask the owner for its Token ID.",
   "emergencyId": "Token ID to revoke",
   "adminPassword": "Administrator password",
   "emergencyDone": "Token revoked.",
-  "dynamicTools": "All existing and new tokens can use capabilities currently permitted to their bound department. Access is checked on each request."
+  "dynamicTools": "Tokens can use capabilities currently allowed for their tenant and identity context. Access is checked on each request."
 }

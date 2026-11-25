@@ -20,7 +20,7 @@ type GovAddAnnouncementMessageParams struct {
 	TenantID       string
 	AnnouncementID pgtype.Int8
 	RecipientID    int64
-	DepartmentID   int64
+	DepartmentID   pgtype.Int8
 	Payload        []byte
 }
 
@@ -223,7 +223,9 @@ func (q *Queries) GovCreateAnnouncement(ctx context.Context, arg GovCreateAnnoun
 
 const govInboxMessage = `-- name: GovInboxMessage :one
 SELECT n.id,n.payload,n.read_at,n.created_at FROM gov_notifications n WHERE n.tenant_id=$1 AND n.recipient_id=$2 AND n.id=$3
-AND (n.department_id=$4 OR (n.announcement_id IS NOT NULL AND EXISTS(SELECT 1 FROM gov_notification_members m WHERE m.tenant_id=n.tenant_id AND m.account_id=n.recipient_id AND m.department_id=n.department_id)))
+AND (n.department_id = $4::bigint
+    OR (n.department_id IS NULL AND $5::boolean) OR (n.announcement_id IS NOT NULL AND EXISTS(SELECT 1 FROM gov_notification_members m WHERE m.tenant_id=n.tenant_id AND m.account_id=n.recipient_id AND m.department_id=n.department_id)))
+AND (COALESCE(n.payload->>'event','') <> 'requested' OR $6::boolean)
 `
 
 type GovInboxMessageParams struct {
@@ -231,6 +233,8 @@ type GovInboxMessageParams struct {
 	RecipientID  int64
 	ID           int64
 	DepartmentID int64
+	TenantBase   bool
+	CanReview    bool
 }
 
 type GovInboxMessageRow struct {
@@ -246,6 +250,8 @@ func (q *Queries) GovInboxMessage(ctx context.Context, arg GovInboxMessageParams
 		arg.RecipientID,
 		arg.ID,
 		arg.DepartmentID,
+		arg.TenantBase,
+		arg.CanReview,
 	)
 	var i GovInboxMessageRow
 	err := row.Scan(

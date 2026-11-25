@@ -2,7 +2,7 @@
 
 下文按功能批次保留历史执行证据；早期的“尚未实现”只描述当时基线，正式身份后台的当前状态以文末记录和 ADR 002 为准。
 
-日期：2026-10-28（Asia/Shanghai）。工作区 `/Users/selibra/www/xxh-baseline` 初始为空，已初始化本地 Git，未创建提交或远程仓库。
+日期：2026-10-28（Asia/Shanghai）。租户 `/Users/selibra/www/xxh-baseline` 初始为空，已初始化本地 Git，未创建提交或远程仓库。
 
 ## 实际验证命令
 
@@ -68,7 +68,7 @@ Playwright 1.64.1 配套 Chromium 下载缓慢，已中止；本地使用已安�
 实际执行：`TEST_DATABASE_URL=<隔离本地测试连接> PLAYWRIGHT_CHANNEL=chrome make ci`，退出码 0。
 
 - 快速门禁全部通过：13 份 AGENTS / 7 个 Skill 的规则检查，格式、ESLint、Go vet、TypeScript、6 个 Vitest 文件 / 12 个测试、Go/HTTP 测试、双语 key、重复生成一致性和前后端构建。
-- PostgreSQL 集成全部通过：原有隔离/约束/回滚/并发/投影，加正式身份的六类数据范围、账号覆盖收窄角色范围、显式拒绝、范围外 ID 写入与授权升级拒绝、组织层级约束、跨工作区隔离、CSRF/Origin、角色停用、账号停用、密码重置和退出后会话失效。
+- PostgreSQL 集成全部通过：原有隔离/约束/回滚/并发/投影，加正式身份的六类数据范围、账号覆盖收窄角色范围、显式拒绝、范围外 ID 写入与授权升级拒绝、组织层级约束、跨租户隔离、CSRF/Origin、角色停用、账号停用、密码重置和退出后会话失效。
 - 4 个 Playwright 用例全部通过（7.0 分钟）：登录保护/验证/主题刷新保持/退出；创建组织、部门、角色和账号，分配角色与独立 OWN 范围、刷新后读取、编辑、删除；原有 SDK/真实 API/语言切换流程及原有视口检查。API 与生产构建 preview 使用 8099/5179，测试专用 schema，不使用开发管理员或浏览器接口 mock。
 - 另执行过 `make test-security`，真实数据库与负向用例通过。开发库迁移及首次管理员初始化已执行，未设置通用默认密码。
 - 真实浏览器已检查中文登录、概览、账号表及权限矩阵的浅色/暗色呈现；登录表单宽度约 322px，页面统计来自实际授权数据。
@@ -83,7 +83,7 @@ Playwright 1.64.1 配套 Chromium 下载缓慢，已中止；本地使用已安�
 
 完整执行 `TEST_DATABASE_URL=<隔离本地连接> PLAYWRIGHT_CHANNEL=chrome make ci`，退出码 0。快速门禁通过：规则、格式、ESLint、Go vet、TypeScript、7 个 Vitest 文件 / 14 个测试、Go/HTTP、双语资源、重复生成和两端构建。真实 PostgreSQL 用例全部通过，7 个 Playwright 用例全部通过（10.1 分钟），包含原有管理/会话/布局/国际化流程与新增申请、审批修订和即时撤销。
 
-新增数据库验收覆盖：无资源权限仍可申请、独立审批权限、已有 OWN 范围临时扩大并在撤销后恢复、修改批准时效/范围且保留原始申请、审批正式权限/范围上限、禁止自批和临时范围再委托、账号调部门后的固定范围、数据库时间到期、显式 deny、撤回/拒绝/撤销审计、并发审批唯一成功、跨工作区隔离。安全复核另补了临时账号编辑/创建与部门重挂不能留下永久角色、凭证或范围提权的拒绝用例；非敏感业务字段和无权限新账号创建仍允许。
+新增数据库验收覆盖：无资源权限仍可申请、独立审批权限、已有 OWN 范围临时扩大并在撤销后恢复、修改批准时效/范围且保留原始申请、审批正式权限/范围上限、禁止自批和临时范围再委托、账号调部门后的固定范围、数据库时间到期、显式 deny、撤回/拒绝/撤销审计、并发审批唯一成功、跨租户隔离。安全复核另补了临时账号编辑/创建与部门重挂不能留下永久角色、凭证或范围提权的拒绝用例；非敏感业务字段和无权限新账号创建仍允许。
 
 更新 baseline-security、baseline-web-development 的 Skill，以及前/后端 AGENTS、安全/工具矩阵、ADR 003。两个 Skill 均通过官方 quick_validate.py；未修改上游 Goa Skill。详细制度见 decisions/003-temporary-access.md。
 
@@ -159,7 +159,7 @@ Playwright 1.64.1 配套 Chromium 下载缓慢，已中止；本地使用已安�
 
 ## 2026-10-29 公共配置与公共能力 Skill
 
-按用户最新要求，以 [ADR 007](decisions/007-global-governance.md) 替代前节的组织设置继承和字典覆盖。设置与字典统一工作空间管理，页面移除配置范围；运行时只解析系统设置和允许的本人偏好。管理仍需正式权限与 ALL 范围，旧部门授权不自动扩权；文件、消息和动态来源保留原数据授权。
+按用户最新要求，以 [ADR 007](decisions/007-global-governance.md) 替代前节的组织设置继承和字典覆盖。设置与字典统一租户管理，页面移除配置范围；运行时只解析系统设置和允许的本人偏好。管理仍需正式权限与 ALL 范围，旧部门授权不自动扩权；文件、消息和动态来源保留原数据授权。
 
 追加 00007 迁移，将旧字典及其项统一为公共定义并保留 ID/代码/引用；旧组织设置和覆盖仅保留历史，不再参与运行时或重新发布。秘密不跨加密范围自动搬移。字典历史文档读取/发布/回退使用公共目标，数据合并的 Down 不重新拆分。
 
@@ -187,13 +187,13 @@ Playwright 1.64.1 配套 Chromium 下载缓慢，已中止；本地使用已安�
 已完成验证：
 
 - `make ci` 的 fast profile 通过：规则/格式/ESLint/Go vet/TypeScript、14 个 Vitest 文件 / 28 项测试、5 项本地服务/安装器测试、Go 单元/HTTP、双语资源、生成一致性与两端构建。Goa/sqlc/Orval 生成可复现，无源契约变更。
-- 同次 `make ci` 的真实 PostgreSQL 集成测试通过，退出码 0，隔离 schema 未改开发工作区。
+- 同次 `make ci` 的真实 PostgreSQL 集成测试通过，退出码 0，隔离 schema 未改开发租户。
 - `PLAYWRIGHT_CHANNEL=chrome TEST_DATABASE_URL=<隔离本地库> pnpm --filter @baseline/web exec playwright test e2e/webmcp.spec.ts` 退出码 0，1/1 通过。真实浏览器 → SDK → 官方代理 → stdio → MCP Client 覆盖连接、校验、导航、账号筛选、范围外 ID 拒绝、路由工具卸载、脱敏、断开与旧注册清理；浅/暗页面截图已目检。没有让 E2E 修改用户全局客户端配置。
 - `pnpm webmcp:test` 通过：Bearer/Origin/Host/CORS、会话与客户端白名单、配置合并/备份/重复安装/坏配置拒绝、技能安装和 WebMCP 结果信封解包。真实 Codex CLI 在独立临时 home 中完成配置合并验证；WorkBuddy JSON 与技能安装在临时 home 验证。
 - 三套 WebSkills 和修改的 baseline-security 均经官方 quick_validate.py 校验通过（uv 临时 PyYAML 环境）；安装器不会把技能备份放在自动发现目录。
 - 浏览器初次因缺少配套 Chromium 未启动，改用本机 Chrome 后完成专项验收；真实 SDK 接口差异与 CORS 预检问题均根据 Trace 修复并重跑。`.local` 本地预览/Trace 产物与既有 Git 忽略对齐，排除出 Prettier/ESLint，不关闭源代码检查。
 
-全量 `make ci` 最终退出码 2：浏览器 11/13 通过；部门隔离和内置管理员两个既有长流程分别耗尽 240/180 秒总预算。完整 Trace 显示，部门切换/刷新保持及保存/主部门保护断言均已完成，失败发生在最后一次切换/跳转阶段。仅把这两个用例上限调整为有界 300/240 秒，保留所有断言。随后执行 `playwright test e2e/administration.spec.ts --grep 'account department policies persist|built-in administrator can edit additional' --output=/tmp/baseline-webmcp-recheck-results`，退出码 0，2/2 通过（8.1 分钟）。13 个浏览器用例均获得通过记录，但不把首次 `make ci` 宣称为一次全绿。
+全量 `make ci` 最终退出码 2：浏览器 11/13 通过；部门隔离和内置管理员两个既有长流程分别耗尽 240/180 秒总预算。完整 Trace 显示，部门切换/刷新保持及保存/主部门保护断言均已完成，失败发生在最后一次切换/跳转阶段。仅把这两个用例上限调整为有界 300/240 秒，保留所有断言。随后执行 `playwright test e2e/identity.spec.ts --grep 'account department policies persist|built-in administrator can edit additional' --output=/tmp/baseline-webmcp-recheck-results`，退出码 0，2/2 通过（8.1 分钟）。13 个浏览器用例均获得通过记录，但不把首次 `make ci` 宣称为一次全绿。
 
 收尾检查补充：新命名空间的中英文切换和原有字段错误动态翻译通过组件交互验证；自定义 WEBMCP_STATE_DIR 已传递给安装的客户端 env，配置中不包含密钥。最终 lint 发现治理排程表单渲染时调用 Date.now 的纯度告警，已改为弹窗 useState 惰性初始化，保留原默认时间语义；ESLint 与相关 settings/WebMCP 组件测试通过。工具目录变化标准通知已补齐，并经真实 stdio E2E 验证，专项 1/1 再次通过（2.2 分钟）；断开时移除订阅并拒绝旧连接代次通知。最终 `make ci-fast` 退出码 0：15 个 Vitest 文件 / 32 项测试、5 项 WebMCP 服务/安装器测试、Go 测试、规则/格式/ESLint/vet/类型、双语资源、Goa/sqlc/Orval 生成一致性和两端构建全部通过。
 
@@ -211,7 +211,7 @@ Playwright 1.64.1 配套 Chromium 下载缓慢，已中止；本地使用已安�
 
 实际本地验证：
 
-- 最终 `make ci-fast` 退出码 0。当前共享工作区为 14 个 Vitest 文件/29 个测试，规则、格式、ESLint/Go vet、类型、Go 测试、国际化、生成一致性与两端构建通过。工作区含并行 WebMCP 功能，新增 Node 测试需 loopback 监听，最终使用已批准的本地执行权限；未关闭检查。
+- 最终 `make ci-fast` 退出码 0。当前共享租户为 14 个 Vitest 文件/29 个测试，规则、格式、ESLint/Go vet、类型、Go 测试、国际化、生成一致性与两端构建通过。租户含并行 WebMCP 功能，新增 Node 测试需 loopback 监听，最终使用已批准的本地执行权限；未关闭检查。
 - `make test-security` 退出码 0，真实隔离 PostgreSQL 全集通过（14.728 秒）。新增测试覆盖混选去重、受限组织拒绝、CSRF、幂等/冲突、空目标项、跨租户与他人消息、无 files:read 的收件人下载、非本人文件绑定拒绝、偏好、归属失效、发送/删除文件并发及事务回滚。隔离 SMTP 服务验证人工 Markdown 内容、MIME 编码和保护详情链接，未投递到真实外部邮箱。
 - 最终 `make ci E2E_ARGS="--config=playwright.governance.config.ts e2e/notifications.spec.ts"` 退出码 0：再次执行 fast profile、真实数据库和通知浏览器用例（1/1，3.8 分钟）。确认账号和公司两类选择同时保留，上传/预览/发送/收取/详情/下载/已读/投递完整链路，以及系统设置无投递记录区块。
 - 另外两个治理浏览器用例在独立配置首轮通过（设置 3.4 分钟、字典/文件 2.5 分钟）。首轮通知用例因测试把 Mark as read 写成 Mark read 而超时；修正定位后重跑通过。补充组件测试复现并修复切换类型丢失选择、上传引用落入表格的问题，没有删除断言。当前新增组件测试共 3 项，包含 GFM、安全渲染、跨类型选择、缩进保留、文件插入/移除。
@@ -242,7 +242,7 @@ Playwright 1.64.1 配套 Chromium 下载缓慢，已中止；本地使用已安�
 
 侧栏一级入口收敛为：工作台、账号管理、组织管理、权限管理、通知中心、Agent 协作、系统设置（个人偏好仍从顶栏进入）。原「远程 MCP」入口改名为「Agent 协作」，页面标题同步，内部保留 MCP Server / WebMCP / WebSkills 三个标签。
 
-改动位置：`features/administration/layout.tsx`（菜单数组改为 any-of 权限过滤、顶栏临时申请改纯图标、删除“系统管理中心”文字）、`app/router/router.tsx`（`/departments`、`/roles`、`/dictionaries` 改为重定向；`/attachments` 保留路由但不再占菜单位置）、`features/administration/pages.tsx`（组织页承载组织架构/部门标签，权限页承载角色授权/账号独立授权/角色管理标签，各区块保留原表单、删除、分页与页内工具）、`features/governance/settings.tsx` 与 `dictionaries.tsx`（系统设置新增系统配置/字段管理标签，字典列表抽为 DictionarySection）、`styles/admin.css`（`.admin-page-tabs` 复用页签样式）、`i18n/locales/{en,zh-CN}/{admin,governance,mcp}.json`、`lib/webmcp/routes.ts`。
+改动位置：`features/identity/layout.tsx`（菜单数组改为 any-of 权限过滤、顶栏临时申请改纯图标、删除“系统管理中心”文字）、`app/router/router.tsx`（`/departments`、`/roles`、`/dictionaries` 改为重定向；`/attachments` 保留路由但不再占菜单位置）、`features/identity/pages.tsx`（组织页承载组织架构/部门标签，权限页承载角色授权/账号独立授权/角色管理标签，各区块保留原表单、删除、分页与页内工具）、`features/governance/settings.tsx` 与 `dictionaries.tsx`（系统设置新增系统配置/字段管理标签，字典列表抽为 DictionarySection）、`styles/admin.css`（`.admin-page-tabs` 复用页签样式）、`i18n/locales/{en,zh-CN}/{admin,governance,mcp}.json`、`lib/webmcp/routes.ts`。
 
 权限与数据范围未改：标签可见性按正式读取权限（organizations:read 或 departments:read、access:manage 或 roles:read、settings:read 或 dictionaries:read）决定，默认标签随可用权限回退；服务端授权的允许/拒绝用例由既有集合覆盖。页内搜索更新保留其它 URL 参数（`withQuery`），避免切换标签后丢失 `?tab=`/`?type=`。旧路径重定向保留，WebMCP 路由清单同步。
 
@@ -251,9 +251,9 @@ Playwright 1.64.1 配套 Chromium 下载缓慢，已中止；本地使用已安�
 - `npx tsc --noEmit`：退出码 0。
 - `vitest run`（apps/web）：16 个文件 / 39 项通过，含 MCP 页五个标签行为用例与设置页原生提交用例。
 - `node scripts/check-i18n.mjs`：命名空间与键集合一致。
-- `vitest run` 新增 `features/administration/navigation.test.tsx`：4 项覆盖部门标签、角色管理标签及无权限时隐藏，秒级完成。
+- `vitest run` 新增 `features/identity/navigation.test.tsx`：4 项覆盖部门标签、角色管理标签及无权限时隐藏，秒级完成。
 - 浏览器验收只做过一次临时用例（隔离 schema、Go 8099、preview 5179，1/1 通过，3.6 分钟）：确认菜单仅剩七个入口、顶栏申请为无文本图标、三个合并页标签可新建、旧路径重定向生效、`/attachments` 仍可上传、浅暗截图一致。该用例运行成本过高，验收后已删除，回归改由上面的 Vitest 用例承担；需要真实链路时按需临时补回。
-- `e2e/administration.spec.ts` 与 `e2e/governance.spec.ts` 已按新入口改写导航步骤，本轮未重跑这两个文件。
+- `e2e/identity.spec.ts` 与 `e2e/governance.spec.ts` 已按新入口改写导航步骤，本轮未重跑这两个文件。
 
 未执行：`make ci-fast`、完整 E2E 集合、远程 CI 与生产部署。仓库根 `eslint .` 仍因并行开发中的未跟踪临时文件 `apps/web/shot.mjs`、`apps/web/src/preview-editor.tsx` 报错，不属于本批次改动文件。
 
@@ -279,7 +279,7 @@ Playwright 1.64.1 配套 Chromium 下载缓慢，已中止；本地使用已安�
 
 ## 2026-11-01：能力中心平台当前代码提交检查
 
-本批次更新 README、当前架构 SVG/PNG 与分层概念，保留此前能力中心迁移、Eino 编排、AI/MCP、文章管理及开发 Skills 的工作区变更。架构图按实际代码标明通用引擎与业务接入的区别；文章 Workflow/ADK、业务人工审核及已发现的安全边界缺口仍未在本批次修复，不能把门禁通过解释为这些问题已解决。
+本批次更新 README、当前架构 SVG/PNG 与分层概念，保留此前能力中心迁移、Eino 编排、AI/MCP、文章管理及开发 Skills 的租户变更。架构图按实际代码标明通用引擎与业务接入的区别；文章 Workflow/ADK、业务人工审核及已发现的安全边界缺口仍未在本批次修复，不能把门禁通过解释为这些问题已解决。
 
 - `make ci-fast`：退出 0；24 个前端测试文件、85 项测试通过，规则/格式/lint/vet/typecheck、Go 测试、i18n、生成一致性、实体/流程检查与两端构建完成。
 - `make test-security`：退出 0；包含真实本机 PostgreSQL 的独立 schema 集成集合。`TestMCPNativeClients` 按其专项目标约定跳过，本批次未执行原生客户端验收。

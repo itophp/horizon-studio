@@ -37,7 +37,7 @@ func TestAutomationCapabilities(t *testing.T) {
 		Registry: catalog, Identity: iam, Pool: pool,
 		Approvals: approval.NewStore(pool), Audit: audit.NewStore(pool), Events: eventhub.NewStore(pool),
 	})
-	owner, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	owner, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,23 +92,19 @@ func TestAutomationCapabilities(t *testing.T) {
 	}
 
 	grants := func(permission string) *genidentity.PermissionGrant {
-		return &genidentity.PermissionGrant{Permission: permission, Effect: "allow", Scope: "ALL", DepartmentIds: []int64{}}
-	}
-	overrides, err := json.Marshal([]*genidentity.PermissionGrant{grants("automation:read"), grants("automation:write")})
-	if err != nil {
-		t.Fatal(err)
+		return &genidentity.PermissionGrant{Permission: permission, Effect: "allow", Scope: "ALL"}
 	}
 	// A real second account is required: the gateway re-resolves every caller
 	// from the database, so a fabricated principal would only test rejection.
 	foreignID, err := dbgen.New(pool).IAMCreateAccount(ctx, dbgen.IAMCreateAccountParams{
-		TenantID: "tenant-a", Username: "foreign-automation", FullName: "Foreign",
-		Status: "active", OrganizationID: root.OrganizationID, DepartmentID: root.DepartmentID,
-		Overrides: overrides, PasswordHash: "unusable",
+		TenantID: "tenant-a", Username: "foreign-automation",
+		Status: "active", PasswordHash: "unusable",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	foreign, err := iam.PrincipalForTask(ctx, "tenant-a", foreignID, root.DepartmentID)
+	seedTenantRole(t, pool, "tenant-a", "foreign-automation", root.ID, foreignID, []*genidentity.PermissionGrant{grants("automation:read"), grants("automation:write")})
+	foreign, err := iam.PrincipalForTask(ctx, "tenant-a", foreignID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +115,7 @@ func TestAutomationCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherTenant, err := iam.PrincipalForTask(ctx, "tenant-b", otherRoot.ID, otherRoot.DepartmentID)
+	otherTenant, err := iam.PrincipalForTask(ctx, "tenant-b", otherRoot.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

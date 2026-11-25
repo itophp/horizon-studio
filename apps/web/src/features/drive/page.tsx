@@ -11,12 +11,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
-import { useSession } from "@/features/administration/auth";
-import {
-  ErrorBanner,
-  Loading,
-  PageHeading,
-} from "@/features/administration/shared";
+import { useSession } from "@/features/identity/auth";
+import { ErrorBanner, Loading, PageHeading } from "@/features/identity/shared";
 import {
   drivePersonalEnsure,
   driveSpaceCreate,
@@ -30,7 +26,7 @@ export function DrivePage() {
   const client = useQueryClient();
   const [creating, setCreating] = useState(false);
   const canUse = session.permissions.includes("drive:use");
-  const identity = `${session.tenantId}:${session.account.id}:${session.activeDepartmentId}`;
+  const identity = `${session.tenantId}:${session.account.id}:${session.identityBindingId}`;
   const key = ["drive", identity, "spaces"];
   const ensured = useRef("");
   const { mutate: ensure, error: ensureError } = useMutation({

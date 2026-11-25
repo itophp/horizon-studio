@@ -58,7 +58,7 @@ func (*runtimeAnalysisModel) Stream(context.Context, []*schema.Message, ...model
 
 func TestRuntimeAnalysisUsesRealADKAndSafeReplayEvents(t *testing.T) {
 	handler, pool, root := iamFixture(t)
-	client := loginIAM(t, handler, "root-admin")
+	client := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	created := invokeCapability(t, client, "project.create", map[string]any{"input": map[string]any{"code": "AGENT", "name": "Evidence"}, "idempotencyKey": "analysis-project"})
 	if created.Status != "succeeded" {
 		t.Fatal(created)
@@ -96,7 +96,7 @@ func TestRuntimeAnalysisUsesRealADKAndSafeReplayEvents(t *testing.T) {
 	engine.AgentModel = func(context.Context) (model.ToolCallingChatModel, error) {
 		return &runtimeAnalysisModel{args: fmt.Sprintf(`{"projectId":%d}`, id), evidence: &evidence}, nil
 	}
-	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +234,7 @@ func TestRuntimeEventsStopOnAccountRevocation(t *testing.T) {
 	ctx := context.Background()
 	iam := identity.New(pool, false)
 	core := governance.New(pool, iam, governance.Options{})
-	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

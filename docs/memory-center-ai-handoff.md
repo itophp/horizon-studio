@@ -15,7 +15,7 @@
 | `foundation/system/memory/` | 能力注册、实体声明、消费器、观察队列、记忆管理、范围授权、保留策略和重放。 |
 | `foundation/runtime/app/capabilities.go`、`entities.go` | 模块及实体装配。 |
 | `foundation/runtime/transport/memory_observation.go`、`foundation/kernel/capability/gateway/observation.go`、`foundation/kernel/workflow/observation.go` | HTTP、Gateway 和 Workflow 观测接入。 |
-| `apps/web/src/lib/activity.ts`、`features/administration/activity-capture.tsx` | 已验证会话的页面访问和白名单交互采集；配置项为 `memory.activitySamplePercent`。 |
+| `apps/web/src/lib/activity.ts`、`features/identity/activity-capture.tsx` | 已验证会话的页面访问和白名单交互采集；配置项为 `memory.activitySamplePercent`。 |
 | `cmd/capabilitysdk/`、`apps/web/src/api/generated/capability-memory.ts`、`apps/web/src/lib/capabilities.ts` | 从能力定义生成的 TypeScript 类型及 Gateway 调用包装。禁止手改生成文件。 |
 | `tests/integration/memory_*_test.go` | 隔离 PostgreSQL 上的 Memory 功能、授权、消费和恢复测试。 |
 

@@ -19,7 +19,7 @@ import type {
   CapabilityApproval,
 } from "@/api/generated/models";
 import { ApiError } from "@/api/client/request";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import { useCapabilityKey } from "@/features/capabilities/shared";
 import { useAiKey } from "./shared";
 

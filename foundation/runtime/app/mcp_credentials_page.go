@@ -12,10 +12,10 @@ const (
 // collaboration definition. The local connection sections can be composed next
 // to it without giving them access to passwords or issued secrets.
 func mcpCredentialPanel(provider string, enabledWhen *ar.Expression) ar.Node {
-	return mcpCredentialPanelVersion(provider, enabledWhen, false)
+	return mcpCredentialPanelVersion(provider, enabledWhen, false, true)
 }
 
-func mcpCredentialPanelVersion(provider string, enabledWhen *ar.Expression, legacy bool) ar.Node {
+func mcpCredentialPanelVersion(provider string, enabledWhen *ar.Expression, legacy, tenantContext bool) ar.Node {
 	const tokenData = "credentials"
 	open := func(event, kind string) ar.EventBinding {
 		return ar.EventBinding{
@@ -54,6 +54,10 @@ func mcpCredentialPanelVersion(provider string, enabledWhen *ar.Expression, lega
 		},
 		"search": false,
 	}, credentialRowAction("rotate"), credentialRowAction("revoke"))
+	if tenantContext {
+		columns := componentOf(table).Props["columns"].([]viewProps)
+		componentOf(table).Props["columns"] = append(columns[:2], columns[3:]...)
+	}
 	if legacy {
 		legacyColumn := func(label, path, format string) viewProps {
 			field := viewProps{"path": path}
@@ -81,27 +85,26 @@ func mcpCredentialPanelVersion(provider string, enabledWhen *ar.Expression, lega
 	create := credentialDialog("create", "createTitle", "tokenLimits", "create", "mcp.token.create", true)
 	componentOf(create).Props["wide"] = true
 	form := componentOf(componentOf(create).Content.Children[0])
-	form.Bindings = []ar.Mapping{mapping("fields", operation("array",
+	fields := []ar.Expression{
 		constant(credentialField(legacy, viewProps{"name": "name", "type": "text", "labelKey": "mcp:name", "required": true, "maxLength": 100, "invalidKey": "mcp:validation.name"})),
 		constant(credentialField(legacy, viewProps{"name": "days", "type": "integer", "labelKey": "mcp:days", "required": true, "defaultValue": 30, "min": 1, "max": 90, "invalidKey": "mcp:validation.days"})),
-		objectValue(
+	}
+	payload := []ar.Mapping{mapping("name", fieldPath("event.values.name")), mapping("days", fieldPath("event.values.days"))}
+	if !tenantContext {
+		department := objectValue(
 			mapping("name", constant("departmentId")), mapping("type", constant("select")),
 			mapping("labelKey", constant("mcp:department")), mapping("invalidKey", constant("mcp:validation.department")), mapping("required", constant(true)),
 			mapping("defaultValue", fieldPath("context.activeDepartmentId")),
 			mapping("options", fieldPath("context.departmentOptions")),
-		),
-		constant(credentialField(legacy, credentialPassword("password"))),
-	))}
-	if legacy {
-		department := &form.Bindings[0].Value.Items[2]
-		department.Fields = append(department.Fields[:3], department.Fields[4:]...)
+		)
+		if legacy {
+			department.Fields = append(department.Fields[:3], department.Fields[4:]...)
+		}
+		fields = append(fields, department)
+		payload = append(payload, mapping("departmentId", fieldPath("event.values.departmentId")))
 	}
-	form.Events[0].Payload = objectValue(
-		mapping("name", fieldPath("event.values.name")),
-		mapping("days", fieldPath("event.values.days")),
-		mapping("departmentId", fieldPath("event.values.departmentId")),
-		mapping("password", fieldPath("event.values.password")),
-	)
+	form.Bindings = []ar.Mapping{mapping("fields", operation("array", append(fields, constant(credentialField(legacy, credentialPassword("password"))))...))}
+	form.Events[0].Payload = objectValue(append(payload, mapping("password", fieldPath("event.values.password")))...)
 
 	rotate := credentialDialog("rotate", "rotateTitle", "rotateHelp", "confirmRotate", "mcp.token.rotate", true)
 	revoke := credentialDialog("revoke", "revokeTitle", "revokeHelp", "confirmRevoke", "mcp.token.revoke", false)

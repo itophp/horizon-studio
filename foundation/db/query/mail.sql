@@ -63,7 +63,6 @@ WHERE tenant_id=$3 AND mailbox_id=$4 AND direction=$5;
 
 -- name: MailReceiveDue :many
 SELECT m.id AS mailbox_id,m.tenant_id,m.owner_account_id,m.email_address,c.id AS channel_id,
- a.organization_id AS owner_organization_id,a.department_id AS owner_department_id,
  c.host,c.port,c.username,cr.ciphertext,cr.version
 FROM mail_channels c JOIN mail_mailboxes m ON m.tenant_id=c.tenant_id AND m.id=c.mailbox_id
 JOIN iam_accounts a ON a.tenant_id=m.tenant_id AND a.id=m.owner_account_id

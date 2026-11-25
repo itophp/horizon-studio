@@ -9,12 +9,8 @@ import {
   type RuntimeInstallation,
   type RuntimeDefinitionView,
 } from "@/api/generated/runtime";
-import { useSession } from "@/features/administration/auth";
-import {
-  ErrorBanner,
-  Loading,
-  EditorDialog,
-} from "@/features/administration/shared";
+import { useSession } from "@/features/identity/auth";
+import { ErrorBanner, Loading, EditorDialog } from "@/features/identity/shared";
 import { Button } from "@/components/ui/button";
 import { z } from "zod";
 import { DesignValidation } from "./design-validation";

@@ -22,18 +22,18 @@ vi.mock("@/lib/capabilities", async (original) => ({
   runtimeExecute: api.execute,
 }));
 
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant",
     account: { id: 1 },
-    activeDepartmentId: 2,
+
     permissions: [
       "accounts:read",
       "accounts:create",
       "accounts:update",
       "accounts:delete",
       "organizations:read",
-      "organizations:create",
+      "organizations:update",
       "departments:read",
       "roles:read",
       "roles:create",
@@ -206,7 +206,10 @@ beforeEach(async () => {
           total: 1,
         };
       if (name === "identity.organizations.read")
-        return { items: [organization, company], total: 2 };
+        return {
+          items: [{ ...company, parentId: 0, description: "" }],
+          total: 1,
+        };
       if (name === "identity.departments.read")
         return {
           items: [adminDepartment],
@@ -235,7 +238,6 @@ beforeEach(async () => {
               scopeConfigurable: false,
             },
           ],
-          departments: [adminDepartment],
           total: 1,
         };
       if (name === "application.runtime.data.read") {
@@ -262,7 +264,6 @@ beforeEach(async () => {
               },
             ],
             catalog: [],
-            departments: [adminDepartment],
             total: 1,
           };
       }
@@ -279,11 +280,12 @@ it("renders the account console from the deployed V3 definition", async () => {
   expect(
     screen.getByRole("button", { name: /Create account/i }),
   ).toBeInTheDocument();
-  expect(screen.getByText("Platform")).toBeInTheDocument();
-  expect(screen.getByText("Platform · Administrator")).toBeInTheDocument();
+  expect(
+    screen.queryByText("Platform · Administrator"),
+  ).not.toBeInTheDocument();
 });
 
-it("opens a schema-declared account form and resolves reference providers", async () => {
+it("creates an account without assigning a department or role", async () => {
   const user = userEvent.setup();
   const fixture = applications.find((item) => item.id === "accounts");
   api.application.mockResolvedValue(fixture);
@@ -293,33 +295,26 @@ it("opens a schema-declared account form and resolves reference providers", asyn
   );
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
   expect(screen.getByLabelText("Full name")).toBeInTheDocument();
-  expect(
-    (screen.getByLabelText("Company") as HTMLSelectElement).querySelector(
-      'option[value="9"]',
-    ),
-  ).not.toBeNull();
+  expect(screen.queryByLabelText("Company")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Department")).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("Account"), "bob");
   await user.type(screen.getByLabelText("Full name"), "Bob Chen");
   await user.type(
     screen.getByLabelText("Initial password"),
     "safe-password-123",
   );
-  await user.selectOptions(screen.getByLabelText("Company"), "9");
-  await user.selectOptions(screen.getByLabelText("Department"), "3");
   await user.click(screen.getByRole("button", { name: "Save changes" }));
   await waitFor(() => expect(api.execute).toHaveBeenCalled());
   expect(api.execute).toHaveBeenCalledWith(
     "identity.account.create",
     "1.0.0",
-    expect.objectContaining({
+    {
       username: "bob",
       fullName: "Bob Chen",
-      organizationId: 9,
-      departmentId: 3,
-      roleIds: [],
-      overrides: [],
+      email: "",
+      initialStatus: "active",
       password: "safe-password-123",
-    }),
+    },
     expect.any(String),
     expect.any(String),
     expect.anything(),
@@ -341,8 +336,6 @@ it("shows a failed schema form submission in an error dialog", async () => {
     await screen.findByLabelText("Initial password"),
     "safe-password-123",
   );
-  await user.selectOptions(screen.getByLabelText("Company"), "9");
-  await user.selectOptions(screen.getByLabelText("Department"), "3");
   await user.click(screen.getByRole("button", { name: "Save changes" }));
   const errorDialog = await screen.findByRole("dialog", {
     name: "Action failed",
@@ -352,7 +345,7 @@ it("shows a failed schema form submission in an error dialog", async () => {
   );
 });
 
-it("requires a department for the current company and a policy-length password", async () => {
+it("requires a policy-length password", async () => {
   const user = userEvent.setup();
   api.application.mockResolvedValue(
     applications.find((item) => item.id === "accounts"),
@@ -365,11 +358,7 @@ it("requires a department for the current company and a policy-length password",
   await user.type(screen.getByLabelText("Account"), "bob");
   const password = screen.getByLabelText("Initial password");
   await user.type(password, "short");
-  const company = screen.getByLabelText("Company");
-  const department = screen.getByLabelText("Department");
   const save = screen.getByRole("button", { name: "Save changes" });
-  await user.selectOptions(company, "9");
-  await user.selectOptions(department, "3");
   await user.click(save);
   expect(
     await screen.findByText(
@@ -380,14 +369,6 @@ it("requires a department for the current company and a policy-length password",
 
   await user.clear(password);
   await user.type(password, "TestOnly!2026Secure");
-  await user.selectOptions(company, "10");
-  await user.click(save);
-  expect(await screen.findByRole("alert")).toBeInTheDocument();
-  expect(api.execute).not.toHaveBeenCalled();
-
-  await user.selectOptions(company, "9");
-  expect(department).toHaveValue("0");
-  await user.selectOptions(department, "3");
   await user.click(save);
   await waitFor(() => expect(api.execute).toHaveBeenCalledTimes(1));
 });
@@ -401,40 +382,50 @@ it("renders organization and department views from one V3 page", async () => {
   await userEvent.click(departments);
   expect(departments).toHaveClass("active");
   expect(await screen.findByText("Platform")).toBeInTheDocument();
-  expect(screen.getByText("Companies")).toBeInTheDocument();
+  expect(screen.queryByText("Companies")).not.toBeInTheDocument();
   view.unmount();
 });
 
-it("selects the organization table's All filter when the URL filter is cleared", async () => {
+it("shows one editable organization without create or delete actions", async () => {
   api.application.mockResolvedValue(
     applications.find((item) => item.id === "organizations"),
   );
   mount("/organizations");
   const user = userEvent.setup();
   const table = within(await screen.findByRole("table"));
-  const all = screen.getByRole("button", { name: /^All\s*2$/ });
-  const enterprises = screen.getByRole("button", { name: /^Enterprises\s*1$/ });
-  const companies = screen.getByRole("button", { name: /^Companies\s*1$/ });
-
-  expect(all).toHaveAttribute("aria-pressed", "true");
-  expect(table.getByText("Acme Labs")).toBeInTheDocument();
-
-  await user.click(enterprises);
-  expect(enterprises).toHaveAttribute("aria-pressed", "true");
-  expect(all).toHaveAttribute("aria-pressed", "false");
-  expect(table.queryByText("Acme Labs")).toBeNull();
-
-  await user.click(companies);
-  expect(companies).toHaveAttribute("aria-pressed", "true");
-  expect(enterprises).toHaveAttribute("aria-pressed", "false");
   expect(table.getAllByRole("row")).toHaveLength(2);
   expect(table.getByText("Acme Labs")).toBeInTheDocument();
-
-  await user.click(all);
-  expect(all).toHaveAttribute("aria-pressed", "true");
-  expect(companies).toHaveAttribute("aria-pressed", "false");
-  expect(table.getAllByRole("row")).toHaveLength(3);
-  expect(table.getByText("Acme Labs")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Create organization" }),
+  ).toBeNull();
+  await user.click(table.getByRole("button", { name: "Actions" }));
+  const edit = await screen.findByRole("menuitem", { name: "Edit" });
+  expect(screen.queryByRole("menuitem", { name: "Delete" })).toBeNull();
+  await user.click(edit);
+  const dialog = within(await screen.findByRole("dialog"));
+  expect(dialog.queryByLabelText("Parent enterprise")).toBeNull();
+  const name = dialog.getByLabelText("Name");
+  await user.clear(name);
+  await user.type(name, "Acme Workspace");
+  await user.click(dialog.getByRole("button", { name: "Save changes" }));
+  await waitFor(() =>
+    expect(api.execute).toHaveBeenCalledWith(
+      "identity.organization.update",
+      "1.0.0",
+      {
+        id: company.id,
+        name: "Acme Workspace",
+        code: company.code,
+        kind: "company",
+        parentId: 0,
+        status: "active",
+        description: "",
+      },
+      expect.any(String),
+      expect.any(String),
+      expect.anything(),
+    ),
+  );
 });
 
 it("renders the V3 permissions role gallery and detail tabs", async () => {

@@ -20,6 +20,7 @@ import (
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/kernel/capability/gateway"
 	"horizon/foundation/kernel/capability/registry"
+	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
 	"horizon/internal/repository/dbgen"
 )
@@ -49,7 +50,11 @@ var events = map[string]string{
 
 // Module owns the automation capabilities. The worker is constructed separately
 // with the agent launcher, so the capability catalog never needs a model.
-type Module struct{ Pool *pgxpool.Pool }
+type Module struct {
+	Pool    *pgxpool.Pool
+	Core    *governance.Core
+	Gateway *gateway.Gateway
+}
 
 // New builds the module. A nil pool keeps catalog assembly and offline checks
 // working while every executor reports unavailable.
@@ -59,6 +64,7 @@ func New(pool *pgxpool.Pool) *Module { return &Module{Pool: pool} }
 func (m *Module) Entries() []registry.Entry {
 	return []registry.Entry{
 		{Definition: m.createDefinition(), Handler: contracts.Handler{ExecuteTx: m.create}},
+		{Definition: serviceScheduleDefinition(), Handler: contracts.Handler{ExecuteTx: m.createServiceSchedule}},
 		{Definition: m.updateDefinition(), Handler: contracts.Handler{ExecuteTx: m.update}},
 		{Definition: m.enableDefinition(), Handler: contracts.Handler{ExecuteTx: m.setEnabled}},
 		{Definition: m.disableDefinition(), Handler: contracts.Handler{ExecuteTx: m.setEnabled}},
@@ -251,23 +257,24 @@ func idWriteDefinition(action, title string) contracts.Definition {
 
 func taskOutput() *contracts.Schema {
 	return contracts.Object(map[string]*contracts.Schema{
-		"id":           {Type: "integer"},
-		"name":         contracts.Str(1, maxNameLength),
-		"description":  contracts.Str(0, maxDescriptionLength),
-		"scheduleKind": contracts.Enum(ScheduleKinds...),
-		"runAt":        contracts.Str(0, 40),
-		"time":         contracts.Str(0, 5),
-		"minute":       contracts.Enum(numberRange(0, 59)...),
-		"second":       contracts.Enum(numberRange(0, 59)...),
-		"weekday":      contracts.Enum("1", "2", "3", "4", "5", "6", "7"),
-		"dayOfMonth":   contracts.Enum(numberRange(1, 31)...),
-		"timezone":     contracts.Str(1, 100),
-		"enabled":      {Type: "boolean"},
-		"nextRunAt":    {Type: "string"},
-		"lastRunAt":    {Type: "string"},
-		"failureCount": {Type: "integer"},
-		"createdAt":    {Type: "string"},
-		"updatedAt":    {Type: "string"},
+		"id":            {Type: "integer"},
+		"name":          contracts.Str(1, maxNameLength),
+		"description":   contracts.Str(0, maxDescriptionLength),
+		"scheduleKind":  contracts.Enum(ScheduleKinds...),
+		"runAt":         contracts.Str(0, 40),
+		"time":          contracts.Str(0, 5),
+		"minute":        contracts.Enum(numberRange(0, 59)...),
+		"second":        contracts.Enum(numberRange(0, 59)...),
+		"weekday":       contracts.Enum("1", "2", "3", "4", "5", "6", "7"),
+		"dayOfMonth":    contracts.Enum(numberRange(1, 31)...),
+		"timezone":      contracts.Str(1, 100),
+		"enabled":       {Type: "boolean"},
+		"runsAsService": {Type: "boolean"},
+		"nextRunAt":     {Type: "string"},
+		"lastRunAt":     {Type: "string"},
+		"failureCount":  {Type: "integer"},
+		"createdAt":     {Type: "string"},
+		"updatedAt":     {Type: "string"},
 	}, "id", "name", "description", "scheduleKind", "runAt", "time", "minute", "second", "weekday", "dayOfMonth", "timezone", "enabled", "nextRunAt", "lastRunAt", "failureCount", "createdAt", "updatedAt")
 }
 
@@ -343,18 +350,24 @@ func (m *Module) list(ctx context.Context, in contracts.Input) (contracts.Output
 	q := dbgen.New(m.Pool)
 	rows, err := q.AutomationTaskList(ctx, dbgen.AutomationTaskListParams{
 		TenantID: p.TenantID, OwnerID: p.Account.ID, Keyword: text(in, "keyword"),
+		DepartmentID: p.Account.DepartmentID, BindingID: p.IdentityBindingID,
 		PageLimit: int32(size), PageOffset: int32((page - 1) * size),
 	})
 	if err != nil {
 		return contracts.Output{}, err
 	}
-	total, err := q.AutomationTaskCount(ctx, dbgen.AutomationTaskCountParams{TenantID: p.TenantID, OwnerID: p.Account.ID, Keyword: text(in, "keyword")})
+	total, err := q.AutomationTaskCount(ctx, dbgen.AutomationTaskCountParams{
+		TenantID: p.TenantID, OwnerID: p.Account.ID, DepartmentID: p.Account.DepartmentID,
+		BindingID: p.IdentityBindingID, Keyword: text(in, "keyword"),
+	})
 	if err != nil {
 		return contracts.Output{}, err
 	}
 	items := []map[string]any{}
 	for _, row := range rows {
-		items = append(items, taskView(row.ID, row.Name, row.Description, row.ScheduleKind, row.RunAt, row.Timezone, row.ScheduleDay, row.Enabled, row.NextRunAt, row.LastRunAt, row.FailureCount, row.CreatedAt, row.UpdatedAt))
+		item := taskView(row.ID, row.Name, row.Description, row.ScheduleKind, row.RunAt, row.Timezone, row.ScheduleDay, row.Enabled, row.NextRunAt, row.LastRunAt, row.FailureCount, row.CreatedAt, row.UpdatedAt)
+		item["runsAsService"] = row.RunsAsService
+		items = append(items, item)
 	}
 	return contracts.Output{Data: map[string]any{"items": items, "total": total, "page": page, "pageSize": size}}, nil
 }
@@ -364,14 +377,20 @@ func (m *Module) get(ctx context.Context, in contracts.Input) (contracts.Output,
 	if err != nil {
 		return contracts.Output{}, err
 	}
-	row, err := dbgen.New(m.Pool).AutomationTaskGet(ctx, dbgen.AutomationTaskGetParams{TenantID: p.TenantID, OwnerID: p.Account.ID, ID: integer(in, "id")})
+	row, err := dbgen.New(m.Pool).AutomationTaskGet(ctx, taskLookup(p, integer(in, "id")))
 	if err != nil {
 		return contracts.Output{}, contracts.Problem("not_found")
 	}
-	return contracts.Output{Data: taskView(row.ID, row.Name, row.Description, row.ScheduleKind, row.RunAt, row.Timezone, row.ScheduleDay, row.Enabled, row.NextRunAt, row.LastRunAt, row.FailureCount, row.CreatedAt, row.UpdatedAt)}, nil
+	item := taskView(row.ID, row.Name, row.Description, row.ScheduleKind, row.RunAt, row.Timezone, row.ScheduleDay, row.Enabled, row.NextRunAt, row.LastRunAt, row.FailureCount, row.CreatedAt, row.UpdatedAt)
+	item["runsAsService"] = row.RunsAsService
+	return contracts.Output{Data: item}, nil
 }
 
 func (m *Module) create(ctx context.Context, tx pgx.Tx, in contracts.Input) (contracts.Output, error) {
+	return m.createTask(ctx, tx, in, nil)
+}
+
+func (m *Module) createTask(ctx context.Context, tx pgx.Tx, in contracts.Input, execution *serviceExecution) (contracts.Output, error) {
 	p, err := principal(ctx)
 	if err != nil {
 		return contracts.Output{}, err
@@ -397,7 +416,7 @@ func (m *Module) create(ctx context.Context, tx pgx.Tx, in contracts.Input) (con
 		return contracts.Output{}, err
 	}
 	q := dbgen.New(tx)
-	count, err := q.AutomationTaskCount(ctx, dbgen.AutomationTaskCountParams{TenantID: p.TenantID, OwnerID: p.Account.ID})
+	count, err := q.AutomationOwnerTaskCount(ctx, dbgen.AutomationOwnerTaskCountParams{TenantID: p.TenantID, OwnerID: p.Account.ID})
 	if err != nil {
 		return contracts.Output{}, err
 	}
@@ -405,17 +424,29 @@ func (m *Module) create(ctx context.Context, tx pgx.Tx, in contracts.Input) (con
 		return contracts.Output{}, contracts.Problem("conflict")
 	}
 	row, err := q.AutomationTaskCreate(ctx, dbgen.AutomationTaskCreateParams{
-		TenantID: p.TenantID, OwnerID: p.Account.ID, DepartmentID: p.Account.DepartmentID,
+		TenantID: p.TenantID, OwnerID: p.Account.ID, DepartmentID: p.Account.DepartmentID, BindingID: p.IdentityBindingID,
 		Name: name, Description: instruction, ScheduleKind: kind, RunAt: pgtype.Timestamptz{Time: anchor, Valid: true},
 		Timezone: loc.String(), NextRunAt: pgtype.Timestamptz{Time: anchor, Valid: true}, ScheduleDay: scheduleDayValue(monthlyDay),
 	})
 	if err != nil {
 		return contracts.Output{}, err
 	}
+	if execution != nil {
+		if err = m.storeServiceExecution(ctx, q, p, row, execution); err != nil {
+			return contracts.Output{}, err
+		}
+	}
 	return contracts.Output{Data: map[string]any{"id": row}, Summary: fmt.Sprintf("automation=%d", row), Events: []contracts.Event{{
 		Type: events["create"], AggregateType: "automation_task", AggregateID: fmt.Sprint(row),
 		Payload: map[string]any{"id": row, "scheduleKind": kind},
 	}}}, nil
+}
+
+func taskLookup(principal *identity.Principal, id int64) dbgen.AutomationTaskGetParams {
+	return dbgen.AutomationTaskGetParams{
+		TenantID: principal.TenantID, OwnerID: principal.Account.ID, ID: id,
+		DepartmentID: principal.Account.DepartmentID, BindingID: principal.IdentityBindingID,
+	}
 }
 
 func (m *Module) update(ctx context.Context, tx pgx.Tx, in contracts.Input) (contracts.Output, error) {
@@ -425,7 +456,7 @@ func (m *Module) update(ctx context.Context, tx pgx.Tx, in contracts.Input) (con
 	}
 	q := dbgen.New(tx)
 	id := integer(in, "id")
-	current, err := q.AutomationTaskGet(ctx, dbgen.AutomationTaskGetParams{TenantID: p.TenantID, OwnerID: p.Account.ID, ID: id})
+	current, err := q.AutomationTaskGet(ctx, taskLookup(p, id))
 	if err != nil {
 		return contracts.Output{}, contracts.Problem("not_found")
 	}
@@ -449,6 +480,7 @@ func (m *Module) update(ctx context.Context, tx pgx.Tx, in contracts.Input) (con
 	}
 	affected, err := q.AutomationTaskUpdate(ctx, dbgen.AutomationTaskUpdateParams{
 		TenantID: p.TenantID, OwnerID: p.Account.ID, ID: id,
+		DepartmentID: p.Account.DepartmentID, BindingID: p.IdentityBindingID,
 		Name: name, Description: instruction, ScheduleKind: kind,
 		RunAt: pgtype.Timestamptz{Time: anchor, Valid: true}, Timezone: loc.String(), NextRunAt: nextRunAt,
 		ScheduleDay: scheduleDayValue(monthlyDay),
@@ -480,7 +512,7 @@ func (m *Module) setEnabled(ctx context.Context, tx pgx.Tx, in contracts.Input) 
 	}
 	q := dbgen.New(tx)
 	id := integer(in, "id")
-	current, err := q.AutomationTaskGet(ctx, dbgen.AutomationTaskGetParams{TenantID: p.TenantID, OwnerID: p.Account.ID, ID: id})
+	current, err := q.AutomationTaskGet(ctx, taskLookup(p, id))
 	if err != nil {
 		return contracts.Output{}, contracts.Problem("not_found")
 	}
@@ -499,12 +531,20 @@ func (m *Module) setEnabled(ctx context.Context, tx pgx.Tx, in contracts.Input) 
 	}
 	affected, err := q.AutomationTaskSetEnabled(ctx, dbgen.AutomationTaskSetEnabledParams{
 		TenantID: p.TenantID, OwnerID: p.Account.ID, ID: id, Enabled: enabled, NextRunAt: nextRunAt,
+		DepartmentID: p.Account.DepartmentID, BindingID: p.IdentityBindingID,
 	})
 	if err != nil {
 		return contracts.Output{}, err
 	}
 	if affected != 1 {
 		return contracts.Output{}, contracts.Problem("conflict")
+	}
+	if !enabled && current.RunsAsService {
+		if err = q.AutomationCancelQueuedServiceRuns(ctx, dbgen.AutomationCancelQueuedServiceRunsParams{
+			TenantID: p.TenantID, TaskID: id,
+		}); err != nil {
+			return contracts.Output{}, err
+		}
 	}
 	return contracts.Output{Data: map[string]any{"id": id}, Summary: fmt.Sprintf("automation=%d enabled=%v", id, enabled), Events: []contracts.Event{{
 		Type: events[action], AggregateType: "automation_task", AggregateID: fmt.Sprint(id),
@@ -518,7 +558,7 @@ func (m *Module) remove(ctx context.Context, tx pgx.Tx, in contracts.Input) (con
 		return contracts.Output{}, err
 	}
 	id := integer(in, "id")
-	affected, err := dbgen.New(tx).AutomationTaskDelete(ctx, dbgen.AutomationTaskDeleteParams{TenantID: p.TenantID, OwnerID: p.Account.ID, ID: id})
+	affected, err := dbgen.New(tx).AutomationTaskDelete(ctx, dbgen.AutomationTaskDeleteParams(taskLookup(p, id)))
 	if err != nil {
 		return contracts.Output{}, err
 	}
@@ -538,7 +578,7 @@ func (m *Module) runNow(ctx context.Context, tx pgx.Tx, in contracts.Input) (con
 	}
 	id := integer(in, "id")
 	q := dbgen.New(tx)
-	if _, err = q.AutomationTaskGet(ctx, dbgen.AutomationTaskGetParams{TenantID: p.TenantID, OwnerID: p.Account.ID, ID: id}); err != nil {
+	if _, err = q.AutomationTaskGet(ctx, taskLookup(p, id)); err != nil {
 		return contracts.Output{}, contracts.Problem("not_found")
 	}
 	meta, _ := gateway.CurrentInvocation(ctx)
@@ -584,12 +624,16 @@ func (m *Module) runList(ctx context.Context, in contracts.Input) (contracts.Out
 	q := dbgen.New(m.Pool)
 	rows, err := q.AutomationRunList(ctx, dbgen.AutomationRunListParams{
 		TenantID: p.TenantID, OwnerID: p.Account.ID, TaskID: taskID,
+		DepartmentID: p.Account.DepartmentID, BindingID: p.IdentityBindingID,
 		PageLimit: int32(size), PageOffset: int32((page - 1) * size),
 	})
 	if err != nil {
 		return contracts.Output{}, err
 	}
-	total, err := q.AutomationRunCount(ctx, dbgen.AutomationRunCountParams{TenantID: p.TenantID, OwnerID: p.Account.ID, TaskID: taskID})
+	total, err := q.AutomationRunCount(ctx, dbgen.AutomationRunCountParams{
+		TenantID: p.TenantID, OwnerID: p.Account.ID, TaskID: taskID,
+		DepartmentID: p.Account.DepartmentID, BindingID: p.IdentityBindingID,
+	})
 	if err != nil {
 		return contracts.Output{}, err
 	}
@@ -607,7 +651,7 @@ func (m *Module) runGet(ctx context.Context, in contracts.Input) (contracts.Outp
 	if err != nil {
 		return contracts.Output{}, err
 	}
-	row, err := dbgen.New(m.Pool).AutomationRunGet(ctx, dbgen.AutomationRunGetParams{TenantID: p.TenantID, OwnerID: p.Account.ID, ID: integer(in, "id")})
+	row, err := dbgen.New(m.Pool).AutomationRunGet(ctx, dbgen.AutomationRunGetParams(taskLookup(p, integer(in, "id"))))
 	if err != nil {
 		return contracts.Output{}, contracts.Problem("not_found")
 	}

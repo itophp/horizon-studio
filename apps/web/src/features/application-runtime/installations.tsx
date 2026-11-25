@@ -11,7 +11,7 @@ import {
   type RuntimeCandidate,
   type RuntimeInstallation,
 } from "@/api/generated/runtime";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   PageHeading,
   DataTable,
@@ -21,7 +21,7 @@ import {
   EmptyState,
   Loading,
   type AdminColumn,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import { Button } from "@/components/ui/button";
 import "./runtime.css";
 
@@ -71,7 +71,7 @@ export function InstallationsPage() {
     "runtime-installations",
     session.tenantId,
     session.account.id,
-    session.activeDepartmentId,
+    session.identityBindingId,
     session.authorizationVersion,
   ];
   const q = useQuery({

@@ -29,25 +29,26 @@ const (
 
 // Approval is one confirmation card.
 type Approval struct {
-	ID            int64
-	TenantID      string
-	AccountID     int64
-	DepartmentID  int64
-	Capability    string
-	Version       string
-	InvocationID  string
-	Risk          string
-	Kind          string
-	Status        string
-	Arguments     json.RawMessage
-	ActionKey     string
-	Digest        string
-	RequestedAt   time.Time
-	ExpiresAt     time.Time
-	DecidedAt     time.Time
-	DecidedBy     int64
-	Note          string
-	ExecutionCode string
+	ID        int64
+	TenantID  string
+	AccountID int64
+
+	IdentityBindingID string
+	Capability        string
+	Version           string
+	InvocationID      string
+	Risk              string
+	Kind              string
+	Status            string
+	Arguments         json.RawMessage
+	ActionKey         string
+	Digest            string
+	RequestedAt       time.Time
+	ExpiresAt         time.Time
+	DecidedAt         time.Time
+	DecidedBy         int64
+	Note              string
+	ExecutionCode     string
 }
 
 // Store owns the approval table.
@@ -69,9 +70,10 @@ func (s *Store) Create(ctx context.Context, q *dbgen.Queries, a Approval, ttl ti
 		arguments = json.RawMessage(`{}`)
 	}
 	return q.CapCreateApproval(ctx, dbgen.CapCreateApprovalParams{
-		TenantID:          a.TenantID,
-		AccountID:         a.AccountID,
-		DepartmentID:      a.DepartmentID,
+		TenantID:  a.TenantID,
+		AccountID: a.AccountID,
+
+		IdentityBindingID: a.IdentityBindingID,
 		Capability:        a.Capability,
 		CapabilityVersion: a.Version,
 		InvocationID:      a.InvocationID,
@@ -101,11 +103,13 @@ func (s *Store) Get(ctx context.Context, tenant string, id int64) (*Approval, er
 }
 
 // List returns pending cards for the requester, or every card for a reviewer.
-func (s *Store) List(ctx context.Context, tenant string, accountID int64, reviewer bool) ([]Approval, error) {
+func (s *Store) List(ctx context.Context, tenant string, accountID int64, binding string, reviewer bool) ([]Approval, error) {
 	if s == nil || s.pool == nil {
 		return nil, contracts.Problem("unavailable")
 	}
-	rows, err := dbgen.New(s.pool).CapListApprovals(ctx, dbgen.CapListApprovalsParams{TenantID: tenant, AccountID: accountID, Reviewer: reviewer})
+	rows, err := dbgen.New(s.pool).CapListApprovals(ctx, dbgen.CapListApprovalsParams{
+		TenantID: tenant, AccountID: accountID, Binding: binding, Reviewer: reviewer,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -156,8 +160,9 @@ func (s *Store) Expire(ctx context.Context, tenant string) error {
 
 func fromRow(row dbgen.CapApproval) Approval {
 	return Approval{
-		ID: row.ID, TenantID: row.TenantID, AccountID: row.AccountID, DepartmentID: row.DepartmentID,
-		Capability: row.Capability, Version: row.CapabilityVersion, InvocationID: row.InvocationID,
+		ID: row.ID, TenantID: row.TenantID, AccountID: row.AccountID,
+		IdentityBindingID: row.IdentityBindingID.String(),
+		Capability:        row.Capability, Version: row.CapabilityVersion, InvocationID: row.InvocationID,
 		Risk: row.Risk, Kind: row.Approval, Status: row.Status, Arguments: json.RawMessage(row.Arguments),
 		Digest: row.ArgumentsDigest, RequestedAt: row.RequestedAt.Time, ExpiresAt: row.ExpiresAt.Time,
 		DecidedAt: row.DecidedAt.Time, DecidedBy: int64Of(row.DecidedBy), Note: row.DecisionNote,

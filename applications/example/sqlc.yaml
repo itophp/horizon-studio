@@ -1,0 +1,12 @@
+version: "2"
+sql:
+  - engine: postgresql
+    queries: query
+    schema: ../../deployment/database/init.sql
+    gen:
+      go:
+        package: exampledb
+        out: ../../internal/repository/dbgen/exampledb
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        omit_unused_structs: true

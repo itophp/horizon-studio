@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import type { AiConfigReadOutput } from "@/api/generated/capability-ai-config";
-import { Loading } from "@/features/administration/shared";
+import { Loading } from "@/features/identity/shared";
 import type { ComponentRendererProps } from "./component-registry";
 import {
   Choice,

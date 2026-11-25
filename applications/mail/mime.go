@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"mime"
 	"net/mail"
 	"strings"
 	"time"
 
 	"github.com/emersion/go-message"
+	"github.com/emersion/go-message/charset"
 	"github.com/emersion/go-message/textproto"
 )
 
@@ -50,7 +52,8 @@ func parseAddressHeader(value string) []mail.Address {
 	if strings.TrimSpace(value) == "" {
 		return nil
 	}
-	parsed, err := mail.ParseAddressList(value)
+	parser := mail.AddressParser{WordDecoder: &mime.WordDecoder{CharsetReader: charset.Reader}}
+	parsed, err := parser.ParseList(value)
 	if err != nil {
 		return nil
 	}
@@ -59,6 +62,16 @@ func parseAddressHeader(value string) []mail.Address {
 		out = append(out, *address)
 	}
 	return out
+}
+
+func messageSubject(direction, value string) string {
+	if direction == "inbound" && strings.Contains(value, "=?") {
+		decoder := mime.WordDecoder{CharsetReader: charset.Reader}
+		if decoded, err := decoder.DecodeHeader(value); err == nil {
+			return clip(decoded, 998)
+		}
+	}
+	return value
 }
 
 func firstAddress(value string) string {
@@ -135,7 +148,7 @@ func ParseMIME(entity *message.Entity, maxBytes int) (*parsedMessage, error) {
 	if totalBytes > maxBytes {
 		return nil, ErrMimeTooLarge
 	}
-	safeHTML, err := SanitizeHTML(htmlBody, maxBytes)
+	safeHTML, err := sanitizeHTML(inboundHTMLPolicy(), htmlBody, maxBytes)
 	if err != nil {
 		return nil, err
 	}

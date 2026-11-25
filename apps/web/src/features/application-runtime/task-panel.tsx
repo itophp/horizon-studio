@@ -6,8 +6,8 @@ import { runtimeExecute } from "@/lib/capabilities";
 import { subscribeTaskEvents } from "@/api/client/task-events";
 import { Sparkles, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/features/administration/shared";
-import { useSession } from "@/features/administration/auth";
+import { ErrorBanner } from "@/features/identity/shared";
+import { useSession } from "@/features/identity/auth";
 export function TaskPanel({ runId }: { runId: number }) {
   const { t } = useTranslation("runtime");
   const session = useSession();
@@ -15,7 +15,7 @@ export function TaskPanel({ runId }: { runId: number }) {
   const identity = JSON.stringify([
     session.tenantId,
     session.account.id,
-    session.activeDepartmentId,
+    session.identityBindingId,
     session.authorizationVersion,
   ]);
   const [failed, setFailed] = useState(false);

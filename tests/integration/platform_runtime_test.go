@@ -6,28 +6,15 @@ import (
 	"net/http"
 	"testing"
 
-	"horizon/foundation/db/migrations"
 	gencap "horizon/foundation/gen/capability"
 	genidentity "horizon/foundation/gen/identity"
 	"horizon/foundation/runtime/app"
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
-
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 )
 
 func TestPlatformRuntimeInstallationsAndProviders(t *testing.T) {
 	_, pool, _ := iamFixture(t)
-	db := stdlib.OpenDB(*pool.Config().ConnConfig)
-	defer db.Close()
-	migrator, err := goose.NewProvider(goose.DialectPostgres, db, migrations.Files)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := migrator.DownTo(t.Context(), 34); err != nil {
-		t.Fatal(err)
-	}
 	const existing = "platform-existing"
 	const fresh = "platform-fresh"
 	newHandler := func(tenant string) http.Handler {
@@ -37,19 +24,11 @@ func TestPlatformRuntimeInstallationsAndProviders(t *testing.T) {
 		})
 		return deploymentHandler(app.System{}, core, iam)
 	}
-	for index, tenant := range []string{existing, fresh} {
-		if index == 1 {
-			if _, err := migrator.Up(t.Context()); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if _, err := identity.Bootstrap(t.Context(), pool, tenant, tenant, "TestOnly!2026Secure"); err != nil {
-			t.Fatal(err)
-		}
-		if tenant == existing {
-			// Reconcile the compiled deployment before migration 00035 installs the pages.
-			newHandler(tenant)
-		}
+	if _, err := identity.Bootstrap(t.Context(), pool, existing, existing, "TestOnly!2026Secure"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := identity.Bootstrap(t.Context(), pool, fresh, fresh, "TestOnly!2026Secure"); err != nil {
+		t.Fatal(err)
 	}
 
 	routes := map[string]string{
@@ -63,7 +42,7 @@ func TestPlatformRuntimeInstallationsAndProviders(t *testing.T) {
 	}
 	for _, tenant := range []string{existing, fresh} {
 		handler := newHandler(tenant)
-		root := loginIAM(t, handler, tenant)
+		root := loginTenantIAM(t, handler, tenant, tenant)
 		for id, route := range routes {
 			pages := protocol(root, id)["pages"].([]any)
 			expected := []string{route}
@@ -86,10 +65,9 @@ func TestPlatformRuntimeInstallationsAndProviders(t *testing.T) {
 				t.Fatalf("%s must return an empty array: %v", name, data)
 			}
 		}
-		account := decodeBody[genidentity.SessionProfile](t, root.request(t, "GET", "/api/auth/me", nil, false)).Account
 		if tenant == existing {
 			checkSucceeded(t, root.invoke(t, "mcp.token.create", map[string]any{
-				"name": "platform test", "password": "TestOnly!2026Secure", "days": 1, "departmentId": account.DepartmentID,
+				"name": "platform test", "password": "TestOnly!2026Secure", "days": 1,
 			}, true))
 			res := root.invoke(t, "mcp.token.list", map[string]any{}, true)
 			checkSucceeded(t, res)
@@ -102,7 +80,7 @@ func TestPlatformRuntimeInstallationsAndProviders(t *testing.T) {
 				t.Fatal("unexpected token list projection")
 			}
 		}
-		restarted := loginIAM(t, newHandler(tenant), tenant)
+		restarted := loginTenantIAM(t, newHandler(tenant), tenant, tenant)
 		for id := range routes {
 			protocol(restarted, id)
 		}
@@ -110,12 +88,15 @@ func TestPlatformRuntimeInstallationsAndProviders(t *testing.T) {
 			continue
 		}
 		readerName := "platform-reader"
-		checkSucceeded(t, root.invoke(t, "identity.account.create", map[string]any{
+		account := checkIAMInvocation(t, root.invoke(t, "identity.account.create", map[string]any{
 			"username": readerName, "fullName": "Platform Reader", "email": "reader@example.test",
-			"status": "active", "organizationId": account.OrganizationID, "departmentId": account.DepartmentID,
-			"roleIds": []int64{}, "overrides": []any{}, "password": "TestOnly!2026Secure",
+			"initialStatus": "active",
+			"password":      "TestOnly!2026Secure",
 		}, true))
-		reader := loginIAM(t, handler, readerName)
+		profile := decodeBody[genidentity.SessionProfile](t, root.request(t, "GET", "/api/auth/me", nil, false))
+		seedTenantRole(t, pool, tenant, "platform-reader", profile.Account.ID, int64(account["id"].(float64)),
+			[]*genidentity.PermissionGrant{{Permission: "applications:read", Effect: "allow", Scope: "ALL"}})
+		reader := loginTenantIAM(t, handler, readerName, tenant)
 		catalog := decodeData[map[string]any](t, reader.invoke(t, "application.runtime.list", map[string]any{}, true))
 		for _, app := range catalog["items"].([]any) {
 			if app.(map[string]any)["id"] == "ai-settings" {

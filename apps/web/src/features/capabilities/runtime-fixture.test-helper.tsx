@@ -9,6 +9,9 @@ const applications = JSON.parse(
 export const capabilityDefinition = applications.find(
   (application) => application.id === "capabilities",
 )!;
+export const exampleDefinition = applications.find(
+  (application) => application.id === "example-playground",
+)!;
 
 export function CapabilityRuntimeFixture() {
   return (
@@ -16,6 +19,17 @@ export function CapabilityRuntimeFixture() {
       <ApplicationPage
         applicationId="capabilities"
         pageId="capabilities.console"
+      />
+    </MemoryRouter>
+  );
+}
+
+export function ExampleRuntimeFixture() {
+  return (
+    <MemoryRouter initialEntries={["/example"]}>
+      <ApplicationPage
+        applicationId="example-playground"
+        pageId="example.playground"
       />
     </MemoryRouter>
   );

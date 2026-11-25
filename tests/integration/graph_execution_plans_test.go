@@ -128,7 +128,7 @@ func runGraphPlanCase(t *testing.T, fake *riskGraphModel, success bool, wantCall
 		t.Fatal(err)
 	}
 	engine.AgentModel = func(context.Context) (model.ToolCallingChatModel, error) { return fake, nil }
-	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,7 @@ func TestStandaloneGraphPlanPreservesReadContractAndRollback(t *testing.T) {
 	if err := engine.Attach(g, catalog); err != nil {
 		t.Fatal(err)
 	}
-	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID, root.DepartmentID)
+	p, err := iam.PrincipalForTask(ctx, "tenant-a", root.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

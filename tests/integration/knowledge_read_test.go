@@ -13,7 +13,7 @@ import (
 
 func TestKnowledgeDocumentQueryAndRead(t *testing.T) {
 	handler, pool, admin := iamFixture(t)
-	root := loginIAM(t, handler, "root-admin")
+	root := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	other, err := identity.Bootstrap(t.Context(), pool, "tenant-b", "other-admin", "TestOnly!2026Secure")
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +42,7 @@ func TestKnowledgeDocumentQueryAndRead(t *testing.T) {
 		}
 		checkSucceeded(t, root.invoke(t, "identity.account.create", map[string]any{
 			"username": username, "fullName": username, "organizationId": admin.OrganizationID,
-			"departmentId": admin.DepartmentID, "status": "active", "roleIds": []int64{},
+			"departmentId": admin.DepartmentID, "initialStatus": "active", "roleIds": []int64{},
 			"overrides": overrides, "password": "TestOnly!2026Secure",
 		}, true))
 	}

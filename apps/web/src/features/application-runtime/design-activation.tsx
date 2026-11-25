@@ -4,10 +4,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { runtimeRead, runtimeExecute } from "@/lib/capabilities";
 import { runtimeInstallationSchema } from "@/api/generated/runtime";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import { Power, PowerOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/features/administration/shared";
+import { ErrorBanner } from "@/features/identity/shared";
 export function DesignActivation({
   applicationId,
   source,

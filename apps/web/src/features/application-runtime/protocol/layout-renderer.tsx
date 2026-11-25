@@ -15,7 +15,7 @@ import {
   type ComponentRegistry,
   type ProtocolEventOptions,
 } from "./component-registry";
-import { ErrorBanner, Loading } from "@/features/administration/shared";
+import { ErrorBanner, Loading } from "@/features/identity/shared";
 import { resolveRef, type BindingState, type DataMap } from "./data-resolver";
 import type {
   ComponentSpec,

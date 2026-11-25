@@ -2,8 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { runtimeDefinitionValidationSchema } from "@/api/generated/runtime";
 import { runtimeRead } from "@/lib/capabilities";
-import { useSession } from "@/features/administration/auth";
-import { ErrorBanner } from "@/features/administration/shared";
+import { useSession } from "@/features/identity/auth";
+import { ErrorBanner } from "@/features/identity/shared";
 
 export function DesignValidation({
   applicationId,

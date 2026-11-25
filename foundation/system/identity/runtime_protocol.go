@@ -8,10 +8,10 @@ import ar "horizon/foundation/kernel/applicationruntime"
 func RuntimeProtocolApplication() ar.ApplicationV2 {
 	provider := ar.Provider{
 		ID:          "protocol.accounts",
-		Capability:  ar.Ref("identity.accounts.admin.read"),
+		Capability:  ar.Ref("identity.accounts.read"),
 		ResultPath:  "items",
 		KeyField:    "id",
-		LabelField:  "fullName",
+		LabelField:  "username",
 		Pagination:  "none",
 		StaleTimeMs: 15000,
 		Tags:        []string{"identity", "runtime-protocol"},
@@ -91,11 +91,8 @@ func RuntimeProtocolApplication() ar.ApplicationV2 {
 														Props: map[string]any{
 															"keyField": "id",
 															"columns": []map[string]any{
-																{"name": "fullName", "labelKey": "admin:fields.fullName", "display": "entity"},
 																{"name": "username", "labelKey": "admin:fields.username", "display": "mono"},
-																{"name": "email", "labelKey": "admin:fields.email"},
 																{"name": "status", "labelKey": "admin:fields.status", "display": "status"},
-																{"name": "createdAt", "labelKey": "admin:fields.createdAt", "display": "date"},
 															},
 														},
 													},

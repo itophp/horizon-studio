@@ -13,10 +13,10 @@ const api = vi.hoisted(() => ({
   create: vi.fn(),
   permissions: [] as string[],
 }));
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant-a",
-    activeDepartmentId: 1,
+
     account: { id: 1 },
     permissions: api.permissions,
   }),

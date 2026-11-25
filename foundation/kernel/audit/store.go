@@ -45,14 +45,16 @@ type Store struct{ pool *pgxpool.Pool }
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
 // List returns the caller's own invocations, newest first.
-func (s *Store) List(ctx context.Context, tenant string, accountID int64, limit int) ([]Invocation, error) {
+func (s *Store) List(ctx context.Context, tenant string, accountID int64, binding string, limit int) ([]Invocation, error) {
 	if s == nil || s.pool == nil {
 		return nil, contracts.Problem("unavailable")
 	}
 	if limit <= 0 || limit > 100 {
 		limit = 30
 	}
-	rows, err := dbgen.New(s.pool).CapListInvocations(ctx, dbgen.CapListInvocationsParams{TenantID: tenant, AccountID: accountID, MaxRows: int32(limit)})
+	rows, err := dbgen.New(s.pool).CapListInvocations(ctx, dbgen.CapListInvocationsParams{
+		TenantID: tenant, AccountID: accountID, Binding: binding, MaxRows: int32(limit),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -72,11 +74,13 @@ func (s *Store) List(ctx context.Context, tenant string, accountID int64, limit 
 }
 
 // Get returns one invocation owned by the caller.
-func (s *Store) Get(ctx context.Context, tenant string, accountID int64, invocationID string) (*Invocation, error) {
+func (s *Store) Get(ctx context.Context, tenant string, accountID int64, binding, invocationID string) (*Invocation, error) {
 	if s == nil || s.pool == nil {
 		return nil, contracts.Problem("unavailable")
 	}
-	row, err := dbgen.New(s.pool).CapGetInvocation(ctx, dbgen.CapGetInvocationParams{TenantID: tenant, AccountID: accountID, InvocationID: invocationID})
+	row, err := dbgen.New(s.pool).CapGetInvocation(ctx, dbgen.CapGetInvocationParams{
+		TenantID: tenant, AccountID: accountID, Binding: binding, InvocationID: invocationID,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, contracts.Problem("not_found")
 	}

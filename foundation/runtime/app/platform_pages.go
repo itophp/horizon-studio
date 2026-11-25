@@ -46,7 +46,7 @@ func platformColumn(name, label, display string) viewProps {
 }
 
 func agentCollaborationApplication() ar.ApplicationV2 {
-	return agentCollaborationVersion("1.0.2")
+	return agentCollaborationVersion("1.0.3")
 }
 
 func legacyAgentCollaborationApplication() ar.ApplicationV2 {
@@ -84,7 +84,7 @@ func agentCollaborationVersion(version string) ar.ApplicationV2 {
 	remoteContent := []ar.Node{tokensPanel, auditPanel}
 	pageContent := []ar.Node{componentNode("webmcp", "webmcp-panel", "", nil)}
 	if version != "1.0.0" {
-		remoteContent = append([]ar.Node{mcpCredentialPanelVersion(tokens, &remoteActive, version == "1.0.1")}, remoteMcpClientContent()...)
+		remoteContent = append([]ar.Node{mcpCredentialPanelVersion(tokens, &remoteActive, version == "1.0.1", version == "1.0.3")}, remoteMcpClientContent(version == "1.0.3")...)
 		remoteContent = append(remoteContent, auditPanel)
 		pageContent = webMcpContent(version == "1.0.1")
 	}

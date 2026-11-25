@@ -24,11 +24,11 @@ vi.mock("@/lib/capabilities", async (original) => ({
   ...(await original<typeof import("@/lib/capabilities")>()),
   executionPlans: api,
 }));
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "a",
     account: { id: 1 },
-    activeDepartmentId: 2,
+
     authorizationVersion: 1,
     permissions: api.permissions,
   }),

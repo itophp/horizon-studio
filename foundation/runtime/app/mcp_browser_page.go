@@ -104,7 +104,7 @@ func webMcpContent(legacy bool) []ar.Node {
 	}
 }
 
-func remoteMcpClientContent() []ar.Node {
+func remoteMcpClientContent(tenantContext bool) []ar.Node {
 	origin := fieldPath("context.browser.origin")
 	code := func(id, before, after string) ar.Node {
 		return browserMarkdown(id, constant("```\n"+before), origin, constant(after+"\n```"))
@@ -117,24 +117,29 @@ func remoteMcpClientContent() []ar.Node {
 		"fields": []viewProps{token}, "submitKey": "mcp:diagnose",
 	}, browserAction("submit", "remote-mcp.diagnose", objectValue(mapping("token", fieldPath("event.values.token"))))), disabled)
 
-	prepare := componentNode("remote-install-form", "action-form", "", viewProps{"submitKey": "mcp:prepareInstall"},
-		browserAction("submit", "remote-mcp.prepare", objectValue(
-			mapping("client", fieldPath("event.values.client")),
-			mapping("key", fieldPath("event.values.key")),
-			mapping("token", fieldPath("event.values.token")),
-			mapping("departmentId", fieldPath("event.values.departmentId")),
-		)))
-	componentOf(prepare).Bindings = []ar.Mapping{mapping("fields", operation("array",
-		constant(viewProps{"name": "client", "type": "select", "labelKey": "mcp:installClient", "required": true,
-			"options": []viewProps{{"value": "codex", "labelKey": "webmcp:client.codex"}, {"value": "workbuddy", "labelKey": "webmcp:client.workbuddy"}},
-		}),
-		objectValue(mapping("name", constant("departmentId")), mapping("type", constant("select")),
+	payload := []ar.Mapping{
+		mapping("client", fieldPath("event.values.client")),
+		mapping("key", fieldPath("event.values.key")),
+		mapping("token", fieldPath("event.values.token")),
+	}
+	fields := []ar.Expression{constant(viewProps{"name": "client", "type": "select", "labelKey": "mcp:installClient", "required": true,
+		"options": []viewProps{{"value": "codex", "labelKey": "webmcp:client.codex"}, {"value": "workbuddy", "labelKey": "webmcp:client.workbuddy"}},
+	})}
+	if !tenantContext {
+		payload = append(payload, mapping("departmentId", fieldPath("event.values.departmentId")))
+		fields = append(fields, objectValue(mapping("name", constant("departmentId")), mapping("type", constant("select")),
 			mapping("labelKey", constant("mcp:department")), mapping("required", constant(true)),
 			mapping("defaultValue", fieldPath("context.activeDepartmentId")),
-			mapping("options", fieldPath("context.departmentOptions"))),
+			mapping("options", fieldPath("context.departmentOptions"))))
+	}
+	prepare := componentNode("remote-install-form", "action-form", "", viewProps{"submitKey": "mcp:prepareInstall"},
+		browserAction("submit", "remote-mcp.prepare", objectValue(payload...)))
+	fields = append(fields,
 		constant(viewProps{"name": "key", "type": "password", "labelKey": "mcp:pairing", "required": true, "minLength": 64, "maxLength": 64, "format": "hex"}),
 		constant(token),
-	))}
+	)
+	componentOf(prepare).Bindings = []ar.Mapping{mapping("fields", operation("array", fields...))}
+
 	browserDisabled(prepare, disabled)
 	confirm := browserDisabled(componentNode("remote-install-confirm", "button", "", viewProps{
 		"labelKey": "mcp:confirmInstall", "variant": "default",

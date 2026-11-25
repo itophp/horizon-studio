@@ -17,7 +17,31 @@ func fixture() ([]ar.ApplicationV2, []contracts.Entity, []contracts.Definition) 
 	for _, entry := range entries {
 		defs = append(defs, entry.Definition)
 	}
-	return []ar.ApplicationV2{articles.RuntimeApplication(), projects.RuntimeApplication()}, app.EntitiesWithRegistration(registration), defs
+	// Keep exercising the historical article contract without registering it in the deployment.
+	for _, entry := range (&articles.Module{}).Entries() {
+		defs = append(defs, entry.Definition)
+	}
+	entities := append(app.EntitiesWithRegistration(registration), articles.Entities()...)
+	return []ar.ApplicationV2{articles.RuntimeApplication(), projects.RuntimeApplication()}, entities, defs
+}
+
+func TestArticleManagementIsAbsentFromDeployment(t *testing.T) {
+	registration := Register(nil)
+	for _, source := range app.RuntimeContributions(registration) {
+		if source.ID == "articles" || source.Source == "builtin:articles" {
+			t.Fatal("article management is still in the Runtime catalog")
+		}
+	}
+	for _, entry := range (app.CapabilityModules{Registration: registration}).Entries() {
+		if strings.HasPrefix(entry.Definition.Name, "article.") {
+			t.Fatalf("retired article capability is still registered: %s", entry.Definition.Name)
+		}
+	}
+	for _, workflow := range WorkflowDefinitions() {
+		if strings.HasPrefix(workflow.Name, "article-") {
+			t.Fatalf("retired article workflow is still registered: %s", workflow.Name)
+		}
+	}
 }
 
 func TestAssembleUsesOnlyProtocolApplications(t *testing.T) {

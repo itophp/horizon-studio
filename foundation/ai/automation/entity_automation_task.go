@@ -42,10 +42,13 @@ func automationTaskEntity() contracts.Entity {
 			{Name: "failureCount", Kind: contracts.AttributeSystem, Type: contracts.TypeInteger, Required: true,
 				Description: "Consecutive failed occurrences; reset by a completed run."},
 			{Name: "createdAt", Kind: contracts.AttributeSystem, Type: contracts.TypeTimestamp, Required: true},
+			{Name: "identityBindingId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Nullable: true},
 			{Name: "updatedAt", Kind: contracts.AttributeSystem, Type: contracts.TypeTimestamp, Required: true},
+			{Name: "serviceExecution", Kind: contracts.AttributeSystem, Type: contracts.TypeString, Nullable: true, Sensitive: true},
 		},
 		Relations: []contracts.Relation{
 			{Name: "owner", Target: "account", Kind: "one", Via: "owner_id", Required: true},
+			{Name: "identityBinding", Target: "identity_binding", Kind: "one", Via: "identity_binding_id"},
 		},
 	}
 }

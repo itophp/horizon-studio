@@ -30,7 +30,7 @@ func TestParseMIMEAlternativesAndAttachment(t *testing.T) {
 		"--alt",
 		"Content-Type: text/html; charset=utf-8",
 		"",
-		"<p onclick=\"alert(1)\">HTML <script>alert(2)</script>body</p><img src=\"https://tracker.test/x.png\" alt=\"tracker\">",
+		"<p onclick=\"alert(1)\">HTML <script>alert(2)</script>body</p><img src=\"https://tracker.test/x.png\" alt=\"tracker\" onerror=\"alert(3)\"><img src=\"http://tracker.test/x.png\">",
 		"--alt--",
 		"--mixed",
 		"Content-Type: text/plain; name=\"notes.txt\"",
@@ -54,8 +54,12 @@ func TestParseMIMEAlternativesAndAttachment(t *testing.T) {
 	if parsed.Text != "Plain body" {
 		t.Fatalf("plain body = %q", parsed.Text)
 	}
-	if strings.Contains(parsed.HTML, "onclick") || strings.Contains(parsed.HTML, "<script") || strings.Contains(parsed.HTML, "<img") {
+	if strings.Contains(parsed.HTML, "onclick") || strings.Contains(parsed.HTML, "<script") ||
+		strings.Contains(parsed.HTML, "onerror") || strings.Contains(parsed.HTML, "http://") {
 		t.Fatalf("unsafe HTML survived: %s", parsed.HTML)
+	}
+	if !strings.Contains(parsed.HTML, `src="https://tracker.test/x.png"`) {
+		t.Fatalf("HTTPS image reference was lost: %s", parsed.HTML)
 	}
 	if !strings.Contains(parsed.HTML, "HTML body") {
 		t.Fatalf("safe HTML content was lost: %s", parsed.HTML)

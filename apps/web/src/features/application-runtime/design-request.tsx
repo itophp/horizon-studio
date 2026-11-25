@@ -5,7 +5,7 @@ import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import { Sparkles } from "lucide-react";
 import { runtimeExecute } from "@/lib/capabilities";
-import { ErrorBanner } from "@/features/administration/shared";
+import { ErrorBanner } from "@/features/identity/shared";
 import { Button } from "@/components/ui/button";
 
 const schema = z.object({ request: z.string().min(1).max(4000) });

@@ -5,7 +5,7 @@ import "horizon/foundation/kernel/capability/contracts"
 func inboxSyncEntity() contracts.Entity {
 	return contracts.Entity{
 		Name: "mail_inbox_sync", Domain: "mail", Table: "mail_inbox_syncs",
-		Description: "One bounded POP3 retrieval batch for a mailbox.",
+		Description: "One bounded POP3 or IMAP retrieval batch for a mailbox.",
 		Key:         "id",
 		Attributes: []contracts.Attribute{
 			{Name: "id", Kind: contracts.AttributeSystem, Type: contracts.TypeInteger, Required: true},

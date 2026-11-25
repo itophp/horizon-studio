@@ -16,13 +16,14 @@ import (
 
 // Endpoints wraps the "capability" service endpoints.
 type Endpoints struct {
-	Definitions goa.Endpoint
-	Invoke      goa.Endpoint
-	Invocations goa.Endpoint
-	Invocation  goa.Endpoint
-	Approvals   goa.Endpoint
-	Decide      goa.Endpoint
-	Events      goa.Endpoint
+	Definitions   goa.Endpoint
+	Invoke        goa.Endpoint
+	InvokeMachine goa.Endpoint
+	Invocations   goa.Endpoint
+	Invocation    goa.Endpoint
+	Approvals     goa.Endpoint
+	Decide        goa.Endpoint
+	Events        goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "capability" service with endpoints.
@@ -30,13 +31,14 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Definitions: NewDefinitionsEndpoint(s, a.APIKeyAuth),
-		Invoke:      NewInvokeEndpoint(s, a.APIKeyAuth),
-		Invocations: NewInvocationsEndpoint(s, a.APIKeyAuth),
-		Invocation:  NewInvocationEndpoint(s, a.APIKeyAuth),
-		Approvals:   NewApprovalsEndpoint(s, a.APIKeyAuth),
-		Decide:      NewDecideEndpoint(s, a.APIKeyAuth),
-		Events:      NewEventsEndpoint(s, a.APIKeyAuth),
+		Definitions:   NewDefinitionsEndpoint(s, a.APIKeyAuth),
+		Invoke:        NewInvokeEndpoint(s, a.APIKeyAuth),
+		InvokeMachine: NewInvokeMachineEndpoint(s, a.APIKeyAuth),
+		Invocations:   NewInvocationsEndpoint(s, a.APIKeyAuth),
+		Invocation:    NewInvocationEndpoint(s, a.APIKeyAuth),
+		Approvals:     NewApprovalsEndpoint(s, a.APIKeyAuth),
+		Decide:        NewDecideEndpoint(s, a.APIKeyAuth),
+		Events:        NewEventsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -44,6 +46,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Definitions = m(e.Definitions)
 	e.Invoke = m(e.Invoke)
+	e.InvokeMachine = m(e.InvokeMachine)
 	e.Invocations = m(e.Invocations)
 	e.Invocation = m(e.Invocation)
 	e.Approvals = m(e.Approvals)
@@ -86,6 +89,25 @@ func NewInvokeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return s.Invoke(ctx, p)
+	}
+}
+
+// NewInvokeMachineEndpoint returns an endpoint function that calls the method
+// "invoke_machine" of service "capability".
+func NewInvokeMachineEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*InvokeMachinePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "machine_credential",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		ctx, err = authAPIKeyFn(ctx, string(p.Authorization), &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.InvokeMachine(ctx, p)
 	}
 }
 

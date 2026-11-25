@@ -17,6 +17,26 @@ import (
 
 // Client lists the identity service endpoint HTTP clients.
 type Client struct {
+	// SamlCallback Doer is the HTTP client used to make requests to the
+	// saml_callback endpoint.
+	SamlCallbackDoer goahttp.Doer
+
+	// CompleteSaml Doer is the HTTP client used to make requests to the
+	// complete_saml endpoint.
+	CompleteSamlDoer goahttp.Doer
+
+	// FederationProviders Doer is the HTTP client used to make requests to the
+	// federation_providers endpoint.
+	FederationProvidersDoer goahttp.Doer
+
+	// StartFederation Doer is the HTTP client used to make requests to the
+	// start_federation endpoint.
+	StartFederationDoer goahttp.Doer
+
+	// CompleteFederation Doer is the HTTP client used to make requests to the
+	// complete_federation endpoint.
+	CompleteFederationDoer goahttp.Doer
+
 	// TemporaryAccess Doer is the HTTP client used to make requests to the
 	// temporary_access endpoint.
 	TemporaryAccessDoer goahttp.Doer
@@ -37,18 +57,46 @@ type Client struct {
 	// revoke_temporary_access endpoint.
 	RevokeTemporaryAccessDoer goahttp.Doer
 
-	// SwitchDepartment Doer is the HTTP client used to make requests to the
-	// switch_department endpoint.
-	SwitchDepartmentDoer goahttp.Doer
+	// ListSignInIdentities Doer is the HTTP client used to make requests to the
+	// list_sign_in_identities endpoint.
+	ListSignInIdentitiesDoer goahttp.Doer
+
+	// SelectSignInIdentity Doer is the HTTP client used to make requests to the
+	// select_sign_in_identity endpoint.
+	SelectSignInIdentityDoer goahttp.Doer
+
+	// RedeemSignInInvitation Doer is the HTTP client used to make requests to the
+	// redeem_sign_in_invitation endpoint.
+	RedeemSignInInvitationDoer goahttp.Doer
 
 	// Login Doer is the HTTP client used to make requests to the login endpoint.
 	LoginDoer goahttp.Doer
+
+	// RequestRegistration Doer is the HTTP client used to make requests to the
+	// request_registration endpoint.
+	RequestRegistrationDoer goahttp.Doer
+
+	// CompleteRegistration Doer is the HTTP client used to make requests to the
+	// complete_registration endpoint.
+	CompleteRegistrationDoer goahttp.Doer
+
+	// RequestPasswordReset Doer is the HTTP client used to make requests to the
+	// request_password_reset endpoint.
+	RequestPasswordResetDoer goahttp.Doer
+
+	// CompletePasswordReset Doer is the HTTP client used to make requests to the
+	// complete_password_reset endpoint.
+	CompletePasswordResetDoer goahttp.Doer
 
 	// Me Doer is the HTTP client used to make requests to the me endpoint.
 	MeDoer goahttp.Doer
 
 	// Logout Doer is the HTTP client used to make requests to the logout endpoint.
 	LogoutDoer goahttp.Doer
+
+	// RefreshSession Doer is the HTTP client used to make requests to the
+	// refresh_session endpoint.
+	RefreshSessionDoer goahttp.Doer
 
 	// Snapshot Doer is the HTTP client used to make requests to the snapshot
 	// endpoint.
@@ -74,21 +122,148 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		SamlCallbackDoer:           doer,
+		CompleteSamlDoer:           doer,
+		FederationProvidersDoer:    doer,
+		StartFederationDoer:        doer,
+		CompleteFederationDoer:     doer,
 		TemporaryAccessDoer:        doer,
 		RequestTemporaryAccessDoer: doer,
 		ReviewTemporaryAccessDoer:  doer,
 		CancelTemporaryAccessDoer:  doer,
 		RevokeTemporaryAccessDoer:  doer,
-		SwitchDepartmentDoer:       doer,
+		ListSignInIdentitiesDoer:   doer,
+		SelectSignInIdentityDoer:   doer,
+		RedeemSignInInvitationDoer: doer,
 		LoginDoer:                  doer,
+		RequestRegistrationDoer:    doer,
+		CompleteRegistrationDoer:   doer,
+		RequestPasswordResetDoer:   doer,
+		CompletePasswordResetDoer:  doer,
 		MeDoer:                     doer,
 		LogoutDoer:                 doer,
+		RefreshSessionDoer:         doer,
 		SnapshotDoer:               doer,
 		RestoreResponseBody:        restoreBody,
 		scheme:                     scheme,
 		host:                       host,
 		decoder:                    dec,
 		encoder:                    enc,
+	}
+}
+
+// SamlCallback returns an endpoint that makes HTTP requests to the identity
+// service saml_callback server.
+func (c *Client) SamlCallback() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSamlCallbackRequest(c.encoder)
+		decodeResponse = DecodeSamlCallbackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSamlCallbackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SamlCallbackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identity", "saml_callback", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CompleteSaml returns an endpoint that makes HTTP requests to the identity
+// service complete_saml server.
+func (c *Client) CompleteSaml() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCompleteSamlRequest(c.encoder)
+		decodeResponse = DecodeCompleteSamlResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCompleteSamlRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CompleteSamlDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identity", "complete_saml", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// FederationProviders returns an endpoint that makes HTTP requests to the
+// identity service federation_providers server.
+func (c *Client) FederationProviders() goa.Endpoint {
+	var (
+		decodeResponse = DecodeFederationProvidersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildFederationProvidersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.FederationProvidersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identity", "federation_providers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// StartFederation returns an endpoint that makes HTTP requests to the identity
+// service start_federation server.
+func (c *Client) StartFederation() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeStartFederationRequest(c.encoder)
+		decodeResponse = DecodeStartFederationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildStartFederationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.StartFederationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identity", "start_federation", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CompleteFederation returns an endpoint that makes HTTP requests to the
+// identity service complete_federation server.
+func (c *Client) CompleteFederation() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCompleteFederationRequest(c.encoder)
+		decodeResponse = DecodeCompleteFederationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCompleteFederationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CompleteFederationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identity", "complete_federation", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
@@ -212,15 +387,15 @@ func (c *Client) RevokeTemporaryAccess() goa.Endpoint {
 	}
 }
 
-// SwitchDepartment returns an endpoint that makes HTTP requests to the
-// identity service switch_department server.
-func (c *Client) SwitchDepartment() goa.Endpoint {
+// ListSignInIdentities returns an endpoint that makes HTTP requests to the
+// identity service list_sign_in_identities server.
+func (c *Client) ListSignInIdentities() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeSwitchDepartmentRequest(c.encoder)
-		decodeResponse = DecodeSwitchDepartmentResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeListSignInIdentitiesRequest(c.encoder)
+		decodeResponse = DecodeListSignInIdentitiesResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildSwitchDepartmentRequest(ctx, v)
+		req, err := c.BuildListSignInIdentitiesRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -228,9 +403,57 @@ func (c *Client) SwitchDepartment() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.SwitchDepartmentDoer.Do(req)
+		resp, err := c.ListSignInIdentitiesDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("identity", "switch_department", err)
+			return nil, goahttp.ErrRequestError("identity", "list_sign_in_identities", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SelectSignInIdentity returns an endpoint that makes HTTP requests to the
+// identity service select_sign_in_identity server.
+func (c *Client) SelectSignInIdentity() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSelectSignInIdentityRequest(c.encoder)
+		decodeResponse = DecodeSelectSignInIdentityResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSelectSignInIdentityRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SelectSignInIdentityDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identity", "select_sign_in_identity", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RedeemSignInInvitation returns an endpoint that makes HTTP requests to the
+// identity service redeem_sign_in_invitation server.
+func (c *Client) RedeemSignInInvitation() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRedeemSignInInvitationRequest(c.encoder)
+		decodeResponse = DecodeRedeemSignInInvitationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRedeemSignInInvitationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RedeemSignInInvitationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identity", "redeem_sign_in_invitation", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -255,6 +478,102 @@ func (c *Client) Login() goa.Endpoint {
 		resp, err := c.LoginDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("identity", "login", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RequestRegistration returns an endpoint that makes HTTP requests to the
+// identity service request_registration server.
+func (c *Client) RequestRegistration() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRequestRegistrationRequest(c.encoder)
+		decodeResponse = DecodeRequestRegistrationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRequestRegistrationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RequestRegistrationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identity", "request_registration", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CompleteRegistration returns an endpoint that makes HTTP requests to the
+// identity service complete_registration server.
+func (c *Client) CompleteRegistration() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCompleteRegistrationRequest(c.encoder)
+		decodeResponse = DecodeCompleteRegistrationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCompleteRegistrationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CompleteRegistrationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identity", "complete_registration", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RequestPasswordReset returns an endpoint that makes HTTP requests to the
+// identity service request_password_reset server.
+func (c *Client) RequestPasswordReset() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRequestPasswordResetRequest(c.encoder)
+		decodeResponse = DecodeRequestPasswordResetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRequestPasswordResetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RequestPasswordResetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identity", "request_password_reset", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CompletePasswordReset returns an endpoint that makes HTTP requests to the
+// identity service complete_password_reset server.
+func (c *Client) CompletePasswordReset() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCompletePasswordResetRequest(c.encoder)
+		decodeResponse = DecodeCompletePasswordResetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCompletePasswordResetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CompletePasswordResetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identity", "complete_password_reset", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -303,6 +622,30 @@ func (c *Client) Logout() goa.Endpoint {
 		resp, err := c.LogoutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("identity", "logout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RefreshSession returns an endpoint that makes HTTP requests to the identity
+// service refresh_session server.
+func (c *Client) RefreshSession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRefreshSessionRequest(c.encoder)
+		decodeResponse = DecodeRefreshSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRefreshSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RefreshSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identity", "refresh_session", err)
 		}
 		return decodeResponse(resp)
 	}

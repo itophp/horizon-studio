@@ -20,6 +20,8 @@ type Service interface {
 	Definitions(context.Context, *DefinitionsPayload) (res []*CapabilityContract, err error)
 	// Invoke one capability through the full gateway pipeline.
 	Invoke(context.Context, *InvokePayload) (res *CapabilityResult, err error)
+	// Invoke a pinned capability using an audience-bound machine credential.
+	InvokeMachine(context.Context, *InvokeMachinePayload) (res *CapabilityResult, err error)
 	// List the caller's own capability invocations, newest first.
 	Invocations(context.Context, *InvocationsPayload) (res []*CapabilityInvocation, err error)
 	// Read one invocation owned by the caller.
@@ -54,7 +56,7 @@ const ServiceName = "capability"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"definitions", "invoke", "invocations", "invocation", "approvals", "decide", "events"}
+var MethodNames = [8]string{"definitions", "invoke", "invoke_machine", "invocations", "invocation", "approvals", "decide", "events"}
 
 // ApprovalsPayload is the payload type of the capability service approvals
 // method.
@@ -195,6 +197,17 @@ type InvocationPayload struct {
 type InvocationsPayload struct {
 	Cookie string
 	Limit  int
+}
+
+// InvokeMachinePayload is the payload type of the capability service
+// invoke_machine method.
+type InvokeMachinePayload struct {
+	Authorization  string
+	DelegationID   *string
+	Name           string
+	Version        string
+	Input          any
+	IdempotencyKey *string
 }
 
 // InvokePayload is the payload type of the capability service invoke method.

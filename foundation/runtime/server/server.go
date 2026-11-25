@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"horizon/foundation/integrations/mcp"
+	"horizon/foundation/kernel/audit"
 	"horizon/foundation/runtime/app"
 	"horizon/foundation/runtime/config"
 	"horizon/foundation/runtime/transport"
@@ -36,7 +37,24 @@ func Run(ctx context.Context, c config.Config, register app.Register) error {
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
 	iam := identity.New(identityPool, c.SecureCookies)
+	iam.ConfigurePlatformOperators(c.PlatformOperatorIDs)
 	core := governance.New(identityPool, iam, c.Governance)
+	iam.AttachSecretProtector(core)
+	mail := notifications.New(core)
+	var email identity.ContactDelivery
+	if c.Governance.PublicWorkspace != "" {
+		email = func(ctx context.Context, destination, purpose, code, id string) error {
+			return mail.SendIAMChallenge(ctx, c.Governance.PublicWorkspace, destination, purpose, code, id)
+		}
+	}
+	iam.ConfigureContactDelivery(email, smsContactDelivery(c.SMSURL, c.SMSToken))
+	go iam.RunContactDelivery(workerCtx)
+	if err := iam.ConfigureOIDC(ctx, c.OIDCProviders, c.Governance.PublicURL); err != nil {
+		return err
+	}
+	if err := iam.ConfigureSAML(c.SAMLProviders, c.Governance.PublicURL); err != nil {
+		return err
+	}
 	iam.Policies = core
 	var registration app.Registration
 	if register != nil {
@@ -61,6 +79,7 @@ func Run(ctx context.Context, c config.Config, register app.Register) error {
 	}
 
 	if identityPool != nil {
+		go audit.NewSecurityLog(identityPool, c.Governance.AuditSigningSeed, c.AuditPreviousKeys...).Run(workerCtx, c.AuditOnlineDays, c.AuditRetentionDays)
 		fileService := files.New(core)
 		mcpService := mcp.New(identityPool, iam)
 		worker := notifications.New(core)

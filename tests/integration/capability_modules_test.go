@@ -24,7 +24,7 @@ import (
 // the entry point is now one contract.
 func TestModuleCapabilitiesClosedLoop(t *testing.T) {
 	handler, pool, root := iamFixture(t)
-	owner := loginIAM(t, handler, "root-admin")
+	owner := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	relay := outbox.NewRelay(pool, eventhub.NewHub())
 
 	t.Run("settings draft publishes and emits an event", func(t *testing.T) {
@@ -110,7 +110,7 @@ func TestModuleCapabilitiesClosedLoop(t *testing.T) {
 	t.Run("mcp token lifecycle runs as capabilities", func(t *testing.T) {
 		created := decodeData[mcp.MCPTokenCreated](t, owner.invoke(t, "mcp.token.create", map[string]any{
 			"name": "capability acceptance", "password": "TestOnly!2026Secure",
-			"days": 1, "departmentId": root.DepartmentID, "tools": []string{"context_get"},
+			"days": 1,
 		}, true))
 		if created.Secret == "" || created.Token.ID == 0 {
 			t.Fatal("token secret was not issued")

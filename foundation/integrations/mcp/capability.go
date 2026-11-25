@@ -47,53 +47,48 @@ func stringListSchema() *contracts.Schema {
 
 func tokenSchema() *contracts.Schema {
 	return contracts.Object(map[string]*contracts.Schema{
-		"id":           {Type: "integer"},
-		"name":         {Type: "string"},
-		"prefix":       {Type: "string"},
-		"departmentId": {Type: "integer"},
-		"tools":        stringListSchema(), // Deprecated: accepted for old clients but ignored.
-		"createdAt":    {Type: "string"},
-		"expiresAt":    {Type: "string"},
-		"revokedAt":    {Type: "string"},
-		"revokedBy":    {Type: "integer"},
-		"lastUsedAt":   {Type: "string"},
+		"id":         {Type: "integer"},
+		"name":       {Type: "string"},
+		"prefix":     {Type: "string"},
+		"createdAt":  {Type: "string"},
+		"expiresAt":  {Type: "string"},
+		"revokedAt":  {Type: "string"},
+		"revokedBy":  {Type: "integer"},
+		"lastUsedAt": {Type: "string"},
 	}, "id", "name", "prefix")
 }
 
 func auditSchema() *contracts.Schema {
 	return contracts.Object(map[string]*contracts.Schema{
-		"id":           {Type: "integer"},
-		"tokenId":      {Type: "integer"},
-		"departmentId": {Type: "integer"},
-		"tool":         {Type: "string"},
-		"resultCode":   {Type: "string"},
-		"durationMs":   {Type: "integer"},
-		"requestId":    {Type: "string"},
-		"createdAt":    {Type: "string"},
+		"id":         {Type: "integer"},
+		"tokenId":    {Type: "integer"},
+		"tool":       {Type: "string"},
+		"resultCode": {Type: "string"},
+		"durationMs": {Type: "integer"},
+		"requestId":  {Type: "string"},
+		"createdAt":  {Type: "string"},
 	}, "id", "tokenId", "tool", "resultCode", "createdAt")
 }
 
 func (s *Service) createTokenDefinition() contracts.Definition {
 	return contracts.Definition{Layer: contracts.LayerAtomic,
 		Name: "mcp.token.create", Version: version, Title: "Create an MCP token",
-		Description: "Mint a personal MCP credential bound to a department and current permissions. The secret is returned once.",
+		Description: "Mint a personal MCP credential bound to the current tenant and identity context. The secret is returned once.",
 		Domain:      "mcp", Entity: "mcp_token", Permission: "",
 		Risk: contracts.RiskHigh, Approval: contracts.ApprovalConfirm, TransientResult: true,
 		Idempotency:   contracts.Idempotency{Required: true, Scope: "tenant+operation+key"},
 		SuccessEvents: []string{TokenCreatedEvent}, Executor: "go:mcp.token.create",
-		Tags: []string{"mcp", "write", "manual-only", contracts.AuthenticatedActionTag},
+		Tags: []string{"mcp", "write", "manual-only", contracts.AuthenticatedActionTag, contracts.OrganizationScopedTag},
 		Input: contracts.Object(map[string]*contracts.Schema{
-			"password":     passwordSchema(),
-			"name":         contracts.Str(1, 100),
-			"departmentId": contracts.Int(0, 1<<40),
-			"days":         contracts.Int(1, 90),
-			"tools":        stringListSchema(),
+			"password": passwordSchema(),
+			"name":     contracts.Str(1, 100),
+			"days":     contracts.Int(1, 90),
 		}, "password", "name", "days"),
 		Output: contracts.Object(map[string]*contracts.Schema{
 			"token": tokenSchema(), "secret": {Type: "string"},
 		}, "token", "secret"),
 		// The password is deliberately absent: it must never be projected.
-		Loggable: []string{"name", "departmentId", "days"},
+		Loggable: []string{"name", "days"},
 	}
 }
 
@@ -103,7 +98,7 @@ func (s *Service) listTokensDefinition() contracts.Definition {
 		Description: "List the caller's own MCP credentials with their expiry and revocation state.",
 		Domain:      "mcp", Entity: "mcp_token", Permission: "",
 		Risk: contracts.RiskLow, Approval: contracts.ApprovalAuto, ReadOnly: true,
-		Executor: "go:mcp.token.list", Tags: []string{"mcp", "read", "agent", contracts.AuthenticatedProviderTag},
+		Executor: "go:mcp.token.list", Tags: []string{"mcp", "read", "agent", contracts.AuthenticatedProviderTag, contracts.OrganizationScopedTag},
 		Input:  contracts.Object(map[string]*contracts.Schema{}),
 		Output: &contracts.Schema{Type: "array", Items: tokenSchema()},
 	}
@@ -130,7 +125,7 @@ func (s *Service) revokeTokenDefinition() contracts.Definition {
 func (s *Service) rotateTokenDefinition() contracts.Definition {
 	return contracts.Definition{Layer: contracts.LayerAtomic,
 		Name: "mcp.token.rotate", Version: version, Title: "Rotate an MCP token",
-		Description: "Replace a credential with a new secret, carrying over its department and expiry.",
+		Description: "Replace a credential with a new secret, retaining its identity context and expiry.",
 		Domain:      "mcp", Entity: "mcp_token", Permission: "mcp:revoke",
 		Risk: contracts.RiskHigh, Approval: contracts.ApprovalConfirm, TransientResult: true,
 		Idempotency:   contracts.Idempotency{Required: true, Scope: "tenant+operation+key"},
@@ -168,17 +163,14 @@ func (s *Service) adminRevokeTokenDefinition() contracts.Definition {
 func (s *Service) capabilitiesDefinition() contracts.Definition {
 	return contracts.Definition{Layer: contracts.LayerAtomic,
 		Name: "mcp.capability.list", Version: version, Title: "List MCP tool capabilities",
-		Description: "List the MCP capability tools currently available in a department.",
+		Description: "List the MCP capability tools available in the active identity context.",
 		Domain:      "mcp", Entity: "mcp_token", Permission: "",
 		Risk: contracts.RiskLow, Approval: contracts.ApprovalAuto, ReadOnly: true,
-		Executor: "go:mcp.capability.list", Tags: []string{"mcp", "read", "agent"},
-		Input: contracts.Object(map[string]*contracts.Schema{
-			"departmentId": contracts.Int(1, 1<<40),
-		}),
+		Executor: "go:mcp.capability.list", Tags: []string{"mcp", "read", "agent", contracts.OrganizationScopedTag},
+		Input: contracts.Object(map[string]*contracts.Schema{}),
 		Output: contracts.Object(map[string]*contracts.Schema{
 			"tools": stringListSchema(),
 		}),
-		Loggable: []string{"departmentId"},
 	}
 }
 
@@ -186,11 +178,13 @@ func (s *Service) capabilitiesDefinition() contracts.Definition {
 func (s *Service) contextDefinition() contracts.Definition {
 	return contracts.Definition{Layer: contracts.LayerAtomic,
 		Name: "mcp.context.get", Version: version, Title: "Get current MCP identity",
-		Description: "Get the authenticated account and active department for connection verification.",
+		Description: "Get the authenticated tenant, account and identity binding for connection verification.",
 		Domain:      "mcp", Entity: "mcp_token", Risk: contracts.RiskLow,
 		Approval: contracts.ApprovalAuto, ReadOnly: true, Executor: "go:mcp.context.get",
-		Tags: []string{"mcp", "read", "agent"}, Input: contracts.Object(map[string]*contracts.Schema{}),
-		Output: contracts.Object(map[string]*contracts.Schema{"accountId": {Type: "integer"}, "departmentId": {Type: "integer"}}, "accountId", "departmentId"),
+		Tags: []string{"mcp", "read", "agent", contracts.OrganizationScopedTag}, Input: contracts.Object(map[string]*contracts.Schema{}),
+		Output: contracts.Object(map[string]*contracts.Schema{
+			"tenantId": {Type: "string"}, "accountId": {Type: "integer"}, "identityBindingId": {Type: "string"},
+		}, "tenantId", "accountId", "identityBindingId"),
 	}
 }
 
@@ -199,7 +193,7 @@ func (s *Service) currentContext(ctx context.Context, _ contracts.Input) (contra
 	if err != nil {
 		return contracts.Output{}, err
 	}
-	return contracts.Output{Data: map[string]any{"accountId": p.Account.ID, "departmentId": p.Account.DepartmentID}}, nil
+	return contracts.Output{Data: map[string]any{"tenantId": p.TenantID, "accountId": p.Account.ID, "identityBindingId": p.IdentityBindingID}}, nil
 }
 
 func (s *Service) auditDefinition() contracts.Definition {

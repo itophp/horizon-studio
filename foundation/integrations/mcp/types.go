@@ -9,38 +9,32 @@ type AdminRevokePayload struct {
 type AuditPayload struct {
 }
 type CapabilitiesPayload struct {
-	DepartmentID *int64 `json:"departmentId"`
 }
 type CreatePayload struct {
-	Password     string   `json:"password"`
-	Name         string   `json:"name"`
-	DepartmentID int64    `json:"departmentId"`
-	Days         int      `json:"days"`
-	Tools        []string `json:"tools"` // Deprecated: ignored; access follows current permissions.
+	Password string `json:"password"`
+	Name     string `json:"name"`
+	Days     int    `json:"days"`
 }
 type ListPayload struct {
 }
 type MCPAudit struct {
-	ID           int64  `json:"id"`
-	TokenID      int64  `json:"tokenId"`
-	DepartmentID int64  `json:"departmentId"`
-	Tool         string `json:"tool"`
-	ResultCode   string `json:"resultCode"`
-	DurationMs   int64  `json:"durationMs"`
-	RequestID    string `json:"requestId"`
-	CreatedAt    string `json:"createdAt"`
+	ID         int64  `json:"id"`
+	TokenID    int64  `json:"tokenId"`
+	Tool       string `json:"tool"`
+	ResultCode string `json:"resultCode"`
+	DurationMs int64  `json:"durationMs"`
+	RequestID  string `json:"requestId"`
+	CreatedAt  string `json:"createdAt"`
 }
 type MCPToken struct {
-	ID           int64    `json:"id"`
-	DepartmentID int64    `json:"departmentId"`
-	Name         string   `json:"name"`
-	Prefix       string   `json:"prefix"`
-	Tools        []string `json:"tools"` // Deprecated: ignored; access follows current permissions.
-	CreatedAt    string   `json:"createdAt"`
-	ExpiresAt    string   `json:"expiresAt"`
-	RevokedAt    string   `json:"revokedAt"`
-	LastUsedAt   string   `json:"lastUsedAt"`
-	RevokedBy    int64    `json:"revokedBy"`
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	Prefix     string `json:"prefix"`
+	CreatedAt  string `json:"createdAt"`
+	ExpiresAt  string `json:"expiresAt"`
+	RevokedAt  string `json:"revokedAt"`
+	LastUsedAt string `json:"lastUsedAt"`
+	RevokedBy  int64  `json:"revokedBy"`
 }
 type MCPTokenCreated struct {
 	Token  *MCPToken `json:"token"`

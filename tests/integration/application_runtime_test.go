@@ -11,13 +11,45 @@ import (
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/kernel/capability/gateway"
 	"horizon/foundation/kernel/capability/registry"
+	"horizon/foundation/runtime/app"
+	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
 	"testing"
 )
 
+func TestRetiredArticleApplicationRejectsOldEntrypoints(t *testing.T) {
+	handler, pool, root := articleFixture(t)
+	before := loginIAM(t, handler, root.Username)
+	checkIAMInvocation(t, before.invoke(t, "application.runtime.resolve", map[string]any{"applicationId": "articles"}, true))
+	article := checkIAMInvocation(t, before.invoke(t, "article.create", map[string]any{
+		"title": "Historical article", "body": "Preserved article body",
+	}, true))
+
+	iam := identity.New(pool, false)
+	core := governance.New(pool, iam, governance.Options{PublicWorkspace: "tenant-a", StorageRoot: t.TempDir()})
+	current := before
+	current.handler = deploymentHandler(app.System{}, core, iam)
+	response := current.invoke(t, "application.runtime.resolve", map[string]any{"applicationId": "articles"}, true)
+	checkStatus(t, response, 200)
+	if result := decodeBody[contracts.Result](t, response); result.ErrorCode != "not_found" {
+		t.Fatalf("old article Runtime definition still resolves: %+v", result)
+	}
+	checkStatus(t, current.invoke(t, "article.list", map[string]any{}, true), 404)
+	catalog := checkIAMInvocation(t, current.invoke(t, "application.runtime.list", map[string]any{}, true))
+	for _, item := range catalog["items"].([]any) {
+		if item.(map[string]any)["id"] == "articles" {
+			t.Fatal("retired app still appears in the navigation catalog")
+		}
+	}
+	var title string
+	if err := pool.QueryRow(t.Context(), "SELECT title FROM articles WHERE tenant_id=$1 AND id=$2", "tenant-a", int64(article["id"].(float64))).Scan(&title); err != nil || title != "Historical article" {
+		t.Fatalf("article data was not preserved: %q (%v)", title, err)
+	}
+}
+
 func TestApplicationRuntimeArticleQueries(t *testing.T) {
-	handler, pool, root := iamFixture(t)
-	client := loginIAM(t, handler, "root-admin")
+	handler, pool, root := articleFixture(t)
+	client := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	response := invokeCapability(t, client, "application.runtime.resolve", map[string]any{"input": map[string]any{"applicationId": "articles"}})
 	if response.Status != "succeeded" {
 		t.Fatal(response)
@@ -36,7 +68,7 @@ func TestApplicationRuntimeArticleQueries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := pluginIAM(t, pool).NewPrincipal(&gen.AccountRecord{ID: root.ID}, "tenant-a", []*gen.PermissionGrant{{Permission: "articles:read", Effect: "allow"}})
+	p, err := pluginIAM(t, pool, (articles.Plugin{}).Manifest().Permissions...).NewPrincipal(&gen.AccountRecord{ID: root.ID}, "tenant-a", []*gen.PermissionGrant{{Permission: "articles:read", Effect: "allow"}})
 	if err != nil {
 		t.Fatal(err)
 	}

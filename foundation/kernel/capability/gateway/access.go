@@ -7,11 +7,45 @@ import (
 	"horizon/foundation/kernel/capability/registry"
 	"horizon/foundation/system/identity"
 	"horizon/internal/repository/dbgen"
+	"slices"
 	"sort"
 	"strings"
 )
 
+// MachineDirectEntry checks whether a capability can execute as a bounded machine action.
+func MachineDirectEntry(entry registry.Entry) bool {
+	definition := entry.Definition
+	return definition.MachineCallable && definition.Layer == contracts.LayerAtomic && definition.Permission != "" && definition.Domain != "identity" &&
+		!slices.Contains(definition.Tags, "manual-only") && !slices.Contains(definition.Tags, "system-only") &&
+		!slices.Contains(definition.Tags, "internal-only") &&
+		!definition.TransientResult && entry.Handler.ExecuteTx != nil &&
+		definition.Risk != contracts.RiskCritical && definition.Approval != contracts.ApprovalForbidden
+}
+
+func serviceAutomationTarget(entry registry.Entry) bool {
+	definition := entry.Definition
+	return MachineDirectEntry(entry) && definition.Risk == contracts.RiskLow &&
+		definition.Approval == contracts.ApprovalAuto && slices.Contains(definition.AllowedOrigins, contracts.OriginAutomation)
+}
+
+// ValidateServiceAutomationTarget validates a schedule without executing it.
+// The worker still repeats all Gateway checks for each occurrence.
+func (g *Gateway) ValidateServiceAutomationTarget(p *identity.Principal, name, version string, input contracts.Input) error {
+	entry, ok := g.registry.Resolve(name, version)
+	if !ok || version == "" || !serviceAutomationTarget(entry) ||
+		!p.MachineAllows(entry.Definition, input, contracts.OriginAutomation) || !p.Can(entry.Definition.Permission) {
+		return contracts.Problem("forbidden")
+	}
+	if err := entry.Definition.Input.Validate(input); err != nil {
+		return contracts.Problem("invalid")
+	}
+	return checkInputAccess(p, entry.Definition, input)
+}
+
 func (g *Gateway) available(ctx context.Context, q *dbgen.Queries, p *identity.Principal, d contracts.Definition, lock bool) error {
+	if d.Name != "" && p.ActingOrganization.OrganizationID != 0 && !slices.Contains(d.Tags, contracts.OrganizationScopedTag) {
+		return contracts.Problem("forbidden")
+	}
 	if d.Installation == "" {
 		return nil
 	}
@@ -71,8 +105,8 @@ func hasPath(v any, parts []string) bool {
 	}
 	return false
 }
-func projectOutput(p *identity.Principal, d contracts.Definition, value any) (any, error) {
-	if len(d.OutputAccess) == 0 {
+func projectOutput(p *identity.Principal, d contracts.Definition, value any, masks ...string) (any, error) {
+	if len(d.OutputAccess) == 0 && len(masks) == 0 {
 		return value, nil
 	}
 	raw, err := json.Marshal(value)
@@ -87,6 +121,9 @@ func projectOutput(p *identity.Principal, d contracts.Definition, value any) (an
 		if !p.Can(rule.Permission) {
 			removePath(out, strings.Split(rule.Path, "."))
 		}
+	}
+	for _, path := range masks {
+		removePath(out, strings.Split(path, "."))
 	}
 	return out, nil
 }
@@ -115,6 +152,10 @@ func (g *Gateway) DefinitionsFor(ctx context.Context, keys []string) ([]contract
 	if err != nil {
 		return nil, err
 	}
+	disabled, err := g.disabledResources(ctx, p)
+	if err != nil {
+		return nil, err
+	}
 	out := []contracts.Definition{}
 	for _, key := range keys {
 		name, version, ok := strings.Cut(key, "@")
@@ -126,7 +167,7 @@ func (g *Gateway) DefinitionsFor(ctx context.Context, keys []string) ([]contract
 			return nil, contracts.Problem("invalid")
 		}
 		d := entry.Definition
-		if !callerOf(p).Allowed(d.Permission) || !d.AllowsOrigin(contracts.OriginAgent) || g.available(ctx, dbgen.New(g.pool), p, d, false) != nil {
+		if disabled[d.Entity] || !callerOf(p).Allowed(d.Permission) || !d.AllowsOrigin(contracts.OriginAgent) || g.available(ctx, dbgen.New(g.pool), p, d, false) != nil {
 			continue
 		}
 		d.Input = contracts.AuthorizedSchema(d.Input, d.InputAccess, p.Can)
@@ -140,6 +181,21 @@ func (g *Gateway) DefinitionsFor(ctx context.Context, keys []string) ([]contract
 		out = append(out, d)
 	}
 	return out, nil
+}
+
+func (g *Gateway) disabledResources(ctx context.Context, p *identity.Principal) (map[string]bool, error) {
+	if g.identity == nil || g.pool == nil {
+		return nil, nil
+	}
+	rows, err := dbgen.New(g.pool).IAMDisabledResources(ctx, p.TenantID)
+	if err != nil {
+		return nil, contracts.Problem("unavailable")
+	}
+	disabled := make(map[string]bool, len(rows))
+	for _, resource := range rows {
+		disabled[resource] = true
+	}
+	return disabled, nil
 }
 
 func entrySources(entry registry.Entry, input contracts.Input) ([]contracts.Activation, error) {
@@ -162,8 +218,82 @@ func entrySources(entry registry.Entry, input contracts.Input) ([]contracts.Acti
 	})
 	return refs, nil
 }
-func (g *Gateway) checkEntry(ctx context.Context, q *dbgen.Queries, p *identity.Principal, entry registry.Entry, input contracts.Input, lock bool) error {
-	refs, err := entrySources(entry, input)
+func (g *Gateway) checkEntry(ctx context.Context, q *dbgen.Queries, p *identity.Principal, entry registry.Entry, request Request, lock bool) error {
+	definition := entry.Definition
+	if p.ActingOrganization.OrganizationID != 0 && !slices.Contains(definition.Tags, contracts.OrganizationScopedTag) {
+		return contracts.Problem("forbidden")
+	}
+	if slices.Contains(definition.Tags, identity.PlatformOperatorTag) && (g.identity == nil || !g.identity.IsPlatformOperator(p)) {
+		if !lock {
+			g.observeDenied(ctx, p, request, definition.Name, "platform_authority")
+		}
+		return contracts.Problem("forbidden")
+	}
+	origin := request.Origin
+	if request.authorizationOrigin != "" {
+		origin = request.authorizationOrigin
+	}
+	if p.MachineCredentialID() != "" && (!p.MachineAllows(definition, request.Input, origin) || !MachineDirectEntry(entry) || !definition.AllowsOrigin(origin)) {
+		return contracts.Problem("forbidden")
+	}
+	if g.identity != nil && definition.Domain != "identity" {
+		if lock {
+			if err := q.IAMResourceReadLock(ctx, dbgen.IAMResourceReadLockParams{TenantID: p.TenantID, Resource: definition.Entity}); err != nil {
+				return contracts.Problem("unavailable")
+			}
+		}
+		if p.Account.ID == 0 {
+			enabled, err := q.IAMResourceEnabled(ctx, dbgen.IAMResourceEnabledParams{TenantID: p.TenantID, Resource: definition.Entity})
+			if err != nil {
+				return contracts.Problem("unavailable")
+			}
+			if !enabled.Valid || !enabled.Bool {
+				return contracts.Problem("forbidden")
+			}
+		}
+	}
+	if g.identity != nil && p.Account.ID != 0 && !strings.HasPrefix(definition.Name, "identity.policy.") {
+		if lock {
+			if err := q.IAMPolicyReadLock(ctx, p.TenantID); err != nil {
+				return contracts.Problem("unavailable")
+			}
+		}
+		authorization := identity.AuthorizationInput{
+			Principal: p, Action: definition.Name, Permission: definition.Permission, Resource: definition.Entity, Environment: origin,
+		}
+		authorization.ApplyCapabilityFields(definition)
+		resourceID := definition.ResourceAttributeID
+		if resourceID == "" {
+			resourceID = definition.DelegationResourceID
+		}
+		if resourceID != "" {
+			var target struct{ ID int64 }
+			if err := contracts.Bind(contracts.Input{"ID": request.Input[resourceID]}, &target); err == nil {
+				authorization.ResourceID = target.ID
+			}
+		}
+		if p.MachineCredentialID() != "" && (!g.identity.AuthorizeMachineIssuer(ctx, q, authorization) ||
+			!g.identity.AuthorizeDelegatedBinding(ctx, q, p, definition, authorization.ResourceID, lock)) {
+			if !lock {
+				g.observeDenied(ctx, p, request, definition.Name, "machine_issuer")
+			}
+			return contracts.Problem("forbidden")
+		}
+		decision, err := g.identity.AuthorizeAction(ctx, q, authorization)
+		if err != nil || !decision.Allowed {
+			if !lock {
+				g.observeDenied(ctx, p, request, definition.Name, decision.Reason)
+			}
+			if err != nil {
+				return contracts.Problem("unavailable")
+			}
+			return contracts.Problem("forbidden")
+		}
+		if request.authorization != nil {
+			*request.authorization = decision
+		}
+	}
+	refs, err := entrySources(entry, request.Input)
 	if err != nil {
 		return err
 	}

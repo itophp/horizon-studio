@@ -243,7 +243,6 @@ export interface InboxMessage {
 
 export interface MCPToken {
   createdAt: string;
-  departmentId: number;
   expiresAt: string;
   id: number;
   lastUsedAt: string;
@@ -251,7 +250,6 @@ export interface MCPToken {
   prefix: string;
   revokedAt: string;
   revokedBy: number;
-  tools: string[];
 }
 
 export interface ManagedFile {
@@ -489,7 +487,6 @@ export interface MCPTokenCreated {
 
 export interface MCPAudit {
   createdAt: string;
-  departmentId: number;
   durationMs: number;
   id: number;
   requestId: string;

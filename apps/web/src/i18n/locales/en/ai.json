@@ -30,7 +30,7 @@
     "intro": "Ask for an outcome, not a menu path. The agent can only use capabilities you are allowed to use, and high risk actions wait for your confirmation.",
     "suggestion": {
       "one": "Show me the pending notifications in my inbox.",
-      "two": "What do the workspace policy documents say about password length?",
+      "two": "What do the tenant policy documents say about password length?",
       "three": "Send an announcement to my department about tonight's maintenance window."
     },
     "thinking": "Planning and calling capabilities",
@@ -45,7 +45,7 @@
     "department": "Active department",
     "registry": "Registry version",
     "pendingMeta": "{{time}} · run #{{run}}",
-    "disabled": "The agent is not enabled for this workspace yet. An administrator can turn it on and configure the model under System settings.",
+    "disabled": "The agent is currently disabled. An administrator can turn it on and configure the model under System settings.",
     "openAISettings": "Open AI Configuration",
     "modelFailed": "The model did not answer. Check that the token under System settings is valid and that the agent endpoint is reachable; the failed task is kept in Run history.",
     "conversation": "Conversation",

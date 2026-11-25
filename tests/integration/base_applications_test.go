@@ -42,7 +42,7 @@ func resolveSystemSettings(t *testing.T, client iamClient) map[string]any {
 // deployment baseline.
 func TestPlatformBaseApplicationsAreManagedByDeployment(t *testing.T) {
 	handler, pool, _ := iamFixture(t)
-	client := loginIAM(t, handler, "root-admin")
+	client := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	catalog := decodeData[map[string]any](t, client.invoke(t, "application.runtime.installation.list", map[string]any{}, true))
 	candidates := catalog["candidates"].([]any)
 	baseSeen := map[string]bool{}
@@ -77,7 +77,7 @@ func TestPlatformBaseApplicationsAreManagedByDeployment(t *testing.T) {
 	for _, raw := range items {
 		item := raw.(map[string]any)
 		if item["pluginId"] == "builtin:system-settings" {
-			if item["status"] != "enabled" || item["version"] != "1.0.4" {
+			if item["status"] != "enabled" || item["version"] != "1.0.5" {
 				t.Fatalf("base application is not provisioned: %v", item)
 			}
 		}
@@ -108,7 +108,7 @@ func TestPlatformBaseApplicationsAreManagedByDeployment(t *testing.T) {
 		}
 	}
 	propose := client.invoke(t, "application.runtime.definition.propose", map[string]any{
-		"applicationId": "system-settings", "baseVersion": "1.0.4.0", "revision": 1, "changes": []map[string]any{},
+		"applicationId": "system-settings", "baseVersion": "1.0.5.0", "revision": 1, "changes": []map[string]any{},
 	}, true)
 	if propose.Code == 200 {
 		disallowed := decodeBody[gencap.CapabilityResult](t, propose)
@@ -130,17 +130,20 @@ func TestPlatformBaseApplicationsAreManagedByDeployment(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), `UPDATE runtime_installations SET version='1.0.2', digest='', previous_version='', revision=revision+1 WHERE tenant_id='tenant-a' AND plugin_id='builtin:system-settings'`); err != nil {
 		t.Fatal(err)
 	}
-	upgraded := loginIAM(t, newRuntimeHandler(pool, "tenant-a"), "root-admin")
+	upgraded := loginTenantIAM(t, newRuntimeHandler(pool, "tenant-a"), "root-admin", "tenant-a")
 	installation = decodeBody[gencap.CapabilityResult](t, upgraded.invoke(t, "application.runtime.installation.get", map[string]any{"pluginId": "builtin:system-settings"}, true))
+	if installation.Status != "succeeded" {
+		t.Fatal(installation)
+	}
 	got := installation.Data.(map[string]any)["installation"].(map[string]any)
-	if got["version"] != "1.0.4" || got["status"] != "enabled" {
+	if got["version"] != "1.0.5" || got["status"] != "enabled" {
 		t.Fatalf("base application did not upgrade automatically: %v", got)
 	}
 	history := installation.Data.(map[string]any)["history"].([]any)
 	if len(history) == 0 || history[0].(map[string]any)["Action"] != "auto_upgrade" {
 		t.Fatalf("base application upgrade was not recorded: %v", history)
 	}
-	if resolved := resolveSystemSettings(t, upgraded); resolved["applicationVersion"] != "1.0.4.0" {
+	if resolved := resolveSystemSettings(t, upgraded); resolved["applicationVersion"] != "1.0.5.0" {
 		t.Fatalf("base application definition did not advance: %v", resolved["applicationVersion"])
 	}
 
@@ -164,18 +167,18 @@ func TestPlatformBaseApplicationsAreManagedByDeployment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pool.Exec(t.Context(), `INSERT INTO runtime_application_versions(tenant_id,application_id,version,parent_version,base_digest,definition,digest,source,created_by) VALUES('tenant-a','system-settings','1.0.4.1',$1,$2,$3,'custom-base-digest','human',0)`, published, baseDigest, customized); err != nil {
+	if _, err = pool.Exec(t.Context(), `INSERT INTO runtime_application_versions(tenant_id,application_id,version,parent_version,base_digest,definition,digest,source,created_by) VALUES('tenant-a','system-settings','1.0.5.1',$1,$2,$3,'custom-base-digest','human',0)`, published, baseDigest, customized); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pool.Exec(t.Context(), `UPDATE runtime_application_heads SET published_version='1.0.4.1', proposal_version='', next_configuration=2, revision=revision+1 WHERE tenant_id='tenant-a' AND application_id='system-settings'`); err != nil {
+	if _, err = pool.Exec(t.Context(), `UPDATE runtime_application_heads SET published_version='1.0.5.1', proposal_version='', next_configuration=2, revision=revision+1 WHERE tenant_id='tenant-a' AND application_id='system-settings'`); err != nil {
 		t.Fatal(err)
 	}
 	if custom := resolveSystemSettings(t, upgraded); custom["labelKey"] != "custom:base-override" {
 		t.Fatalf("test fixture did not publish the customization: %v", custom["labelKey"])
 	}
-	reconciled := loginIAM(t, newRuntimeHandler(pool, "tenant-a"), "root-admin")
+	reconciled := loginTenantIAM(t, newRuntimeHandler(pool, "tenant-a"), "root-admin", "tenant-a")
 	restored := resolveSystemSettings(t, reconciled)
-	if restored["labelKey"] == "custom:base-override" || restored["applicationVersion"] == "1.0.4.1" {
+	if restored["labelKey"] == "custom:base-override" || restored["applicationVersion"] == "1.0.5.1" {
 		t.Fatalf("deployment baseline did not replace the base customization: %v", restored)
 	}
 }

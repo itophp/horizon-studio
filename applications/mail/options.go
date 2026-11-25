@@ -19,7 +19,7 @@ type Options struct {
 	SyncBatch          int
 	RetryMax           int
 	// AllowedEndpoints lists the host:port endpoints the module may reach for
-	// SMTP and POP3 traffic.
+	// SMTP, POP3 and IMAP traffic.
 	AllowedEndpoints []string
 }
 

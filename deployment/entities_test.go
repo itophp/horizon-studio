@@ -8,14 +8,15 @@ import (
 )
 
 // TestDeclaredEntitiesMatchSchema is the gate: every declared entity must line
-// up with the columns the migrations actually produce. It runs with the normal
+// up with the columns the deployment baseline creates. It runs with the normal
 // unit tests, so a drifting declaration fails `make test` and not a review.
 func TestDeclaredEntitiesMatchSchema(t *testing.T) {
+	registration := Register(nil)
 	tables, err := metadata.Load()
 	if err != nil {
-		t.Fatalf("parse migrations: %v", err)
+		t.Fatalf("parse initialization schema: %v", err)
 	}
-	declared := app.EntitiesWithRegistration(Register(nil))
+	declared := app.EntitiesWithRegistration(registration)
 	if len(declared) < 18 {
 		t.Fatalf("expected at least 18 declarations, got %d", len(declared))
 	}

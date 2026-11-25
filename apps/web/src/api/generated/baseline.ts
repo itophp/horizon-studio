@@ -43,23 +43,38 @@ import type {
   CapabilityInvocationsParams,
   CapabilityResult,
   ChatRequestBody,
+  CompleteFederationRequestBody,
+  CompletePasswordResetRequestBody,
+  CompleteRegistrationRequestBody,
+  CompleteSamlRequestBody,
   DecideRequestBody,
   EchoResponseBody,
   EffectiveConfiguration,
+  FederationCompleteResult,
+  FederationProvider,
+  FederationStartResult,
   FileContent,
   HealthResponseBody,
   IAMProblem,
   IngestRequestBody,
+  InvokeMachineRequestBody,
   InvokeRequestBody,
   KnowledgeDocument,
   KnowledgeIngested,
   LoginRequestBody,
   LoginResult,
+  RedeemSignInInvitationRequestBody,
+  RefreshSessionRequestBody,
+  RequestPasswordResetRequestBody,
+  RequestRegistrationRequestBody,
   RequestTemporaryAccessRequestBody,
   ReviewTemporaryAccessRequestBody,
   RunRequestBody,
+  SamlCallbackRequestBody,
+  SelectSignInIdentityRequestBody,
   SessionProfile,
-  SwitchDepartmentRequestBody,
+  SignInIdentity,
+  StartFederationRequestBody,
   SystemEchoParams,
   TemporaryAccessRecord,
   TemporaryAccessWorkspace,
@@ -98,6 +113,11 @@ export type identitySnapshotResponse401 = {
   status: 401;
 };
 
+export type identitySnapshotResponse403 = {
+  data: IAMProblem;
+  status: 403;
+};
+
 export type identitySnapshotResponse500 = {
   data: IAMProblem;
   status: 500;
@@ -113,6 +133,7 @@ export type identitySnapshotResponseSuccess = identitySnapshotResponse200 & {
 };
 export type identitySnapshotResponseError = (
   | identitySnapshotResponse401
+  | identitySnapshotResponse403
   | identitySnapshotResponse500
   | identitySnapshotResponse503
 ) & {
@@ -3782,59 +3803,59 @@ export const useAssistantWorkflow = <TError = IAMProblem, TContext = unknown>(
   return useMutation(getAssistantWorkflowMutationOptions(options), queryClient);
 };
 
-export type identitySwitchDepartmentResponse200 = {
-  data: SessionProfile;
+export type identityCompleteFederationResponse200 = {
+  data: FederationCompleteResult;
   status: 200;
 };
 
-export type identitySwitchDepartmentResponse401 = {
+export type identityCompleteFederationResponse401 = {
   data: IAMProblem;
   status: 401;
 };
 
-export type identitySwitchDepartmentResponse403 = {
+export type identityCompleteFederationResponse429 = {
   data: IAMProblem;
-  status: 403;
+  status: 429;
 };
 
-export type identitySwitchDepartmentResponse500 = {
+export type identityCompleteFederationResponse500 = {
   data: IAMProblem;
   status: 500;
 };
 
-export type identitySwitchDepartmentResponse503 = {
+export type identityCompleteFederationResponse503 = {
   data: IAMProblem;
   status: 503;
 };
 
-export type identitySwitchDepartmentResponseSuccess =
-  identitySwitchDepartmentResponse200 & {
+export type identityCompleteFederationResponseSuccess =
+  identityCompleteFederationResponse200 & {
     headers: Headers;
   };
-export type identitySwitchDepartmentResponseError = (
-  | identitySwitchDepartmentResponse401
-  | identitySwitchDepartmentResponse403
-  | identitySwitchDepartmentResponse500
-  | identitySwitchDepartmentResponse503
+export type identityCompleteFederationResponseError = (
+  | identityCompleteFederationResponse401
+  | identityCompleteFederationResponse429
+  | identityCompleteFederationResponse500
+  | identityCompleteFederationResponse503
 ) & {
   headers: Headers;
 };
 
-export type identitySwitchDepartmentResponse =
-  | identitySwitchDepartmentResponseSuccess
-  | identitySwitchDepartmentResponseError;
+export type identityCompleteFederationResponse =
+  | identityCompleteFederationResponseSuccess
+  | identityCompleteFederationResponseError;
 
-export const getIdentitySwitchDepartmentUrl = () => {
-  return `/api/auth/department`;
+export const getIdentityCompleteFederationUrl = () => {
+  return `/api/auth/federation/complete`;
 };
 
 /**
- * @summary switch_department identity
+ * @summary complete_federation identity
  */
-export const identitySwitchDepartment = async (
-  switchDepartmentRequestBody: SwitchDepartmentRequestBody,
+export const identityCompleteFederation = async (
+  completeFederationRequestBody: CompleteFederationRequestBody,
   options?: Parameters<typeof request>[1],
-): Promise<identitySwitchDepartmentResponse> => {
+): Promise<identityCompleteFederationResponse> => {
   const getHeaders = (
     h?: NonNullable<RequestInit["headers"]>,
   ): Record<string, string | readonly string[]> => {
@@ -3856,8 +3877,8 @@ export const identitySwitchDepartment = async (
     }
     return headers;
   };
-  return request<identitySwitchDepartmentResponse>(
-    getIdentitySwitchDepartmentUrl(),
+  return request<identityCompleteFederationResponse>(
+    getIdentityCompleteFederationUrl(),
     {
       ...options,
       method: "POST",
@@ -3865,32 +3886,32 @@ export const identitySwitchDepartment = async (
         "Content-Type": "application/json",
         ...getHeaders(options?.headers),
       },
-      body: JSON.stringify(switchDepartmentRequestBody),
+      body: JSON.stringify(completeFederationRequestBody),
     },
   );
 };
 
-export const getIdentitySwitchDepartmentMutationKey = () =>
-  ["identitySwitchDepartment"] as const;
+export const getIdentityCompleteFederationMutationKey = () =>
+  ["identityCompleteFederation"] as const;
 
-export const getIdentitySwitchDepartmentMutationOptions = <
+export const getIdentityCompleteFederationMutationOptions = <
   TError = IAMProblem,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof identitySwitchDepartment>>,
+    Awaited<ReturnType<typeof identityCompleteFederation>>,
     TError,
-    IdentitySwitchDepartmentMutationVariables,
+    IdentityCompleteFederationMutationVariables,
     TContext
   >;
   request?: SecondParameter<typeof request>;
 }): UseMutationOptions<
-  Awaited<ReturnType<typeof identitySwitchDepartment>>,
+  Awaited<ReturnType<typeof identityCompleteFederation>>,
   TError,
-  IdentitySwitchDepartmentMutationVariables,
+  IdentityCompleteFederationMutationVariables,
   TContext
 > => {
-  const mutationKey = getIdentitySwitchDepartmentMutationKey();
+  const mutationKey = getIdentityCompleteFederationMutationKey();
   const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation &&
       "mutationKey" in options.mutation &&
@@ -3900,51 +3921,1273 @@ export const getIdentitySwitchDepartmentMutationOptions = <
     : { mutation: { mutationKey }, request: undefined };
 
   const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof identitySwitchDepartment>>,
-    IdentitySwitchDepartmentMutationVariables
+    Awaited<ReturnType<typeof identityCompleteFederation>>,
+    IdentityCompleteFederationMutationVariables
   > = (props) => {
     const { data } = props ?? {};
 
-    return identitySwitchDepartment(data, requestOptions);
+    return identityCompleteFederation(data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
-export type IdentitySwitchDepartmentMutationResult = NonNullable<
-  Awaited<ReturnType<typeof identitySwitchDepartment>>
+export type IdentityCompleteFederationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof identityCompleteFederation>>
 >;
-export type IdentitySwitchDepartmentMutationBody = SwitchDepartmentRequestBody;
-export type IdentitySwitchDepartmentMutationError = IAMProblem;
-export type IdentitySwitchDepartmentMutationVariables = {
-  data: SwitchDepartmentRequestBody;
+export type IdentityCompleteFederationMutationBody =
+  CompleteFederationRequestBody;
+export type IdentityCompleteFederationMutationError = IAMProblem;
+export type IdentityCompleteFederationMutationVariables = {
+  data: CompleteFederationRequestBody;
 };
 
 /**
- * @summary switch_department identity
+ * @summary complete_federation identity
  */
-export const useIdentitySwitchDepartment = <
+export const useIdentityCompleteFederation = <
   TError = IAMProblem,
   TContext = unknown,
 >(
   options?: {
     mutation?: UseMutationOptions<
-      Awaited<ReturnType<typeof identitySwitchDepartment>>,
+      Awaited<ReturnType<typeof identityCompleteFederation>>,
       TError,
-      IdentitySwitchDepartmentMutationVariables,
+      IdentityCompleteFederationMutationVariables,
       TContext
     >;
     request?: SecondParameter<typeof request>;
   },
   queryClient?: QueryClient,
 ): UseMutationResult<
-  Awaited<ReturnType<typeof identitySwitchDepartment>>,
+  Awaited<ReturnType<typeof identityCompleteFederation>>,
   TError,
-  IdentitySwitchDepartmentMutationVariables,
+  IdentityCompleteFederationMutationVariables,
   TContext
 > => {
   return useMutation(
-    getIdentitySwitchDepartmentMutationOptions(options),
+    getIdentityCompleteFederationMutationOptions(options),
+    queryClient,
+  );
+};
+
+export type identityFederationProvidersResponse200 = {
+  data: FederationProvider[];
+  status: 200;
+};
+
+export type identityFederationProvidersResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type identityFederationProvidersResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type identityFederationProvidersResponseSuccess =
+  identityFederationProvidersResponse200 & {
+    headers: Headers;
+  };
+export type identityFederationProvidersResponseError = (
+  | identityFederationProvidersResponse500
+  | identityFederationProvidersResponse503
+) & {
+  headers: Headers;
+};
+
+export type identityFederationProvidersResponse =
+  | identityFederationProvidersResponseSuccess
+  | identityFederationProvidersResponseError;
+
+export const getIdentityFederationProvidersUrl = () => {
+  return `/api/auth/federation/providers`;
+};
+
+/**
+ * @summary federation_providers identity
+ */
+export const identityFederationProviders = async (
+  options?: Parameters<typeof request>[1],
+): Promise<identityFederationProvidersResponse> => {
+  return request<identityFederationProvidersResponse>(
+    getIdentityFederationProvidersUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getIdentityFederationProvidersQueryKey = () => {
+  return [`/api/auth/federation/providers`] as const;
+};
+
+export const getIdentityFederationProvidersQueryOptions = <
+  TData = Awaited<ReturnType<typeof identityFederationProviders>>,
+  TError = IAMProblem,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<
+      Awaited<ReturnType<typeof identityFederationProviders>>,
+      TError,
+      TData
+    >
+  >;
+  request?: SecondParameter<typeof request>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getIdentityFederationProvidersQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof identityFederationProviders>>
+  > = ({ signal }) =>
+    identityFederationProviders({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof identityFederationProviders>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type IdentityFederationProvidersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof identityFederationProviders>>
+>;
+export type IdentityFederationProvidersQueryError = IAMProblem;
+
+export function useIdentityFederationProviders<
+  TData = Awaited<ReturnType<typeof identityFederationProviders>>,
+  TError = IAMProblem,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof identityFederationProviders>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof identityFederationProviders>>,
+          TError,
+          Awaited<ReturnType<typeof identityFederationProviders>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useIdentityFederationProviders<
+  TData = Awaited<ReturnType<typeof identityFederationProviders>>,
+  TError = IAMProblem,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof identityFederationProviders>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof identityFederationProviders>>,
+          TError,
+          Awaited<ReturnType<typeof identityFederationProviders>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useIdentityFederationProviders<
+  TData = Awaited<ReturnType<typeof identityFederationProviders>>,
+  TError = IAMProblem,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof identityFederationProviders>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary federation_providers identity
+ */
+
+export function useIdentityFederationProviders<
+  TData = Awaited<ReturnType<typeof identityFederationProviders>>,
+  TError = IAMProblem,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof identityFederationProviders>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getIdentityFederationProvidersQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export type identityCompleteSamlResponse200 = {
+  data: FederationCompleteResult;
+  status: 200;
+};
+
+export type identityCompleteSamlResponse401 = {
+  data: IAMProblem;
+  status: 401;
+};
+
+export type identityCompleteSamlResponse429 = {
+  data: IAMProblem;
+  status: 429;
+};
+
+export type identityCompleteSamlResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type identityCompleteSamlResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type identityCompleteSamlResponseSuccess =
+  identityCompleteSamlResponse200 & {
+    headers: Headers;
+  };
+export type identityCompleteSamlResponseError = (
+  | identityCompleteSamlResponse401
+  | identityCompleteSamlResponse429
+  | identityCompleteSamlResponse500
+  | identityCompleteSamlResponse503
+) & {
+  headers: Headers;
+};
+
+export type identityCompleteSamlResponse =
+  identityCompleteSamlResponseSuccess | identityCompleteSamlResponseError;
+
+export const getIdentityCompleteSamlUrl = () => {
+  return `/api/auth/federation/saml/complete`;
+};
+
+/**
+ * @summary complete_saml identity
+ */
+export const identityCompleteSaml = async (
+  completeSamlRequestBody: CompleteSamlRequestBody,
+  options?: Parameters<typeof request>[1],
+): Promise<identityCompleteSamlResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<
+      string | readonly string[] | undefined
+    >(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return request<identityCompleteSamlResponse>(getIdentityCompleteSamlUrl(), {
+    ...options,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...getHeaders(options?.headers),
+    },
+    body: JSON.stringify(completeSamlRequestBody),
+  });
+};
+
+export const getIdentityCompleteSamlMutationKey = () =>
+  ["identityCompleteSaml"] as const;
+
+export const getIdentityCompleteSamlMutationOptions = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof identityCompleteSaml>>,
+    TError,
+    IdentityCompleteSamlMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof request>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof identityCompleteSaml>>,
+  TError,
+  IdentityCompleteSamlMutationVariables,
+  TContext
+> => {
+  const mutationKey = getIdentityCompleteSamlMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof identityCompleteSaml>>,
+    IdentityCompleteSamlMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return identityCompleteSaml(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IdentityCompleteSamlMutationResult = NonNullable<
+  Awaited<ReturnType<typeof identityCompleteSaml>>
+>;
+export type IdentityCompleteSamlMutationBody = CompleteSamlRequestBody;
+export type IdentityCompleteSamlMutationError = IAMProblem;
+export type IdentityCompleteSamlMutationVariables = {
+  data: CompleteSamlRequestBody;
+};
+
+/**
+ * @summary complete_saml identity
+ */
+export const useIdentityCompleteSaml = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof identityCompleteSaml>>,
+      TError,
+      IdentityCompleteSamlMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof identityCompleteSaml>>,
+  TError,
+  IdentityCompleteSamlMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getIdentityCompleteSamlMutationOptions(options),
+    queryClient,
+  );
+};
+
+export type identitySamlCallbackResponse303 = {
+  data: void;
+  status: 303;
+};
+
+export type identitySamlCallbackResponse401 = {
+  data: IAMProblem;
+  status: 401;
+};
+
+export type identitySamlCallbackResponse429 = {
+  data: IAMProblem;
+  status: 429;
+};
+
+export type identitySamlCallbackResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type identitySamlCallbackResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type identitySamlCallbackResponseError = (
+  | identitySamlCallbackResponse303
+  | identitySamlCallbackResponse401
+  | identitySamlCallbackResponse429
+  | identitySamlCallbackResponse500
+  | identitySamlCallbackResponse503
+) & {
+  headers: Headers;
+};
+
+export type identitySamlCallbackResponse = identitySamlCallbackResponseError;
+
+export const getIdentitySamlCallbackUrl = (providerId: string) => {
+  return `/api/auth/federation/saml/${providerId}/acs`;
+};
+
+/**
+ * Accept only a browser-bound SP-initiated signed SAML POST response, then redirect without assertion or credentials in the URL.
+ * @summary saml_callback identity
+ */
+export const identitySamlCallback = async (
+  providerId: string,
+  samlCallbackRequestBody: SamlCallbackRequestBody,
+  options?: Parameters<typeof request>[1],
+): Promise<identitySamlCallbackResponse> => {
+  const formUrlEncoded = new URLSearchParams();
+  formUrlEncoded.append(`RelayState`, samlCallbackRequestBody.RelayState);
+  formUrlEncoded.append(`SAMLResponse`, samlCallbackRequestBody.SAMLResponse);
+
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<
+      string | readonly string[] | undefined
+    >(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return request<identitySamlCallbackResponse>(
+    getIdentitySamlCallbackUrl(providerId),
+    {
+      ...options,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        ...getHeaders(options?.headers),
+      },
+      body: formUrlEncoded,
+    },
+  );
+};
+
+export const getIdentitySamlCallbackMutationKey = () =>
+  ["identitySamlCallback"] as const;
+
+export const getIdentitySamlCallbackMutationOptions = <
+  TError = void | IAMProblem,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof identitySamlCallback>>,
+    TError,
+    IdentitySamlCallbackMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof request>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof identitySamlCallback>>,
+  TError,
+  IdentitySamlCallbackMutationVariables,
+  TContext
+> => {
+  const mutationKey = getIdentitySamlCallbackMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof identitySamlCallback>>,
+    IdentitySamlCallbackMutationVariables
+  > = (props) => {
+    const { providerId, data } = props ?? {};
+
+    return identitySamlCallback(providerId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IdentitySamlCallbackMutationResult = NonNullable<
+  Awaited<ReturnType<typeof identitySamlCallback>>
+>;
+export type IdentitySamlCallbackMutationBody = SamlCallbackRequestBody;
+export type IdentitySamlCallbackMutationError = void | IAMProblem;
+export type IdentitySamlCallbackMutationVariables = {
+  providerId: string;
+  data: SamlCallbackRequestBody;
+};
+
+/**
+ * @summary saml_callback identity
+ */
+export const useIdentitySamlCallback = <
+  TError = void | IAMProblem,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof identitySamlCallback>>,
+      TError,
+      IdentitySamlCallbackMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof identitySamlCallback>>,
+  TError,
+  IdentitySamlCallbackMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getIdentitySamlCallbackMutationOptions(options),
+    queryClient,
+  );
+};
+
+export type identityStartFederationResponse200 = {
+  data: FederationStartResult;
+  status: 200;
+};
+
+export type identityStartFederationResponse400 = {
+  data: IAMProblem;
+  status: 400;
+};
+
+export type identityStartFederationResponse429 = {
+  data: IAMProblem;
+  status: 429;
+};
+
+export type identityStartFederationResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type identityStartFederationResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type identityStartFederationResponseSuccess =
+  identityStartFederationResponse200 & {
+    headers: Headers;
+  };
+export type identityStartFederationResponseError = (
+  | identityStartFederationResponse400
+  | identityStartFederationResponse429
+  | identityStartFederationResponse500
+  | identityStartFederationResponse503
+) & {
+  headers: Headers;
+};
+
+export type identityStartFederationResponse =
+  identityStartFederationResponseSuccess | identityStartFederationResponseError;
+
+export const getIdentityStartFederationUrl = () => {
+  return `/api/auth/federation/start`;
+};
+
+/**
+ * @summary start_federation identity
+ */
+export const identityStartFederation = async (
+  startFederationRequestBody: StartFederationRequestBody,
+  options?: Parameters<typeof request>[1],
+): Promise<identityStartFederationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<
+      string | readonly string[] | undefined
+    >(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return request<identityStartFederationResponse>(
+    getIdentityStartFederationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getHeaders(options?.headers),
+      },
+      body: JSON.stringify(startFederationRequestBody),
+    },
+  );
+};
+
+export const getIdentityStartFederationMutationKey = () =>
+  ["identityStartFederation"] as const;
+
+export const getIdentityStartFederationMutationOptions = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof identityStartFederation>>,
+    TError,
+    IdentityStartFederationMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof request>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof identityStartFederation>>,
+  TError,
+  IdentityStartFederationMutationVariables,
+  TContext
+> => {
+  const mutationKey = getIdentityStartFederationMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof identityStartFederation>>,
+    IdentityStartFederationMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return identityStartFederation(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IdentityStartFederationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof identityStartFederation>>
+>;
+export type IdentityStartFederationMutationBody = StartFederationRequestBody;
+export type IdentityStartFederationMutationError = IAMProblem;
+export type IdentityStartFederationMutationVariables = {
+  data: StartFederationRequestBody;
+};
+
+/**
+ * @summary start_federation identity
+ */
+export const useIdentityStartFederation = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof identityStartFederation>>,
+      TError,
+      IdentityStartFederationMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof identityStartFederation>>,
+  TError,
+  IdentityStartFederationMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getIdentityStartFederationMutationOptions(options),
+    queryClient,
+  );
+};
+
+export type identityListSignInIdentitiesResponse200 = {
+  data: SignInIdentity[];
+  status: 200;
+};
+
+export type identityListSignInIdentitiesResponse401 = {
+  data: IAMProblem;
+  status: 401;
+};
+
+export type identityListSignInIdentitiesResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type identityListSignInIdentitiesResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type identityListSignInIdentitiesResponseSuccess =
+  identityListSignInIdentitiesResponse200 & {
+    headers: Headers;
+  };
+export type identityListSignInIdentitiesResponseError = (
+  | identityListSignInIdentitiesResponse401
+  | identityListSignInIdentitiesResponse500
+  | identityListSignInIdentitiesResponse503
+) & {
+  headers: Headers;
+};
+
+export type identityListSignInIdentitiesResponse =
+  | identityListSignInIdentitiesResponseSuccess
+  | identityListSignInIdentitiesResponseError;
+
+export const getIdentityListSignInIdentitiesUrl = () => {
+  return `/api/auth/identities`;
+};
+
+/**
+ * @summary list_sign_in_identities identity
+ */
+export const identityListSignInIdentities = async (
+  options?: Parameters<typeof request>[1],
+): Promise<identityListSignInIdentitiesResponse> => {
+  return request<identityListSignInIdentitiesResponse>(
+    getIdentityListSignInIdentitiesUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getIdentityListSignInIdentitiesQueryKey = () => {
+  return [`/api/auth/identities`] as const;
+};
+
+export const getIdentityListSignInIdentitiesQueryOptions = <
+  TData = Awaited<ReturnType<typeof identityListSignInIdentities>>,
+  TError = IAMProblem,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<
+      Awaited<ReturnType<typeof identityListSignInIdentities>>,
+      TError,
+      TData
+    >
+  >;
+  request?: SecondParameter<typeof request>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getIdentityListSignInIdentitiesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof identityListSignInIdentities>>
+  > = ({ signal }) =>
+    identityListSignInIdentities({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof identityListSignInIdentities>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type IdentityListSignInIdentitiesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof identityListSignInIdentities>>
+>;
+export type IdentityListSignInIdentitiesQueryError = IAMProblem;
+
+export function useIdentityListSignInIdentities<
+  TData = Awaited<ReturnType<typeof identityListSignInIdentities>>,
+  TError = IAMProblem,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof identityListSignInIdentities>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof identityListSignInIdentities>>,
+          TError,
+          Awaited<ReturnType<typeof identityListSignInIdentities>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useIdentityListSignInIdentities<
+  TData = Awaited<ReturnType<typeof identityListSignInIdentities>>,
+  TError = IAMProblem,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof identityListSignInIdentities>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof identityListSignInIdentities>>,
+          TError,
+          Awaited<ReturnType<typeof identityListSignInIdentities>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useIdentityListSignInIdentities<
+  TData = Awaited<ReturnType<typeof identityListSignInIdentities>>,
+  TError = IAMProblem,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof identityListSignInIdentities>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary list_sign_in_identities identity
+ */
+
+export function useIdentityListSignInIdentities<
+  TData = Awaited<ReturnType<typeof identityListSignInIdentities>>,
+  TError = IAMProblem,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof identityListSignInIdentities>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getIdentityListSignInIdentitiesQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export type identitySelectSignInIdentityResponse200 = {
+  data: SessionProfile;
+  status: 200;
+};
+
+export type identitySelectSignInIdentityResponse401 = {
+  data: IAMProblem;
+  status: 401;
+};
+
+export type identitySelectSignInIdentityResponse403 = {
+  data: IAMProblem;
+  status: 403;
+};
+
+export type identitySelectSignInIdentityResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type identitySelectSignInIdentityResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type identitySelectSignInIdentityResponseSuccess =
+  identitySelectSignInIdentityResponse200 & {
+    headers: Headers;
+  };
+export type identitySelectSignInIdentityResponseError = (
+  | identitySelectSignInIdentityResponse401
+  | identitySelectSignInIdentityResponse403
+  | identitySelectSignInIdentityResponse500
+  | identitySelectSignInIdentityResponse503
+) & {
+  headers: Headers;
+};
+
+export type identitySelectSignInIdentityResponse =
+  | identitySelectSignInIdentityResponseSuccess
+  | identitySelectSignInIdentityResponseError;
+
+export const getIdentitySelectSignInIdentityUrl = () => {
+  return `/api/auth/identity`;
+};
+
+/**
+ * @summary select_sign_in_identity identity
+ */
+export const identitySelectSignInIdentity = async (
+  selectSignInIdentityRequestBody: SelectSignInIdentityRequestBody,
+  options?: Parameters<typeof request>[1],
+): Promise<identitySelectSignInIdentityResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<
+      string | readonly string[] | undefined
+    >(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return request<identitySelectSignInIdentityResponse>(
+    getIdentitySelectSignInIdentityUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getHeaders(options?.headers),
+      },
+      body: JSON.stringify(selectSignInIdentityRequestBody),
+    },
+  );
+};
+
+export const getIdentitySelectSignInIdentityMutationKey = () =>
+  ["identitySelectSignInIdentity"] as const;
+
+export const getIdentitySelectSignInIdentityMutationOptions = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof identitySelectSignInIdentity>>,
+    TError,
+    IdentitySelectSignInIdentityMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof request>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof identitySelectSignInIdentity>>,
+  TError,
+  IdentitySelectSignInIdentityMutationVariables,
+  TContext
+> => {
+  const mutationKey = getIdentitySelectSignInIdentityMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof identitySelectSignInIdentity>>,
+    IdentitySelectSignInIdentityMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return identitySelectSignInIdentity(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IdentitySelectSignInIdentityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof identitySelectSignInIdentity>>
+>;
+export type IdentitySelectSignInIdentityMutationBody =
+  SelectSignInIdentityRequestBody;
+export type IdentitySelectSignInIdentityMutationError = IAMProblem;
+export type IdentitySelectSignInIdentityMutationVariables = {
+  data: SelectSignInIdentityRequestBody;
+};
+
+/**
+ * @summary select_sign_in_identity identity
+ */
+export const useIdentitySelectSignInIdentity = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof identitySelectSignInIdentity>>,
+      TError,
+      IdentitySelectSignInIdentityMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof identitySelectSignInIdentity>>,
+  TError,
+  IdentitySelectSignInIdentityMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getIdentitySelectSignInIdentityMutationOptions(options),
+    queryClient,
+  );
+};
+
+export type identityRedeemSignInInvitationResponse204 = {
+  data: void;
+  status: 204;
+};
+
+export type identityRedeemSignInInvitationResponse401 = {
+  data: IAMProblem;
+  status: 401;
+};
+
+export type identityRedeemSignInInvitationResponse403 = {
+  data: IAMProblem;
+  status: 403;
+};
+
+export type identityRedeemSignInInvitationResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type identityRedeemSignInInvitationResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type identityRedeemSignInInvitationResponseSuccess =
+  identityRedeemSignInInvitationResponse204 & {
+    headers: Headers;
+  };
+export type identityRedeemSignInInvitationResponseError = (
+  | identityRedeemSignInInvitationResponse401
+  | identityRedeemSignInInvitationResponse403
+  | identityRedeemSignInInvitationResponse500
+  | identityRedeemSignInInvitationResponse503
+) & {
+  headers: Headers;
+};
+
+export type identityRedeemSignInInvitationResponse =
+  | identityRedeemSignInInvitationResponseSuccess
+  | identityRedeemSignInInvitationResponseError;
+
+export const getIdentityRedeemSignInInvitationUrl = () => {
+  return `/api/auth/invitation`;
+};
+
+/**
+ * Redeem an invitation for the configured tenant from a verified login session.
+ * @summary redeem_sign_in_invitation identity
+ */
+export const identityRedeemSignInInvitation = async (
+  redeemSignInInvitationRequestBody: RedeemSignInInvitationRequestBody,
+  options?: Parameters<typeof request>[1],
+): Promise<identityRedeemSignInInvitationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<
+      string | readonly string[] | undefined
+    >(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return request<identityRedeemSignInInvitationResponse>(
+    getIdentityRedeemSignInInvitationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getHeaders(options?.headers),
+      },
+      body: JSON.stringify(redeemSignInInvitationRequestBody),
+    },
+  );
+};
+
+export const getIdentityRedeemSignInInvitationMutationKey = () =>
+  ["identityRedeemSignInInvitation"] as const;
+
+export const getIdentityRedeemSignInInvitationMutationOptions = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof identityRedeemSignInInvitation>>,
+    TError,
+    IdentityRedeemSignInInvitationMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof request>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof identityRedeemSignInInvitation>>,
+  TError,
+  IdentityRedeemSignInInvitationMutationVariables,
+  TContext
+> => {
+  const mutationKey = getIdentityRedeemSignInInvitationMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof identityRedeemSignInInvitation>>,
+    IdentityRedeemSignInInvitationMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return identityRedeemSignInInvitation(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IdentityRedeemSignInInvitationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof identityRedeemSignInInvitation>>
+>;
+export type IdentityRedeemSignInInvitationMutationBody =
+  RedeemSignInInvitationRequestBody;
+export type IdentityRedeemSignInInvitationMutationError = IAMProblem;
+export type IdentityRedeemSignInInvitationMutationVariables = {
+  data: RedeemSignInInvitationRequestBody;
+};
+
+/**
+ * @summary redeem_sign_in_invitation identity
+ */
+export const useIdentityRedeemSignInInvitation = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof identityRedeemSignInInvitation>>,
+      TError,
+      IdentityRedeemSignInInvitationMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof identityRedeemSignInInvitation>>,
+  TError,
+  IdentityRedeemSignInInvitationMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getIdentityRedeemSignInInvitationMutationOptions(options),
     queryClient,
   );
 };
@@ -4391,6 +5634,853 @@ export function useIdentityMe<
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+export type identityCompletePasswordResetResponse204 = {
+  data: void;
+  status: 204;
+};
+
+export type identityCompletePasswordResetResponse400 = {
+  data: IAMProblem;
+  status: 400;
+};
+
+export type identityCompletePasswordResetResponse403 = {
+  data: IAMProblem;
+  status: 403;
+};
+
+export type identityCompletePasswordResetResponse429 = {
+  data: IAMProblem;
+  status: 429;
+};
+
+export type identityCompletePasswordResetResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type identityCompletePasswordResetResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type identityCompletePasswordResetResponseSuccess =
+  identityCompletePasswordResetResponse204 & {
+    headers: Headers;
+  };
+export type identityCompletePasswordResetResponseError = (
+  | identityCompletePasswordResetResponse400
+  | identityCompletePasswordResetResponse403
+  | identityCompletePasswordResetResponse429
+  | identityCompletePasswordResetResponse500
+  | identityCompletePasswordResetResponse503
+) & {
+  headers: Headers;
+};
+
+export type identityCompletePasswordResetResponse =
+  | identityCompletePasswordResetResponseSuccess
+  | identityCompletePasswordResetResponseError;
+
+export const getIdentityCompletePasswordResetUrl = () => {
+  return `/api/auth/password-reset/complete`;
+};
+
+/**
+ * Change a password with a one-use verified contact challenge and the account's active second factor.
+ * @summary complete_password_reset identity
+ */
+export const identityCompletePasswordReset = async (
+  completePasswordResetRequestBody: CompletePasswordResetRequestBody,
+  options?: Parameters<typeof request>[1],
+): Promise<identityCompletePasswordResetResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<
+      string | readonly string[] | undefined
+    >(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return request<identityCompletePasswordResetResponse>(
+    getIdentityCompletePasswordResetUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getHeaders(options?.headers),
+      },
+      body: JSON.stringify(completePasswordResetRequestBody),
+    },
+  );
+};
+
+export const getIdentityCompletePasswordResetMutationKey = () =>
+  ["identityCompletePasswordReset"] as const;
+
+export const getIdentityCompletePasswordResetMutationOptions = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof identityCompletePasswordReset>>,
+    TError,
+    IdentityCompletePasswordResetMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof request>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof identityCompletePasswordReset>>,
+  TError,
+  IdentityCompletePasswordResetMutationVariables,
+  TContext
+> => {
+  const mutationKey = getIdentityCompletePasswordResetMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof identityCompletePasswordReset>>,
+    IdentityCompletePasswordResetMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return identityCompletePasswordReset(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IdentityCompletePasswordResetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof identityCompletePasswordReset>>
+>;
+export type IdentityCompletePasswordResetMutationBody =
+  CompletePasswordResetRequestBody;
+export type IdentityCompletePasswordResetMutationError = IAMProblem;
+export type IdentityCompletePasswordResetMutationVariables = {
+  data: CompletePasswordResetRequestBody;
+};
+
+/**
+ * @summary complete_password_reset identity
+ */
+export const useIdentityCompletePasswordReset = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof identityCompletePasswordReset>>,
+      TError,
+      IdentityCompletePasswordResetMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof identityCompletePasswordReset>>,
+  TError,
+  IdentityCompletePasswordResetMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getIdentityCompletePasswordResetMutationOptions(options),
+    queryClient,
+  );
+};
+
+export type identityRequestPasswordResetResponse204 = {
+  data: void;
+  status: 204;
+};
+
+export type identityRequestPasswordResetResponse429 = {
+  data: IAMProblem;
+  status: 429;
+};
+
+export type identityRequestPasswordResetResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type identityRequestPasswordResetResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type identityRequestPasswordResetResponseSuccess =
+  identityRequestPasswordResetResponse204 & {
+    headers: Headers;
+  };
+export type identityRequestPasswordResetResponseError = (
+  | identityRequestPasswordResetResponse429
+  | identityRequestPasswordResetResponse500
+  | identityRequestPasswordResetResponse503
+) & {
+  headers: Headers;
+};
+
+export type identityRequestPasswordResetResponse =
+  | identityRequestPasswordResetResponseSuccess
+  | identityRequestPasswordResetResponseError;
+
+export const getIdentityRequestPasswordResetUrl = () => {
+  return `/api/auth/password-reset/request`;
+};
+
+/**
+ * Queue a reset message for a verified contact, returning the same result for every account.
+ * @summary request_password_reset identity
+ */
+export const identityRequestPasswordReset = async (
+  requestPasswordResetRequestBody: RequestPasswordResetRequestBody,
+  options?: Parameters<typeof request>[1],
+): Promise<identityRequestPasswordResetResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<
+      string | readonly string[] | undefined
+    >(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return request<identityRequestPasswordResetResponse>(
+    getIdentityRequestPasswordResetUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getHeaders(options?.headers),
+      },
+      body: JSON.stringify(requestPasswordResetRequestBody),
+    },
+  );
+};
+
+export const getIdentityRequestPasswordResetMutationKey = () =>
+  ["identityRequestPasswordReset"] as const;
+
+export const getIdentityRequestPasswordResetMutationOptions = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof identityRequestPasswordReset>>,
+    TError,
+    IdentityRequestPasswordResetMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof request>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof identityRequestPasswordReset>>,
+  TError,
+  IdentityRequestPasswordResetMutationVariables,
+  TContext
+> => {
+  const mutationKey = getIdentityRequestPasswordResetMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof identityRequestPasswordReset>>,
+    IdentityRequestPasswordResetMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return identityRequestPasswordReset(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IdentityRequestPasswordResetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof identityRequestPasswordReset>>
+>;
+export type IdentityRequestPasswordResetMutationBody =
+  RequestPasswordResetRequestBody;
+export type IdentityRequestPasswordResetMutationError = IAMProblem;
+export type IdentityRequestPasswordResetMutationVariables = {
+  data: RequestPasswordResetRequestBody;
+};
+
+/**
+ * @summary request_password_reset identity
+ */
+export const useIdentityRequestPasswordReset = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof identityRequestPasswordReset>>,
+      TError,
+      IdentityRequestPasswordResetMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof identityRequestPasswordReset>>,
+  TError,
+  IdentityRequestPasswordResetMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getIdentityRequestPasswordResetMutationOptions(options),
+    queryClient,
+  );
+};
+
+export type identityCompleteRegistrationResponse204 = {
+  data: void;
+  status: 204;
+};
+
+export type identityCompleteRegistrationResponse403 = {
+  data: IAMProblem;
+  status: 403;
+};
+
+export type identityCompleteRegistrationResponse429 = {
+  data: IAMProblem;
+  status: 429;
+};
+
+export type identityCompleteRegistrationResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type identityCompleteRegistrationResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type identityCompleteRegistrationResponseSuccess =
+  identityCompleteRegistrationResponse204 & {
+    headers: Headers;
+  };
+export type identityCompleteRegistrationResponseError = (
+  | identityCompleteRegistrationResponse403
+  | identityCompleteRegistrationResponse429
+  | identityCompleteRegistrationResponse500
+  | identityCompleteRegistrationResponse503
+) & {
+  headers: Headers;
+};
+
+export type identityCompleteRegistrationResponse =
+  | identityCompleteRegistrationResponseSuccess
+  | identityCompleteRegistrationResponseError;
+
+export const getIdentityCompleteRegistrationUrl = () => {
+  return `/api/auth/registration/complete`;
+};
+
+/**
+ * @summary complete_registration identity
+ */
+export const identityCompleteRegistration = async (
+  completeRegistrationRequestBody: CompleteRegistrationRequestBody,
+  options?: Parameters<typeof request>[1],
+): Promise<identityCompleteRegistrationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<
+      string | readonly string[] | undefined
+    >(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return request<identityCompleteRegistrationResponse>(
+    getIdentityCompleteRegistrationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getHeaders(options?.headers),
+      },
+      body: JSON.stringify(completeRegistrationRequestBody),
+    },
+  );
+};
+
+export const getIdentityCompleteRegistrationMutationKey = () =>
+  ["identityCompleteRegistration"] as const;
+
+export const getIdentityCompleteRegistrationMutationOptions = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof identityCompleteRegistration>>,
+    TError,
+    IdentityCompleteRegistrationMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof request>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof identityCompleteRegistration>>,
+  TError,
+  IdentityCompleteRegistrationMutationVariables,
+  TContext
+> => {
+  const mutationKey = getIdentityCompleteRegistrationMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof identityCompleteRegistration>>,
+    IdentityCompleteRegistrationMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return identityCompleteRegistration(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IdentityCompleteRegistrationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof identityCompleteRegistration>>
+>;
+export type IdentityCompleteRegistrationMutationBody =
+  CompleteRegistrationRequestBody;
+export type IdentityCompleteRegistrationMutationError = IAMProblem;
+export type IdentityCompleteRegistrationMutationVariables = {
+  data: CompleteRegistrationRequestBody;
+};
+
+/**
+ * @summary complete_registration identity
+ */
+export const useIdentityCompleteRegistration = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof identityCompleteRegistration>>,
+      TError,
+      IdentityCompleteRegistrationMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof identityCompleteRegistration>>,
+  TError,
+  IdentityCompleteRegistrationMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getIdentityCompleteRegistrationMutationOptions(options),
+    queryClient,
+  );
+};
+
+export type identityRequestRegistrationResponse204 = {
+  data: void;
+  status: 204;
+};
+
+export type identityRequestRegistrationResponse400 = {
+  data: IAMProblem;
+  status: 400;
+};
+
+export type identityRequestRegistrationResponse429 = {
+  data: IAMProblem;
+  status: 429;
+};
+
+export type identityRequestRegistrationResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type identityRequestRegistrationResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type identityRequestRegistrationResponseSuccess =
+  identityRequestRegistrationResponse204 & {
+    headers: Headers;
+  };
+export type identityRequestRegistrationResponseError = (
+  | identityRequestRegistrationResponse400
+  | identityRequestRegistrationResponse429
+  | identityRequestRegistrationResponse500
+  | identityRequestRegistrationResponse503
+) & {
+  headers: Headers;
+};
+
+export type identityRequestRegistrationResponse =
+  | identityRequestRegistrationResponseSuccess
+  | identityRequestRegistrationResponseError;
+
+export const getIdentityRequestRegistrationUrl = () => {
+  return `/api/auth/registration/request`;
+};
+
+/**
+ * @summary request_registration identity
+ */
+export const identityRequestRegistration = async (
+  requestRegistrationRequestBody: RequestRegistrationRequestBody,
+  options?: Parameters<typeof request>[1],
+): Promise<identityRequestRegistrationResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<
+      string | readonly string[] | undefined
+    >(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return request<identityRequestRegistrationResponse>(
+    getIdentityRequestRegistrationUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getHeaders(options?.headers),
+      },
+      body: JSON.stringify(requestRegistrationRequestBody),
+    },
+  );
+};
+
+export const getIdentityRequestRegistrationMutationKey = () =>
+  ["identityRequestRegistration"] as const;
+
+export const getIdentityRequestRegistrationMutationOptions = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof identityRequestRegistration>>,
+    TError,
+    IdentityRequestRegistrationMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof request>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof identityRequestRegistration>>,
+  TError,
+  IdentityRequestRegistrationMutationVariables,
+  TContext
+> => {
+  const mutationKey = getIdentityRequestRegistrationMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof identityRequestRegistration>>,
+    IdentityRequestRegistrationMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return identityRequestRegistration(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IdentityRequestRegistrationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof identityRequestRegistration>>
+>;
+export type IdentityRequestRegistrationMutationBody =
+  RequestRegistrationRequestBody;
+export type IdentityRequestRegistrationMutationError = IAMProblem;
+export type IdentityRequestRegistrationMutationVariables = {
+  data: RequestRegistrationRequestBody;
+};
+
+/**
+ * @summary request_registration identity
+ */
+export const useIdentityRequestRegistration = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof identityRequestRegistration>>,
+      TError,
+      IdentityRequestRegistrationMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof identityRequestRegistration>>,
+  TError,
+  IdentityRequestRegistrationMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getIdentityRequestRegistrationMutationOptions(options),
+    queryClient,
+  );
+};
+
+export type identityRefreshSessionResponse200 = {
+  data: LoginResult;
+  status: 200;
+};
+
+export type identityRefreshSessionResponse400 = {
+  data: IAMProblem;
+  status: 400;
+};
+
+export type identityRefreshSessionResponse401 = {
+  data: IAMProblem;
+  status: 401;
+};
+
+export type identityRefreshSessionResponse403 = {
+  data: IAMProblem;
+  status: 403;
+};
+
+export type identityRefreshSessionResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type identityRefreshSessionResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type identityRefreshSessionResponseSuccess =
+  identityRefreshSessionResponse200 & {
+    headers: Headers;
+  };
+export type identityRefreshSessionResponseError = (
+  | identityRefreshSessionResponse400
+  | identityRefreshSessionResponse401
+  | identityRefreshSessionResponse403
+  | identityRefreshSessionResponse500
+  | identityRefreshSessionResponse503
+) & {
+  headers: Headers;
+};
+
+export type identityRefreshSessionResponse =
+  identityRefreshSessionResponseSuccess | identityRefreshSessionResponseError;
+
+export const getIdentityRefreshSessionUrl = () => {
+  return `/api/auth/session/refresh`;
+};
+
+/**
+ * Reauthenticate and rotate the current browser session.
+ * @summary refresh_session identity
+ */
+export const identityRefreshSession = async (
+  refreshSessionRequestBody: RefreshSessionRequestBody,
+  options?: Parameters<typeof request>[1],
+): Promise<identityRefreshSessionResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<
+      string | readonly string[] | undefined
+    >(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return request<identityRefreshSessionResponse>(
+    getIdentityRefreshSessionUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getHeaders(options?.headers),
+      },
+      body: JSON.stringify(refreshSessionRequestBody),
+    },
+  );
+};
+
+export const getIdentityRefreshSessionMutationKey = () =>
+  ["identityRefreshSession"] as const;
+
+export const getIdentityRefreshSessionMutationOptions = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof identityRefreshSession>>,
+    TError,
+    IdentityRefreshSessionMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof request>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof identityRefreshSession>>,
+  TError,
+  IdentityRefreshSessionMutationVariables,
+  TContext
+> => {
+  const mutationKey = getIdentityRefreshSessionMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof identityRefreshSession>>,
+    IdentityRefreshSessionMutationVariables
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return identityRefreshSession(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IdentityRefreshSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof identityRefreshSession>>
+>;
+export type IdentityRefreshSessionMutationBody = RefreshSessionRequestBody;
+export type IdentityRefreshSessionMutationError = IAMProblem;
+export type IdentityRefreshSessionMutationVariables = {
+  data: RefreshSessionRequestBody;
+};
+
+/**
+ * @summary refresh_session identity
+ */
+export const useIdentityRefreshSession = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof identityRefreshSession>>,
+      TError,
+      IdentityRefreshSessionMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof identityRefreshSession>>,
+  TError,
+  IdentityRefreshSessionMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getIdentityRefreshSessionMutationOptions(options),
+    queryClient,
+  );
+};
 
 export type capabilityDefinitionsResponse200 = {
   data: CapabilityContract[];
@@ -5894,6 +7984,193 @@ export const useCapabilityInvoke = <TError = IAMProblem, TContext = unknown>(
   TContext
 > => {
   return useMutation(getCapabilityInvokeMutationOptions(options), queryClient);
+};
+
+export type capabilityInvokeMachineResponse200 = {
+  data: CapabilityResult;
+  status: 200;
+};
+
+export type capabilityInvokeMachineResponse400 = {
+  data: IAMProblem;
+  status: 400;
+};
+
+export type capabilityInvokeMachineResponse401 = {
+  data: IAMProblem;
+  status: 401;
+};
+
+export type capabilityInvokeMachineResponse403 = {
+  data: IAMProblem;
+  status: 403;
+};
+
+export type capabilityInvokeMachineResponse404 = {
+  data: IAMProblem;
+  status: 404;
+};
+
+export type capabilityInvokeMachineResponse409 = {
+  data: IAMProblem;
+  status: 409;
+};
+
+export type capabilityInvokeMachineResponse500 = {
+  data: IAMProblem;
+  status: 500;
+};
+
+export type capabilityInvokeMachineResponse503 = {
+  data: IAMProblem;
+  status: 503;
+};
+
+export type capabilityInvokeMachineResponseSuccess =
+  capabilityInvokeMachineResponse200 & {
+    headers: Headers;
+  };
+export type capabilityInvokeMachineResponseError = (
+  | capabilityInvokeMachineResponse400
+  | capabilityInvokeMachineResponse401
+  | capabilityInvokeMachineResponse403
+  | capabilityInvokeMachineResponse404
+  | capabilityInvokeMachineResponse409
+  | capabilityInvokeMachineResponse500
+  | capabilityInvokeMachineResponse503
+) & {
+  headers: Headers;
+};
+
+export type capabilityInvokeMachineResponse =
+  capabilityInvokeMachineResponseSuccess | capabilityInvokeMachineResponseError;
+
+export const getCapabilityInvokeMachineUrl = (name: string) => {
+  return `/api/capabilities/${name}/machine-invocations`;
+};
+
+/**
+ * Invoke a pinned capability using an audience-bound machine credential.
+ * @summary invoke_machine capability
+ */
+export const capabilityInvokeMachine = async (
+  name: string,
+  invokeMachineRequestBody: InvokeMachineRequestBody,
+  options?: Parameters<typeof request>[1],
+): Promise<capabilityInvokeMachineResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<
+      string | readonly string[] | undefined
+    >(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return request<capabilityInvokeMachineResponse>(
+    getCapabilityInvokeMachineUrl(name),
+    {
+      ...options,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getHeaders(options?.headers),
+      },
+      body: JSON.stringify(invokeMachineRequestBody),
+    },
+  );
+};
+
+export const getCapabilityInvokeMachineMutationKey = () =>
+  ["capabilityInvokeMachine"] as const;
+
+export const getCapabilityInvokeMachineMutationOptions = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof capabilityInvokeMachine>>,
+    TError,
+    CapabilityInvokeMachineMutationVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof request>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof capabilityInvokeMachine>>,
+  TError,
+  CapabilityInvokeMachineMutationVariables,
+  TContext
+> => {
+  const mutationKey = getCapabilityInvokeMachineMutationKey();
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof capabilityInvokeMachine>>,
+    CapabilityInvokeMachineMutationVariables
+  > = (props) => {
+    const { name, data } = props ?? {};
+
+    return capabilityInvokeMachine(name, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CapabilityInvokeMachineMutationResult = NonNullable<
+  Awaited<ReturnType<typeof capabilityInvokeMachine>>
+>;
+export type CapabilityInvokeMachineMutationBody = InvokeMachineRequestBody;
+export type CapabilityInvokeMachineMutationError = IAMProblem;
+export type CapabilityInvokeMachineMutationVariables = {
+  name: string;
+  data: InvokeMachineRequestBody;
+};
+
+/**
+ * @summary invoke_machine capability
+ */
+export const useCapabilityInvokeMachine = <
+  TError = IAMProblem,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof capabilityInvokeMachine>>,
+      TError,
+      CapabilityInvokeMachineMutationVariables,
+      TContext
+    >;
+    request?: SecondParameter<typeof request>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof capabilityInvokeMachine>>,
+  TError,
+  CapabilityInvokeMachineMutationVariables,
+  TContext
+> => {
+  return useMutation(
+    getCapabilityInvokeMachineMutationOptions(options),
+    queryClient,
+  );
 };
 
 export type systemEchoResponse200 = {

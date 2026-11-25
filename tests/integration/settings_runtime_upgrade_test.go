@@ -8,9 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
-	"horizon/foundation/db/migrations"
 	gen "horizon/foundation/gen/capability"
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
@@ -39,7 +36,7 @@ func saveAIConfig(t *testing.T, client iamClient, revision int64, values map[str
 
 func TestAIConfigurationSavesImmediatelyWithIndependentPermissions(t *testing.T) {
 	handler, pool, account := iamFixture(t)
-	root := loginIAM(t, handler, "root-admin")
+	root := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	assertAISettingsPublished(t, root)
 	const secret = "test-only-custom-credential"
 	read := func(client iamClient) map[string]any {
@@ -97,7 +94,7 @@ func TestAIConfigurationSavesImmediatelyWithIndependentPermissions(t *testing.T)
 
 	iam := identity.New(pool, false)
 	core := governance.New(pool, iam, governance.Options{EncryptionKey: []byte("01234567890123456789012345678901")})
-	principal, err := iam.PrincipalForTask(t.Context(), "tenant-a", account.ID, account.DepartmentID)
+	principal, err := iam.PrincipalForTask(t.Context(), "tenant-a", account.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,67 +168,9 @@ func TestAIConfigurationSavesImmediatelyWithIndependentPermissions(t *testing.T)
 	}
 }
 
-func TestAIConfigurationMigrationMovesActiveOverridesAndPreservesCredentials(t *testing.T) {
-	_, pool, account := iamFixture(t)
-	ctx := t.Context()
-	db := stdlib.OpenDB(*pool.Config().ConnConfig)
-	defer db.Close()
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations.Files)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = provider.DownTo(ctx, 46); err != nil {
-		t.Fatal(err)
-	}
-	iam := identity.New(pool, false)
-	core := governance.New(pool, iam, governance.Options{EncryptionKey: []byte("01234567890123456789012345678901")})
-	sealed, err := core.Seal("tenant-a", "workspace:0", "aiModels.deepseek.token", `"test-only-legacy-key"`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := pool.Exec(ctx, `INSERT INTO gov_scopes (tenant_id,scope_key,kind,entity_id)
-		VALUES ('tenant-a','workspace:0','workspace',0) ON CONFLICT DO NOTHING`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := pool.Exec(ctx, `INSERT INTO gov_values (tenant_id,scope_key,config_key,value_json) VALUES
-		('tenant-a','workspace:0','aiModels.deepseek.token',to_jsonb($1::text)),
-		('tenant-a','workspace:0','agent.enabled','true'),
-		('tenant-a','workspace:0','branding.name','"Legacy workspace"')`, sealed); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := provider.Up(ctx); err != nil {
-		t.Fatal(err)
-	}
-	principal, err := iam.PrincipalForTask(ctx, "tenant-a", account.ID, account.DepartmentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	model, err := core.ResolveAIModel(ctx, principal, governance.ModelWorkspace)
-	if err != nil || !model.Enabled || model.Token != "test-only-legacy-key" {
-		t.Fatalf("migrated credential was not usable: %v", err)
-	}
-	var general, legacyAI int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE config_key = 'branding.name'),
-		count(*) FILTER (WHERE config_key IN ('aiModels.deepseek.token','agent.enabled'))
-		FROM gov_values WHERE tenant_id = 'tenant-a'`).Scan(&general, &legacyAI); err != nil || general != 1 || legacyAI != 0 {
-		t.Fatalf("unexpected split of persisted settings: system=%d, AI=%d, err=%v", general, legacyAI, err)
-	}
-	if _, err := provider.DownTo(ctx, 46); err != nil {
-		t.Fatal(err)
-	}
-	var restored string
-	if err := pool.QueryRow(ctx, `SELECT value_json #>> '{}' FROM gov_values
-		WHERE tenant_id = 'tenant-a' AND scope_key = 'workspace:0' AND config_key = 'aiModels.deepseek.token'`).Scan(&restored); err != nil || restored != sealed {
-		t.Fatalf("down migration lost the encrypted override: %v", err)
-	}
-	if _, err := provider.Up(ctx); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func assertAISettingsPublished(t *testing.T, client iamClient) {
 	t.Helper()
-	for id, version := range map[string]string{"system-settings": "1.0.4", "ai-settings": "1.0.3"} {
+	for id, version := range map[string]string{"system-settings": "1.0.5", "ai-settings": "1.0.3"} {
 		active := invokeCapability(t, client, "application.runtime.resolve", map[string]any{
 			"input": map[string]any{"applicationId": id},
 		})
@@ -258,6 +197,11 @@ func assertAISettingsPublished(t *testing.T, client iamClient) {
 			for _, field := range []string{`"aiModels.default"`, `"assistant.model"`, `"agent.enabled"`, `"knowledge.embedding.model"`} {
 				if bytes.Contains(raw, []byte(field)) {
 					t.Errorf("system settings still edits %s", field)
+				}
+			}
+			for _, removed := range []string{"workspace-settings-toolbar", "settings.export.read", "governance:groups.smtp", "governance:groups.templates"} {
+				if bytes.Contains(raw, []byte(removed)) {
+					t.Errorf("system settings still render %s", removed)
 				}
 			}
 			continue

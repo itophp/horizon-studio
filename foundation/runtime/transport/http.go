@@ -8,6 +8,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	systemhttp "horizon/foundation/gen/http/system/server"
 	"horizon/foundation/gen/system"
+	"horizon/foundation/kernel/audit"
 	"horizon/foundation/runtime/app"
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
@@ -57,13 +58,16 @@ func handlerWithCore(systemService system.Service, options governance.Options, c
 	}
 	systemhttp.Mount(mux, systemhttp.New(system.NewEndpoints(systemService), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, errors, nil))
 	var identityGuard func(http.ResponseWriter, *http.Request) (*http.Request, bool)
+	var signIns applicationSignIns
 	start := func(context.Context) {}
 	var observer *memorysystem.Observer
 	if len(identities) > 0 {
-		identityGuard = mountIdentity(mux, identities[0], errors)
+		signIns = newApplicationSignIns(registration)
+		identityGuard = mountIdentity(mux, identities[0], registration.Authentication, errors)
 		if core == nil || core.Pool == nil {
 			core = governance.New(identities[0].Database(), identities[0], options)
 		}
+		identities[0].AttachSecretProtector(core)
 		observer = memorysystem.NewObserver(core.Pool)
 		start = mountGovernance(mux, core, registration, observer, errors)
 		startGovernance := start
@@ -77,7 +81,7 @@ func handlerWithCore(systemService system.Service, options governance.Options, c
 			return
 		}
 		id := hex.EncodeToString(raw[:])
-		r = r.WithContext(context.WithValue(r.Context(), requestCorrelationKey{}, "req_"+id))
+		r = r.WithContext(audit.WithCorrelation(context.WithValue(r.Context(), requestCorrelationKey{}, "req_"+id), "req_"+id))
 		w.Header().Set("X-Request-ID", id)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
@@ -91,6 +95,11 @@ func handlerWithCore(systemService system.Service, options governance.Options, c
 			slog.Info("request completed", "request_id", id, "method", r.Method, "duration_ms", time.Since(started).Milliseconds())
 		}()
 		if identityGuard != nil {
+			bound, ok := signIns.bind(w, r)
+			if !ok {
+				return
+			}
+			r = bound.WithContext(identity.WithInteractiveTenant(bound.Context(), options.PublicWorkspace))
 			next, ok := identityGuard(w, r)
 			if !ok {
 				return

@@ -4,8 +4,8 @@ import { Link } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { EditorDialog, PageHeading } from "@/features/administration/shared";
-import { useSession } from "@/features/administration/auth";
+import { EditorDialog, PageHeading } from "@/features/identity/shared";
+import { useSession } from "@/features/identity/auth";
 import { formatMoment } from "@/lib/capability";
 import {
   knowledgeCreate,
@@ -43,7 +43,7 @@ export function KnowledgePage() {
       ...queryKey,
       session.tenantId,
       session.account.id,
-      session.activeDepartmentId,
+      session.identityBindingId,
       session.authorizationVersion,
       keyword,
       beforeId,

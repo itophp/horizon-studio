@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Archive, ArchiveRestore, Check, Pencil, X } from "lucide-react";
 import type { AIConversation } from "@/api/generated/models";
-import { ErrorBanner } from "@/features/administration/shared";
+import { ErrorBanner } from "@/features/identity/shared";
 import { formatMoment } from "@/lib/capability";
 
 // Task list orders. The server returns conversations newest first; the list

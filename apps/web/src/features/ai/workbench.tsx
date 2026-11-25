@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ErrorBanner } from "@/features/administration/shared";
+import { ErrorBanner } from "@/features/identity/shared";
 import { ApiError } from "@/api/client/request";
 import { capabilityLabel, formatMoment } from "@/lib/capability";
 import { ApprovalCard } from "./shared";
@@ -176,10 +176,6 @@ export function Workbench(props: {
             </ul>
           )}
           <dl className="ai-side-meta">
-            <div>
-              <dt>{t("workbench.department")}</dt>
-              <dd>{state.session.activeDepartmentId}</dd>
-            </div>
             <div>
               <dt>{t("workbench.registry")}</dt>
               <dd>{snapshot?.registryVersion ?? "—"}</dd>

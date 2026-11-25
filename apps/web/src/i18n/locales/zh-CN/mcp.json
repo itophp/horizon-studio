@@ -55,9 +55,9 @@
     "id": "请填写有效的 Token ID。"
   },
   "failure": {
-    "forbidden": "当前密码不正确，或该部门没有签发 Token 的权限。",
+    "forbidden": "当前密码不正确，或当前身份没有签发 Token 的权限。",
     "unauthenticated": "登录状态已失效，请重新登录后再试。",
-    "invalid": "服务端拒绝了这次提交，请检查有效期与工具选择是否仍在允许范围内。",
+    "invalid": "服务端拒绝了这次提交，请检查 Token 名称和有效期。",
     "unavailable": "服务暂不可用，请确认后端已启动并完成数据库迁移。",
     "rate_limited": "尝试过于频繁，请稍后再试。",
     "internal": "服务端处理失败，请查看后端日志。",
@@ -114,9 +114,9 @@
   "emergencyRevoke": "紧急撤销",
   "emergencyTitle": "紧急撤销 Token",
   "emergencySubmit": "确认紧急撤销",
-  "emergencyHelp": "拥有专门管理权限时，可撤销当前工作区指定 Token，请向账号本人获取 Token ID。",
+  "emergencyHelp": "拥有专门管理权限时，可撤销当前租户指定 Token，请向账号本人获取 Token ID。",
   "emergencyId": "待撤销的 Token ID",
   "adminPassword": "管理员确认密码",
   "emergencyDone": "Token 已撤销。",
-  "dynamicTools": "所有已有和新建令牌均可使用其绑定部门当前有权使用的能力，每次请求都会重新检查权限。"
+  "dynamicTools": "Token 可以使用所属租户和身份上下文当前获准的能力。每次请求都会检查权限。"
 }

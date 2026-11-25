@@ -45,13 +45,13 @@ func New(pool *pgxpool.Pool) *Module { return &Module{pool: pool} }
 
 // Entries is the capability catalog contributed by the module.
 func (m *Module) Entries() []registry.Entry {
-	return []registry.Entry{
+	return append([]registry.Entry{
 		{Definition: listDefinition(), Handler: contracts.Handler{Execute: m.list}},
 		{Definition: createDefinition(), Handler: contracts.Handler{ExecuteTx: m.create}},
 		{Definition: archiveDefinition(), Handler: contracts.Handler{ExecuteTx: m.archive}},
 		{Definition: getDefinition(), Handler: contracts.Handler{Execute: m.get}},
 		{Definition: assessmentDefinition(), Handler: contracts.Handler{Execute: m.assess}},
-	}
+	}, m.orderEntries()...)
 }
 
 func text(min, max int) *contracts.Schema {
@@ -84,8 +84,9 @@ func createDefinition() contracts.Definition {
 		Description: "Create one example record in draft status. Emits example.record.created so AI review can run asynchronously.",
 		Domain:      "example", Entity: "example_record", Permission: CreatePermission,
 		Risk: contracts.RiskMedium, Approval: contracts.ApprovalAuto,
-		Idempotency:   contracts.Idempotency{Required: true, Scope: "tenant+operation+key"},
-		SuccessEvents: []string{CreatedEvent}, Executor: "go:example.create", Tags: []string{"example", "write"},
+		MachineCallable: true,
+		Idempotency:     contracts.Idempotency{Required: true, Scope: "tenant+operation+key"},
+		SuccessEvents:   []string{CreatedEvent}, Executor: "go:example.create", Tags: []string{"example", "write"},
 		Input: contracts.Object(map[string]*contracts.Schema{
 			"title": text(1, 200),
 		}, "title"),
@@ -102,6 +103,7 @@ func archiveDefinition() contracts.Definition {
 		Description: "Archive one example record. High risk: an agent must obtain human confirmation before it runs.",
 		Domain:      "example", Entity: "example_record", Permission: ArchivePermission,
 		Risk: contracts.RiskHigh, Approval: contracts.ApprovalConfirm,
+		MachineCallable: true, DelegationResourceID: "id",
 		Idempotency:   contracts.Idempotency{Required: true, Scope: "tenant+operation+key"},
 		SuccessEvents: []string{ArchivedEvent}, Executor: "go:example.archive", Tags: []string{"example", "write"},
 		Input: contracts.Object(map[string]*contracts.Schema{
@@ -172,6 +174,9 @@ func (m *Module) archive(ctx context.Context, tx pgx.Tx, in contracts.Input) (co
 		return contracts.Output{}, contracts.Problem("unauthenticated")
 	}
 	if !p.Can(ArchivePermission) {
+		return contracts.Output{}, contracts.Problem("forbidden")
+	}
+	if p.MachineCredentialID() != "" && !p.HasTenantWideGrant(ArchivePermission) {
 		return contracts.Output{}, contracts.Problem("forbidden")
 	}
 	id, ok := number(in["id"])

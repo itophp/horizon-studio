@@ -10,11 +10,7 @@ import {
   notificationsPreview,
   notificationsSend,
 } from "@/lib/capabilities";
-import {
-  ErrorBanner,
-  Loading,
-  EditorDialog,
-} from "@/features/administration/shared";
+import { ErrorBanner, Loading, EditorDialog } from "@/features/identity/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useGovKey, useGovTask } from "./shared";
@@ -99,7 +95,7 @@ export function NotificationComposer({ onSent }: { onSent: () => void }) {
             <label>
               <span>{t("recipientKind")}</span>
               <select value={kind} onChange={(e) => setKind(e.target.value)}>
-                {["account", "department", "company", "enterprise"].map((k) => (
+                {["account", "department", "company"].map((k) => (
                   <option key={k} value={k}>
                     {t(`recipientKinds.${k}`)}
                   </option>

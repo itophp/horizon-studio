@@ -6,6 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Fragment,
   useContext,
@@ -20,13 +21,18 @@ import {
   Archive,
   ArrowUpRight,
   Building2,
+  Settings2,
+  Pencil,
+  Clock,
+  Send,
+  Inbox,
   Play,
   Plus,
   RefreshCw,
   ShieldCheck,
   Square,
 } from "lucide-react";
-import { ShortDate, SuccessNotice } from "@/features/administration/shared";
+import { ShortDate, SuccessNotice } from "@/features/identity/shared";
 import { formatMoment } from "@/lib/capability";
 import { evaluate, pathValue } from "../expression";
 import {
@@ -37,6 +43,11 @@ import type { Expression } from "./types";
 
 export const contentIcons = {
   building: Building2,
+  inbox: Inbox,
+  send: Send,
+  clock: Clock,
+  pencil: Pencil,
+  settings: Settings2,
   shield: ShieldCheck,
   archive: Archive,
   play: Play,
@@ -86,6 +97,8 @@ export type ContentAction = {
   payloadLabelKey?: string;
   className?: string;
   icon?: keyof typeof contentIcons;
+  variant?: "default" | "secondary" | "outline" | "ghost" | "destructive";
+  current?: boolean;
   linkArrow?: boolean;
   permission?: string;
   visible?: Expression;
@@ -236,16 +249,26 @@ export function ActionControl({
   )
     return null;
   const Icon = action.icon && contentIcons[action.icon];
+  const className = action.variant
+    ? buttonVariants({ variant: action.variant, className: action.className })
+    : action.className;
   if (action.href?.kind) {
     const href = evaluate(action.href, scope(record));
     if (!isInternalHref(href)) return null;
     return (
-      <Link className={action.className} to={href}>
-        {Icon && (
-          <span className="entity-symbol" aria-hidden>
-            <Icon size={18} />
-          </span>
-        )}
+      <Link
+        className={className}
+        to={href}
+        aria-current={action.current ? "page" : undefined}
+      >
+        {Icon &&
+          (action.variant ? (
+            <Icon size={14} aria-hidden />
+          ) : (
+            <span className="entity-symbol" aria-hidden>
+              <Icon size={18} />
+            </span>
+          ))}
         <span>{t(action.labelKey)}</span>
         {action.linkArrow && <ArrowUpRight size={14} aria-hidden />}
       </Link>
@@ -254,7 +277,7 @@ export function ActionControl({
   return (
     <button
       type="button"
-      className={action.className}
+      className={className}
       disabled={
         readOnly ||
         busy ||

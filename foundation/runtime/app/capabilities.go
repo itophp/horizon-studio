@@ -142,13 +142,15 @@ func (m CapabilityModules) Entries() []registry.Entry {
 // RuntimeContributions is shared by server assembly and the spec generator.
 func RuntimeContributions(registration Registration) []ar.ApplicationV2 {
 	contributions := []ar.ApplicationV2{
-		automation.RuntimeApplication(), identity.PermissionsRuntimeApplication(),
-		identity.OrganizationsRuntimeApplication(), identity.AccountsRuntimeApplication(),
+		automation.RuntimeApplication(),
+		identity.SecurityRuntimeApplication(),
+		identity.GovernanceRuntimeApplication(),
 		identity.RuntimeProtocolApplication(), analyticsRuntimeApplication("1.0.0"), AnalyticsRuntimeApplication(),
-		legacyAgentCollaborationApplication(), agentCollaborationVersion("1.0.1"), agentCollaborationApplication(),
+		legacyAgentCollaborationApplication(), agentCollaborationVersion("1.0.1"), agentCollaborationVersion("1.0.2"), agentCollaborationApplication(),
 		legacyPersonalPreferencesApplication(), personalPreferencesApplication(),
 		legacySystemSettingsApplication(), systemSettingsApplication("1.0.1"), systemSettingsApplication("1.0.2"),
-		systemSettingsApplication("1.0.3"), systemSettingsApplication("1.0.4"), legacyAISettingsApplication(), activeAISettingsApplication("1.0.1"), activeAISettingsApplication("1.0.2"), activeAISettingsApplication("1.0.3"),
+		systemSettingsApplication("1.0.3"), systemSettingsApplication("1.0.4"), systemSettingsApplication("1.0.5"),
+		legacyAISettingsApplication(), activeAISettingsApplication("1.0.1"), activeAISettingsApplication("1.0.2"), activeAISettingsApplication("1.0.3"),
 	}
 	contributions = append(contributions, registration.Applications...)
 	if plugins := registration.Plugins; plugins != nil {

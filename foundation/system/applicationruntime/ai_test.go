@@ -101,7 +101,7 @@ func TestRuntimeAIAnalysisOnlySendsConfiguredFields(t *testing.T) {
 func TestRuntimeAIFormRejectsUnlistedDraftAndModelFields(t *testing.T) {
 	m, app := aiFixture(t)
 	component, bindings := widgetAIBindings(t)
-	p, err := identity.NewPrincipal(&gen.AccountRecord{ID: 1, IsAdmin: true}, "test-tenant", nil)
+	p, err := identity.NewPrincipal(&gen.AccountRecord{ID: 1}, "test-tenant", []*gen.PermissionGrant{{Permission: widgetWrite, Effect: "allow", Scope: "ALL"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +202,7 @@ func TestRuntimeAIFormFillsTypedConditionalTargets(t *testing.T) {
 		}, "name", "kind"),
 	}
 	m := &Module{Definitions: map[string]contracts.Definition{definition.Key(): definition}}
-	p, err := identity.NewPrincipal(&gen.AccountRecord{ID: 1, IsAdmin: true}, "test-tenant", nil)
+	p, err := identity.NewPrincipal(&gen.AccountRecord{ID: 1}, "test-tenant", []*gen.PermissionGrant{{Permission: definition.Permission, Effect: "allow", Scope: "ALL"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestRuntimeAIFormFillsTypedConditionalTargets(t *testing.T) {
 func TestRuntimeAIFormSuggestsFromDraftWithoutRecord(t *testing.T) {
 	m, app := aiFixture(t)
 	component, bindings := widgetAIBindings(t)
-	p, err := identity.NewPrincipal(&gen.AccountRecord{ID: 1, IsAdmin: true}, "test-tenant", nil)
+	p, err := identity.NewPrincipal(&gen.AccountRecord{ID: 1}, "test-tenant", []*gen.PermissionGrant{{Permission: widgetWrite, Effect: "allow", Scope: "ALL"}})
 	if err != nil {
 		t.Fatal(err)
 	}

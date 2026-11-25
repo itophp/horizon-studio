@@ -14,7 +14,7 @@ import (
 
 func TestRuntimeAIRejectsUnauthorizedAndStaleInvocations(t *testing.T) {
 	handler, pool, rootAccount := iamFixture(t)
-	root := loginIAM(t, handler, "root-admin")
+	root := loginTenantIAM(t, handler, "root-admin", "tenant-a")
 	const plugin = "com.horizon.projects"
 	upgradeProjects := func(client iamClient) {
 		t.Helper()
@@ -73,7 +73,7 @@ func TestRuntimeAIRejectsUnauthorizedAndStaleInvocations(t *testing.T) {
 	checkSucceeded(t, roleResponse)
 	role := decodeData[genidentity.RoleRecord](t, roleResponse)
 	checkSucceeded(t, root.invoke(t, "identity.account.create", map[string]any{
-		"username": "ai-project-reader", "fullName": "Project reader", "email": "", "status": "active",
+		"username": "ai-project-reader", "fullName": "Project reader", "email": "", "initialStatus": "active",
 		"organizationId": rootAccount.OrganizationID, "departmentId": rootAccount.DepartmentID,
 		"roleIds": []int64{role.ID}, "overrides": []map[string]any{}, "password": "TestOnly!2026Secure",
 	}, true))

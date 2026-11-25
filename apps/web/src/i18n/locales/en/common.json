@@ -2,7 +2,7 @@
   "appName": "Foundation",
   "workspace": "Application framework",
   "title": "A foundation to build on.",
-  "subtitle": "One workspace to verify your application infrastructure, API contracts and localization.",
+  "subtitle": "One tenant to verify your application infrastructure, API contracts and localization.",
   "language": "Language",
   "english": "English",
   "chinese": "Simplified Chinese",

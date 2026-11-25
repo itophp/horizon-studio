@@ -2,13 +2,16 @@ package mail
 
 import (
 	"context"
+	"errors"
 	"net/mail"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/system/governance"
 	"horizon/internal/repository/dbgen"
+	"horizon/internal/repository/dbgen/maildb"
 )
 
 func validateMailboxInput(in *OnboardInput) error {
@@ -17,21 +20,18 @@ func validateMailboxInput(in *OnboardInput) error {
 		return contracts.Problem("invalid")
 	}
 	in.EmailAddress = strings.ToLower(address.Address)
-	if in.Password == "" || in.SMTPHost == "" || in.POP3Host == "" ||
-		in.SMTPPort < 1 || in.SMTPPort > 65535 || in.POP3Port < 1 || in.POP3Port > 65535 ||
+	if in.Password == "" || in.SMTPHost == "" ||
+		in.SMTPPort < 1 || in.SMTPPort > 65535 ||
 		(in.SMTPTLS != "starttls" && in.SMTPTLS != "tls") {
 		return contracts.Problem("invalid")
 	}
-	if !headerSafe(in.Name, in.EmailAddress, in.SMTPHost, in.POP3Host, in.SMTPUsername, in.POP3Username) {
+	if !headerSafe(in.Name, in.EmailAddress, in.SMTPHost, in.SMTPUsername) {
 		return contracts.Problem("invalid")
 	}
 	if in.SMTPUsername == "" {
 		in.SMTPUsername = in.EmailAddress
 	}
-	if in.POP3Username == "" {
-		in.POP3Username = in.EmailAddress
-	}
-	return nil
+	return in.ReceiveInput.normalize(in.EmailAddress)
 }
 
 func (m *Module) onboard(ctx context.Context, tx pgx.Tx, in contracts.Input) (contracts.Output, error) {
@@ -69,12 +69,12 @@ func (m *Module) onboard(ctx context.Context, tx pgx.Tx, in contracts.Input) (co
 	if err != nil {
 		return contracts.Output{}, problem(err)
 	}
-	popCiphertext, popFingerprint, err := sealCredential(m.Core, p.TenantID, id, "pop3", payload.Password)
+	receiveCiphertext, receiveFingerprint, err := sealCredential(m.Core, p.TenantID, id, receiveCredentialPurpose, payload.Password)
 	if err != nil {
 		return contracts.Output{}, err
 	}
-	popCredential, err := q.MailCredentialCreate(ctx, dbgen.MailCredentialCreateParams{
-		TenantID: p.TenantID, MailboxID: id, Purpose: "pop3", Ciphertext: popCiphertext, Fingerprint: popFingerprint,
+	receiveCredential, err := q.MailCredentialCreate(ctx, dbgen.MailCredentialCreateParams{
+		TenantID: p.TenantID, MailboxID: id, Purpose: receiveCredentialPurpose, Ciphertext: receiveCiphertext, Fingerprint: receiveFingerprint,
 	})
 	if err != nil {
 		return contracts.Output{}, problem(err)
@@ -86,8 +86,8 @@ func (m *Module) onboard(ctx context.Context, tx pgx.Tx, in contracts.Input) (co
 		return contracts.Output{}, problem(err)
 	}
 	if _, err = q.MailChannelCreate(ctx, dbgen.MailChannelCreateParams{
-		TenantID: p.TenantID, MailboxID: id, Direction: "receive", Protocol: "pop3", Host: payload.POP3Host,
-		Port: int32(payload.POP3Port), TlsMode: "tls", Username: payload.POP3Username, CredentialID: popCredential.ID,
+		TenantID: p.TenantID, MailboxID: id, Direction: "receive", Protocol: payload.Protocol, Host: payload.Host,
+		Port: int32(payload.Port), TlsMode: payload.TLSMode, Username: payload.Username, CredentialID: receiveCredential.ID,
 	}); err != nil {
 		return contracts.Output{}, problem(err)
 	}
@@ -106,7 +106,7 @@ func (m *Module) onboard(ctx context.Context, tx pgx.Tx, in contracts.Input) (co
 				"mailboxId": id, "status": "unverified",
 			})}}, nil
 	}
-	if err = testPOP3(ctx, payload.POP3Host, payload.POP3Port, payload.POP3Username, payload.Password, m.options.AllowedEndpoints); err != nil {
+	if err = m.testReceiver(ctx, payload.ReceiveInput, payload.Password); err != nil {
 		_, _ = q.MailChannelVerificationUpdate(ctx, dbgen.MailChannelVerificationUpdateParams{
 			VerificationStatus: "failed", LastErrorCode: "unavailable", TenantID: p.TenantID, MailboxID: id, Direction: "receive",
 		})
@@ -195,7 +195,7 @@ func (m *Module) listMailboxes(ctx context.Context, in contracts.Input) (contrac
 		}
 		items = append(items, mailboxData(row, channels))
 	}
-	return contracts.Output{Data: map[string]any{"items": items}, Summary: "mailboxes=" + string(rune(len(items)))}, nil
+	return contracts.Output{Data: map[string]any{"items": items}, Summary: "mailboxes=" + strconv.Itoa(len(items))}, nil
 }
 
 func (m *Module) getMailbox(ctx context.Context, in contracts.Input) (contracts.Output, error) {
@@ -232,10 +232,32 @@ func (m *Module) updateMailbox(ctx context.Context, tx pgx.Tx, in contracts.Inpu
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
 	payload.EmailAddress = strings.ToLower(address.Address)
+	legacyReceive := payload.Protocol == ""
+	if err = payload.ReceiveInput.normalize(payload.EmailAddress); err != nil {
+		return contracts.Output{}, err
+	}
+	if !headerSafe(payload.SMTPHost, payload.SMTPUsername) {
+		return contracts.Output{}, contracts.Problem("invalid")
+	}
 	q := dbgen.New(tx)
 	if payload.DefaultSend {
-		if _, err = q.MailMailboxDefaultClear(ctx, dbgen.MailMailboxDefaultClearParams{TenantID: p.TenantID, OwnerAccountID: p.Account.ID}); err != nil {
-			return contracts.Output{}, err
+		current, err := q.MailMailboxGet(ctx, dbgen.MailMailboxGetParams{
+			TenantID: p.TenantID, ID: payload.ID, OwnerAccountID: p.Account.ID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return contracts.Output{}, contracts.Problem("conflict")
+		}
+		if err != nil {
+			return contracts.Output{}, problem(err)
+		}
+		if current.Revision != payload.Revision {
+			return contracts.Output{}, contracts.Problem("conflict")
+		}
+		// Clearing the default increments its revision. Only clear when switching mailboxes.
+		if !current.DefaultSend {
+			if _, err = q.MailMailboxDefaultClear(ctx, dbgen.MailMailboxDefaultClearParams{TenantID: p.TenantID, OwnerAccountID: p.Account.ID}); err != nil {
+				return contracts.Output{}, err
+			}
 		}
 	}
 	rows, err := q.MailMailboxUpdate(ctx, dbgen.MailMailboxUpdateParams{
@@ -253,15 +275,22 @@ func (m *Module) updateMailbox(ctx context.Context, tx pgx.Tx, in contracts.Inpu
 		return contracts.Output{}, problem(err)
 	}
 	for _, channel := range channels {
-		host, port, tlsMode, username := channel.Host, channel.Port, channel.TlsMode, channel.Username
-		if channel.Direction == "send" {
-			host, port, tlsMode, username = payload.SMTPHost, int32(payload.SMTPPort), payload.SMTPTLS, payload.SMTPUsername
-		} else {
-			host, port, tlsMode, username = payload.POP3Host, int32(payload.POP3Port), "tls", payload.POP3Username
+		if channel.Direction == "receive" {
+			if legacyReceive && channel.Protocol != "pop3" {
+				return contracts.Output{}, contracts.Problem("invalid")
+			}
+			if err = maildb.New(tx).ReceiveSettingsUpdate(ctx, maildb.ReceiveSettingsUpdateParams{
+				TenantID: p.TenantID, MailboxID: payload.ID, OwnerAccountID: p.Account.ID, Protocol: payload.Protocol,
+				Host: payload.Host, Port: int32(payload.Port), TlsMode: payload.TLSMode, Username: payload.Username,
+			}); err != nil {
+				return contracts.Output{}, problem(err)
+			}
+			continue
 		}
 		if _, err = q.MailChannelCreate(ctx, dbgen.MailChannelCreateParams{
 			TenantID: p.TenantID, MailboxID: payload.ID, Direction: channel.Direction, Protocol: channel.Protocol,
-			Host: host, Port: port, TlsMode: tlsMode, Username: username, CredentialID: channel.CredentialID,
+			Host: payload.SMTPHost, Port: int32(payload.SMTPPort), TlsMode: payload.SMTPTLS,
+			Username: payload.SMTPUsername, CredentialID: channel.CredentialID,
 		}); err != nil {
 			return contracts.Output{}, problem(err)
 		}
@@ -280,7 +309,7 @@ func (m *Module) replaceCredential(ctx context.Context, tx pgx.Tx, in contracts.
 	if err = contracts.Bind(in, &payload); err != nil {
 		return contracts.Output{}, err
 	}
-	if payload.Password == "" || (payload.Purpose != "smtp" && payload.Purpose != "pop3") {
+	if payload.Password == "" || (payload.Purpose != "smtp" && payload.Purpose != "pop3" && payload.Purpose != "imap") {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
 	q := dbgen.New(tx)
@@ -291,31 +320,31 @@ func (m *Module) replaceCredential(ctx context.Context, tx pgx.Tx, in contracts.
 	found := false
 	credentialID := int64(0)
 	nextVersion := int32(1)
+	direction, purpose := "send", "smtp"
+	if payload.Purpose != "smtp" {
+		direction, purpose = "receive", receiveCredentialPurpose
+	}
 	for _, channel := range channels {
-		if (payload.Purpose == "smtp" && channel.Direction == "send") || (payload.Purpose == "pop3" && channel.Direction == "receive") {
+		if channel.Direction == direction && channel.Protocol == payload.Purpose {
 			found, credentialID, nextVersion = true, channel.CredentialID, channel.Version+1
 		}
 	}
 	if !found {
 		return contracts.Output{}, contracts.Problem("not_found")
 	}
-	ciphertext, err := m.Seal(p.TenantID, credentialScope(payload.MailboxID), credentialKey(payload.Purpose, nextVersion), payload.Password)
+	ciphertext, err := m.Seal(p.TenantID, credentialScope(payload.MailboxID), credentialKey(purpose, nextVersion), payload.Password)
 	if err != nil {
 		return contracts.Output{}, err
 	}
 	rows, err := q.MailCredentialReplace(ctx, dbgen.MailCredentialReplaceParams{
 		Ciphertext: ciphertext, Fingerprint: governance.Hash(ciphertext)[:16], TenantID: p.TenantID,
-		MailboxID: payload.MailboxID, Purpose: payload.Purpose,
+		MailboxID: payload.MailboxID, Purpose: purpose,
 	})
 	if err != nil {
 		return contracts.Output{}, problem(err)
 	}
 	if rows != 1 {
 		return contracts.Output{}, contracts.Problem("conflict")
-	}
-	direction := "send"
-	if payload.Purpose == "pop3" {
-		direction = "receive"
 	}
 	if _, err = q.MailChannelVerificationUpdate(ctx, dbgen.MailChannelVerificationUpdateParams{
 		VerificationStatus: "unknown", LastErrorCode: "", TenantID: p.TenantID, MailboxID: payload.MailboxID, Direction: direction,
@@ -383,7 +412,7 @@ func (m *Module) testConnection(ctx context.Context, tx pgx.Tx, in contracts.Inp
 		}
 		purpose := "smtp"
 		if channel.Direction == "receive" {
-			purpose = "pop3"
+			purpose = receiveCredentialPurpose
 		}
 		password, err := openCredential(m.Core, p.TenantID, payload.MailboxID, purpose, channel.Version, channel.Ciphertext)
 		if err != nil {
@@ -392,7 +421,9 @@ func (m *Module) testConnection(ctx context.Context, tx pgx.Tx, in contracts.Inp
 		if channel.Direction == "send" {
 			err = m.testSMTPDirect(ctx, smtpEndpoint{Host: channel.Host, Port: int(channel.Port), TLSMode: channel.TlsMode, Username: channel.Username, Password: password})
 		} else {
-			err = testPOP3(ctx, channel.Host, int(channel.Port), channel.Username, password, m.options.AllowedEndpoints)
+			err = m.testReceiver(ctx, ReceiveInput{
+				Protocol: channel.Protocol, Host: channel.Host, Port: int(channel.Port), TLSMode: channel.TlsMode, Username: channel.Username,
+			}, password)
 		}
 		if err != nil {
 			if _, updateErr := q.MailChannelVerificationUpdate(ctx, dbgen.MailChannelVerificationUpdateParams{

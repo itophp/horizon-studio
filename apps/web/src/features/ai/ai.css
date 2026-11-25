@@ -642,6 +642,17 @@
   gap: 8px;
 }
 
+/* Override the legacy card surface with the active console theme. */
+.ai-session-layout [data-slot="card"] {
+  border-color: var(--app-line);
+  background: var(--app-panel);
+  box-shadow: none;
+}
+
+.ai-session-notices [data-slot="card"] {
+  background: var(--app-subtle);
+}
+
 .ai-session-approvals {
   max-block-size: min(20dvh, 144px);
   align-self: start;
@@ -654,6 +665,12 @@
   max-block-size: min(35%, 200px);
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* A disabled send or attachment button should not dim an editable prompt. */
+.ai-session-composer [data-slot="input-group"]:has(> textarea:enabled) {
+  background: var(--app-subtle);
+  opacity: 1;
 }
 
 .ai-session-composer textarea {

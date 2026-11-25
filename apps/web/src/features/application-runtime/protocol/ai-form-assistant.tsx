@@ -21,6 +21,9 @@ import { readFileBase64 } from "@/components/shared/read-file";
 
 export function AIFormAssistant({
   spec,
+  showLabel = false,
+  allowAttachments = true,
+  hint,
   draftSource,
   request,
   current,
@@ -31,6 +34,9 @@ export function AIFormAssistant({
   disabled,
 }: {
   spec: RuntimeAIFormAssistant;
+  showLabel?: boolean;
+  allowAttachments?: boolean;
+  hint?: string;
   draftSource?: {
     label: string;
     value: string;
@@ -162,7 +168,7 @@ export function AIFormAssistant({
       <Button
         type="button"
         variant="outline"
-        size="icon-sm"
+        size={showLabel ? "sm" : "icon-sm"}
         className="ai-action"
         aria-label={t(spec.labelKey)}
         title={t(spec.labelKey)}
@@ -171,6 +177,7 @@ export function AIFormAssistant({
         onClick={() => setExpanded(!expanded)}
       >
         <Sparkles aria-hidden="true" size={14} />
+        {showLabel && t(spec.labelKey)}
       </Button>
       <div id={sourceId + "-panel"} hidden={!expanded}>
         <AIComposer
@@ -179,6 +186,7 @@ export function AIFormAssistant({
           value={draftSource?.value ?? sourceText}
           onChange={draftSource?.onChange ?? setSourceText}
           maxLength={draftSource?.maxLength || 2000}
+          allowAttachments={allowAttachments}
           file={file}
           onFileChange={(selected) => {
             setFile(selected);
@@ -188,7 +196,7 @@ export function AIFormAssistant({
           submitDisabled={submitDisabled}
           disabled={disabled || running}
           busy={running}
-          hint={t("ai.generateHint")}
+          hint={hint ?? t("ai.generateHint")}
           action={generateButton}
         />
       </div>

@@ -6,13 +6,13 @@ import { capabilityDefinitions } from "@/api/generated/baseline";
 import type { CapabilityContract } from "@/api/generated/models";
 import { executionPlans } from "@/lib/capabilities";
 import { capabilityLabel } from "@/lib/capability";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   ErrorBanner,
   Loading,
   PageHeading,
   SuccessNotice,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DraftDialog } from "./forms";
@@ -41,7 +41,7 @@ export function CapabilityPlansPage() {
       "capability",
       session.tenantId,
       session.account.id,
-      session.activeDepartmentId,
+      session.identityBindingId,
       session.authorizationVersion,
       "plan-definitions",
     ],

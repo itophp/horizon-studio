@@ -117,6 +117,82 @@ func BuildInvokePayload(capabilityInvokeBody *string, capabilityInvokeName *stri
 	return v, nil
 }
 
+// BuildInvokeMachinePayload builds the payload for the capability
+// invoke_machine endpoint from CLI flags.
+func BuildInvokeMachinePayload(capabilityInvokeMachineBody *string, capabilityInvokeMachineName *string, capabilityInvokeMachineAuthorization *string, capabilityInvokeMachineDelegationID *string) (*capability.InvokeMachinePayload, error) {
+	var err error
+	var body InvokeMachineRequestBody
+	{
+		if capabilityInvokeMachineBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*capabilityInvokeMachineBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"idempotencyKey\": \"94f\",\n      \"input\": \"Commodi voluptatum vel ut rerum.\",\n      \"version\": \"kwf\"\n   }'")
+		}
+		if body.Input == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("input", "body"))
+		}
+		if utf8.RuneCountInString(body.Version) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", body.Version, utf8.RuneCountInString(body.Version), 1, true))
+		}
+		if utf8.RuneCountInString(body.Version) > 16 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", body.Version, utf8.RuneCountInString(body.Version), 16, false))
+		}
+		if body.IdempotencyKey != nil {
+			if utf8.RuneCountInString(*body.IdempotencyKey) > 120 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotencyKey", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 120, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var name string
+	{
+		if capabilityInvokeMachineName == nil {
+			return nil, fmt.Errorf("missing required flag --name")
+		}
+		name = *capabilityInvokeMachineName
+		if utf8.RuneCountInString(name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("name", name, utf8.RuneCountInString(name), 1, true))
+		}
+		if utf8.RuneCountInString(name) > 80 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("name", name, utf8.RuneCountInString(name), 80, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var authorization string
+	{
+		if capabilityInvokeMachineAuthorization == nil {
+			return nil, fmt.Errorf("missing required flag --authorization")
+		}
+		authorization = *capabilityInvokeMachineAuthorization
+	}
+	var delegationID *string
+	{
+		if capabilityInvokeMachineDelegationID != nil {
+			delegationID = capabilityInvokeMachineDelegationID
+			err = goa.MergeErrors(err, goa.ValidatePattern("delegationId", *capabilityInvokeMachineDelegationID, "^[0-9a-fA-F-]{36}$"))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	v := &capability.InvokeMachinePayload{
+		Version:        body.Version,
+		Input:          body.Input,
+		IdempotencyKey: body.IdempotencyKey,
+	}
+	v.Name = name
+	v.Authorization = authorization
+	v.DelegationID = delegationID
+
+	return v, nil
+}
+
 // BuildInvocationsPayload builds the payload for the capability invocations
 // endpoint from CLI flags.
 func BuildInvocationsPayload(capabilityInvocationsLimit string, capabilityInvocationsCookie *string) (*capability.InvocationsPayload, error) {

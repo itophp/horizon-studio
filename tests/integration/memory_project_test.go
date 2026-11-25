@@ -204,7 +204,7 @@ func TestProjectMemoryRequiresMembershipAndParentCapability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	foreignPrincipal, err := h.iam.PrincipalForTask(context.Background(), "tenant-b", foreignAccount.ID, foreignAccount.DepartmentID)
+	foreignPrincipal, err := h.iam.PrincipalForTask(context.Background(), "tenant-b", foreignAccount.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
