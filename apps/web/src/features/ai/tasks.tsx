@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Archive, ArchiveRestore, Check, Pencil, X } from "lucide-react";
 import type { AIConversation } from "@/api/generated/models";
-import { ErrorBanner } from "@/features/administration/shared";
+import { ErrorBanner } from "@/features/identity/shared";
 import { formatMoment } from "@/lib/capability";
 
 // Task list orders. The server returns conversations newest first; the list
@@ -212,7 +212,14 @@ export function TaskList({
                     }
                     onClick={() => onOpen(task.sessionId)}
                   >
-                    <strong>{task.title}</strong>
+                    <strong title={task.title}>{task.title}</strong>
+                    {task.automationAt && (
+                      <small>
+                        {t("automation.conversationSource", {
+                          time: formatMoment(i18n.language, task.automationAt),
+                        })}
+                      </small>
+                    )}
                     {runningSessionIds.has(task.sessionId) && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Loader2

@@ -2,7 +2,11 @@ import type { SessionProfile } from "@/api/generated/models";
 import { mcpManagementCreate } from "@/lib/capabilities";
 import { agentOrigin, getAgentConnection, PROTOCOL } from "./agent-connection";
 
-type Identity = { accountId: number; departmentId: number };
+type Identity = {
+  accountId: number;
+  tenantId: string;
+  identityBindingId: string;
+};
 
 export function isStudioPairingAvailable() {
   return import.meta.env.DEV && window.location.hostname === "127.0.0.1";
@@ -33,12 +37,11 @@ export function isStudioMcpReady(
 }
 
 export async function issueStudioMcpCredential(
-  departmentId: number,
   password: string,
   signal: AbortSignal,
 ) {
   const issued = await mcpManagementCreate(
-    { name: "HorizonStudio DSH", days: 30, departmentId, password },
+    { name: "HorizonStudio DSH", days: 30, password },
     signal,
   );
   signal.throwIfAborted();
@@ -96,7 +99,7 @@ export async function pairStudioMcpAfterLogin(
   password: string,
   isCurrentSession: () => boolean,
 ) {
-  if (!profile.permissions.includes("studio:read"))
+  if (!profile.account || !profile.permissions.includes("studio:read"))
     throw new Error("studio_access_required");
   const lifetime = new AbortController();
   const readySignal = AbortSignal.any([
@@ -132,7 +135,8 @@ export async function pairStudioMcpAfterLogin(
     if (!target) throw new Error("dsh_unavailable");
     const identity = {
       accountId: profile.account.id,
-      departmentId: profile.activeDepartmentId,
+      tenantId: profile.tenantId,
+      identityBindingId: profile.identityBindingId ?? "",
     };
     const checkSignal = AbortSignal.any([
       lifetime.signal,
@@ -152,11 +156,7 @@ export async function pairStudioMcpAfterLogin(
       lifetime.signal,
       AbortSignal.timeout(35000),
     ]);
-    const token = await issueStudioMcpCredential(
-      profile.activeDepartmentId,
-      password,
-      signal,
-    );
+    const token = await issueStudioMcpCredential(password, signal);
     if (!isCurrentSession()) throw new Error("session_changed");
     await saveStudioMcpCredential(target, { ...identity, token }, signal);
   } finally {

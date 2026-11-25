@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	genidentity "horizon/foundation/gen/identity"
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
 	"mime"
@@ -21,6 +22,25 @@ type smtpConfig struct {
 	Host, User, Password, From, TLS string
 	Port                            int
 	Enabled                         bool
+}
+
+// SendIAMChallenge delivers an authentication challenge from the workspace
+// selected by deployment configuration.
+func (s *Service) SendIAMChallenge(ctx context.Context, tenant, destination, purpose, code, id string) error {
+	if tenant == "" {
+		return governance.Problem("unavailable")
+	}
+	config, err := s.smtpConfiguration(ctx, &identity.Principal{TenantID: tenant, Account: &genidentity.AccountRecord{}})
+	if err != nil {
+		return err
+	}
+	subject := "Horizon contact verification"
+	if purpose == "password_reset" {
+		subject = "Horizon password reset"
+	} else if purpose == "registration" {
+		subject = "Horizon registration"
+	}
+	return s.send(ctx, config, destination, subject, subject+" code\r\n"+code+"\r\nThis code expires 15 minutes after it was requested.", id, true)
 }
 
 func (s *Service) smtpConfiguration(ctx context.Context, p *identity.Principal) (smtpConfig, error) {

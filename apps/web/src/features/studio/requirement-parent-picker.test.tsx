@@ -7,7 +7,7 @@ import { expect, it, vi } from "vitest";
 import { studio } from "./api";
 import { RequirementParentPicker } from "./requirement-parent-picker";
 
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant",
     account: { id: 1 },

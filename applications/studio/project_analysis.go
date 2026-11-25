@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/system/identity"
-	"horizon/internal/repository/dbgen"
+	"horizon/internal/repository/dbgen/studiodb"
 )
 
 func projectAnalyzeDefinition() contracts.Definition {
@@ -45,8 +45,8 @@ func (m *Module) projectAnalyze(ctx context.Context, tx pgx.Tx, input contracts.
 	if !ok {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
-	q := dbgen.New(tx)
-	project, err := q.StudioProjectGet(ctx, dbgen.StudioProjectGetParams{TenantID: p.TenantID, ID: id, CreatedBy: p.Account.ID})
+	q := studiodb.New(tx)
+	project, err := q.StudioProjectGet(ctx, studiodb.StudioProjectGetParams{TenantID: p.TenantID, ID: id, CreatedBy: p.Account.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return contracts.Output{}, contracts.Problem("not_found")
 	}
@@ -56,11 +56,11 @@ func (m *Module) projectAnalyze(ctx context.Context, tx pgx.Tx, input contracts.
 	if m.generateAI == nil {
 		return contracts.Output{}, contracts.Problem("unavailable")
 	}
-	requirements, err := q.StudioRequirementList(ctx, dbgen.StudioRequirementListParams{TenantID: p.TenantID, ProjectID: id, CreatedBy: p.Account.ID})
+	requirements, err := q.StudioRequirementList(ctx, studiodb.StudioRequirementListParams{TenantID: p.TenantID, ProjectID: id, CreatedBy: p.Account.ID})
 	if err != nil {
 		return contracts.Output{}, err
 	}
-	tasks, err := q.StudioItemList(ctx, dbgen.StudioItemListParams{TenantID: p.TenantID, ProjectID: id, CreatedBy: p.Account.ID})
+	tasks, err := q.StudioItemList(ctx, studiodb.StudioItemListParams{TenantID: p.TenantID, ProjectID: id, CreatedBy: p.Account.ID})
 	if err != nil {
 		return contracts.Output{}, err
 	}
@@ -102,7 +102,7 @@ func (m *Module) projectAnalyze(ctx context.Context, tx pgx.Tx, input contracts.
 	if runes := []rune(result); len(runes) > 4000 {
 		result = string(runes[:4000])
 	}
-	at, err := q.StudioProjectSaveAnalysis(ctx, dbgen.StudioProjectSaveAnalysisParams{
+	at, err := q.StudioProjectSaveAnalysis(ctx, studiodb.StudioProjectSaveAnalysisParams{
 		TenantID: p.TenantID, ID: id, CreatedBy: p.Account.ID, AiAnalysis: result,
 	})
 	if err != nil {

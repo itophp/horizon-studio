@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { runtimeRead } from "@/lib/capabilities";
 import { runtimeApplicationV2Schema } from "@/api/generated/runtime";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import { z } from "zod";
 export function useApplicationCatalog() {
   const session = useSession();
@@ -10,7 +10,7 @@ export function useApplicationCatalog() {
       "runtime-catalog",
       session.tenantId,
       session.account.id,
-      session.activeDepartmentId,
+      session.identityBindingId,
       session.authorizationVersion,
     ],
     queryFn: async ({ signal }) =>

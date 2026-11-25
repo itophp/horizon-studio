@@ -101,7 +101,10 @@ func (g *Gateway) CompleteWorkflowPlan(ctx context.Context, parent, nativeInvoca
 	if !ok {
 		return contracts.Problem("unavailable")
 	}
-	native, err := q.CapGetInvocation(ctx, dbgen.CapGetInvocationParams{TenantID: p.TenantID, AccountID: p.Account.ID, InvocationID: nativeInvocation})
+	native, err := q.CapGetInvocation(ctx, dbgen.CapGetInvocationParams{
+		TenantID: p.TenantID, AccountID: p.Account.ID,
+		Binding: p.IdentityBindingID, InvocationID: nativeInvocation,
+	})
 	if err != nil {
 		return err
 	}
@@ -160,15 +163,33 @@ func (g *Gateway) startWorkflowInvocation(ctx context.Context, p *identity.Princ
 		}
 		return nil, cause
 	}
+	if p.MachineCredentialID() != "" {
+		p, err = g.identity.WithReadQueries(q).RefreshMachine(ctx, p, true)
+		if err != nil {
+			return fail(err)
+		}
+		if err = checkInputAccess(p, entry.Definition, request.Input); err != nil {
+			return fail(err)
+		}
+		ctx = identity.WithPrincipal(ctx, p)
+	}
 	if resumed {
 		err = q.CapResumeInvocation(ctx, dbgen.CapResumeInvocationParams{TenantID: p.TenantID, InvocationID: id})
 	} else {
-		_, err = q.CapCreateInvocation(ctx, dbgen.CapCreateInvocationParams{TenantID: p.TenantID, AccountID: p.Account.ID, DepartmentID: p.Account.DepartmentID, InvocationID: id, Capability: entry.Definition.Name, CapabilityVersion: entry.Definition.Version, Origin: string(request.Origin), IdempotencyKey: request.IdempotencyKey, Status: string(contracts.StatusExecuting), Input: input, InputDigest: digest, CorrelationID: trace, CausationID: request.CausationID, TriggerDepth: int32(request.TriggerDepth), TraceID: trace, ExecutionBinding: bindingJSON(request.executionBinding)})
+		_, err = q.CapCreateInvocation(ctx, dbgen.CapCreateInvocationParams{
+			ActingOrganizationID: p.ActingOrganization.OrganizationID, ActorPortal: p.ActingOrganization.Portal,
+			TenantID: p.TenantID, AccountID: p.Account.ID, IdentityBindingID: p.IdentityBindingID,
+			MachineCredentialID: p.MachineCredentialID(), AgentDelegationID: p.AgentDelegationID(),
+			InvocationID: id, Capability: entry.Definition.Name, CapabilityVersion: entry.Definition.Version,
+			Origin: string(request.Origin), IdempotencyKey: request.IdempotencyKey, Status: string(contracts.StatusExecuting),
+			Input: input, InputDigest: digest, CorrelationID: trace, CausationID: request.CausationID,
+			TriggerDepth: int32(request.TriggerDepth), TraceID: trace, ExecutionBinding: bindingJSON(request.executionBinding),
+		})
 	}
 	if err != nil {
 		return fail(err)
 	}
-	if err = g.checkEntry(ctx, q, p, entry, request.Input, true); err != nil {
+	if err = g.checkEntry(ctx, q, p, entry, request, true); err != nil {
 		return fail(err)
 	}
 	if request.Runtime != nil {
@@ -235,7 +256,7 @@ func (g *Gateway) executionPlanTask(ctx context.Context, parent string) (*identi
 		return nil, entry, binding, err
 	}
 	if g.identity != nil {
-		p, err = g.identity.PrincipalForTask(ctx, p.TenantID, p.Account.ID, p.Account.DepartmentID)
+		p, err = g.identity.RefreshTaskPrincipal(ctx, p)
 		if err != nil {
 			return nil, entry, binding, contracts.Problem("forbidden")
 		}

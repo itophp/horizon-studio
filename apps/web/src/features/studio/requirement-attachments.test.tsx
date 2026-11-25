@@ -8,7 +8,7 @@ import { filesContent, filesUpload } from "@/lib/capabilities";
 import { studio } from "./api";
 import { RequirementAttachments } from "./requirement-attachments";
 
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant",
     account: { id: 1 },

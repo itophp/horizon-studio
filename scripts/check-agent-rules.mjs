@@ -2,6 +2,8 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { runHorizon } from "./horizon-cli.mjs";
+
 const defaultRoot = fileURLToPath(new URL("../", import.meta.url));
 const ignored = new Set([
   ".git",
@@ -12,6 +14,23 @@ const ignored = new Set([
   "test-results",
   "coverage",
 ]);
+// Local working copies of other repositories live here without being part of
+// this project; root .gitignore entries for plain directories are skipped so
+// the inventory only covers tracked guidance.
+async function gitignoredDirs(root) {
+  let raw = "";
+  try {
+    raw = await readFile(resolve(root, ".gitignore"), "utf8");
+  } catch {
+    return;
+  }
+  for (const line of raw.split("\n")) {
+    const entry = line.trim().replace(/^\//, "").replace(/\/$/, "");
+    if (!entry || entry.startsWith("#") || /[*?[]/.test(entry)) continue;
+    if (entry.includes("/")) continue;
+    ignored.add(entry);
+  }
+}
 function requireValue(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -182,12 +201,13 @@ export async function checkPolicy(root = defaultRoot, suppliedPolicy) {
       `Repository instruction chain exceeds 32 KiB: ${name}`,
     );
   }
-  const makefile = await fileText(root, "Makefile");
-  const targets = new Set(
-    [...makefile.matchAll(/^([a-z][a-z0-9-]*):(?:\s|$)/gm)].map(
-      (match) => match[1],
-    ),
+  const commands = runHorizon(
+    root,
+    ["commands", "--json"],
+    ["ignore", "pipe", "inherit"],
   );
+  requireValue(commands.status === 0, "Cannot list Horizon CLI commands");
+  const targets = new Set(JSON.parse(commands.stdout));
   requireValue(
     policy.gates &&
       typeof policy.gates === "object" &&
@@ -197,7 +217,7 @@ export async function checkPolicy(root = defaultRoot, suppliedPolicy) {
   for (const [gate, target] of Object.entries(policy.gates))
     requireValue(
       targets.has(target),
-      `Gate ${gate} references missing make target: ${target}`,
+      `Gate ${gate} references missing Horizon CLI command: ${target}`,
     );
   requireValue(
     Array.isArray(policy.tasks) && policy.tasks.length > 0,
@@ -226,6 +246,7 @@ export async function checkPolicy(root = defaultRoot, suppliedPolicy) {
         `Task ${task.id} references unknown gate: ${gate}`,
       );
   }
+  await gitignoredDirs(root);
   const discovered = await discover(root);
   sameFiles(discovered.instructions, policy.instructions, "AGENTS.md");
   sameFiles(discovered.skills, skillFiles, "SKILL.md");

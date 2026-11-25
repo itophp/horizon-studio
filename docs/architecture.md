@@ -1,6 +1,6 @@
 # AI-Native 概念架构与运行机制
 
-以 2026-11-06 工作区代码为依据。Horizon 为单仓库、单 Go 服务的能力中心框架：能力是业务契约，Gateway 是业务执行入口，Eino 提供持久化流程和 Agent 执行，事件将已提交事实与后续 AI 行为连接起来。图展示当前框架结构，不表示所有业务模块已完成同等程度的接入。
+以 2026-11-06 租户代码为依据。Horizon 为单仓库、单 Go 服务的能力中心框架：能力是业务契约，Gateway 是业务执行入口，Eino 提供持久化流程和 Agent 执行，事件将已提交事实与后续 AI 行为连接起来。图展示当前框架结构，不表示所有业务模块已完成同等程度的接入。
 
 ![系统概念架构：功能模块与层级](assets/horizon-system-architecture.svg)
 
@@ -139,7 +139,7 @@ Gateway 风险确认与业务人工审核分别设计。前者允许执行一个
 
 ## 8. 验证与运维边界
 
-`make ci-fast` 为非浏览器门禁；SQL/权限改动加真实隔离 PostgreSQL 验证，`make test-security` 包含数据库集成集合。浏览器 E2E 依现行指示暂停；推送会触发远程 CI 的浏览器阶段，因此本地提交不等于推送授权。
+`./horizon-cli ci-fast` 为非浏览器门禁；SQL/权限改动加真实隔离 PostgreSQL 验证，`./horizon-cli test-security` 包含数据库集成集合。浏览器 E2E 依现行指示暂停；推送会触发远程 CI 的浏览器阶段，因此本地提交不等于推送授权。
 
 模型、原生客户端、浏览器与远程 CI 验收分别记录。本地启动及手动流程按钮见 [README](../README.md)，实现细节见 [编排方案](orchestration-plan.md)、[安全约定](security.md) 和 [测试矩阵](testing.md)。
 

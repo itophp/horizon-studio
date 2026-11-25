@@ -40,7 +40,7 @@ type Engine struct {
 }
 
 func New(core *governance.Core, definitions []Definition) *Engine {
-	return NewWithGraphs(core, definitions, spec.BuiltinGraphs())
+	return NewWithGraphs(core, definitions, nil)
 }
 func NewWithGraphs(core *governance.Core, definitions []Definition, graphs []spec.GraphDefinition) *Engine {
 	e := &Engine{Core: core, definitions: map[string]Definition{}, cache: map[string]compose.Runnable[map[string]any, map[string]any]{}, infos: map[string]*compose.GraphInfo{}}
@@ -104,7 +104,7 @@ func (e *Engine) Attach(g *gateway.Gateway, r *registry.Registry) error {
 			continue
 		}
 		if _, _, err := e.compileWithGraph(context.Background(), d, true); err != nil {
-			return err
+			return fmt.Errorf("%s@%s: %w", d.Name, d.Version, err)
 		}
 	}
 	return nil
@@ -161,14 +161,22 @@ func (e *Engine) startTx(ctx context.Context, tx pgx.Tx, in contracts.Input, pla
 	if err = q.OrchStartLock(ctx, p.TenantID+":"+startKey); err != nil {
 		return contracts.Output{}, err
 	}
-	id, err := q.OrchFindStart(ctx, dbgen.OrchFindStartParams{TenantID: p.TenantID, AccountID: p.Account.ID, CheckpointKey: startKey})
+	id, err := q.OrchFindStart(ctx, dbgen.OrchFindStartParams{
+		TenantID: p.TenantID, AccountID: p.Account.ID,
+		IdentityBindingID: p.IdentityBindingID, CheckpointKey: startKey,
+	})
 	if err == nil {
 		return accepted(id), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return contracts.Output{}, err
 	}
-	row, err := q.AICreateRun(ctx, dbgen.AICreateRunParams{TenantID: p.TenantID, AccountID: p.Account.ID, DepartmentID: p.Account.DepartmentID, Agent: "orchestration", InstructionVersion: d.Hash(), Question: name, TraceID: meta.CorrelationID, CorrelationID: meta.CorrelationID, CausationID: meta.InvocationID, TriggerDepth: int32(meta.Depth + 1), Origin: string(contracts.OriginWorkflow), Context: []byte(`{}`)})
+	row, err := q.AICreateRun(ctx, dbgen.AICreateRunParams{
+		TenantID: p.TenantID, AccountID: p.Account.ID, IdentityBindingID: p.IdentityBindingID,
+		Agent: "orchestration", InstructionVersion: d.Hash(), Question: name, TraceID: meta.CorrelationID,
+		CorrelationID: meta.CorrelationID, CausationID: meta.InvocationID, TriggerDepth: int32(meta.Depth + 1),
+		Origin: string(contracts.OriginWorkflow), Context: []byte(`{}`),
+	})
 	if err != nil {
 		return contracts.Output{}, err
 	}
@@ -208,7 +216,12 @@ func (e *Engine) startTx(ctx context.Context, tx pgx.Tx, in contracts.Input, pla
 			return contracts.Output{}, err
 		}
 	}
-	m := manifest{PlanResult: planResult, AuthorityStamp: stamp, Format: 1, Definition: d, Hash: d.Hash(), Input: args, Correlation: meta.CorrelationID, Parent: meta.InvocationID, Depth: meta.Depth + 1}
+	m := manifest{
+		PlanResult: planResult, AuthorityStamp: stamp, Format: 1, Definition: d, Hash: d.Hash(), Input: args,
+		PlanCapability: meta.Capability + "@" + meta.Version,
+		Correlation:    meta.CorrelationID, Parent: meta.InvocationID, Depth: meta.Depth + 1,
+		MachineCredentialID: p.MachineCredentialID(), AgentDelegationID: p.AgentDelegationID(),
+	}
 	state := execution{ID: row.ID, Tenant: p.TenantID, Account: p.Account.ID, Manifest: m}
 	ctx = context.WithValue(ctx, executionKey{}, state)
 	raw, err := json.Marshal(m)
@@ -238,7 +251,7 @@ func (e *Engine) Query(ctx context.Context, in contracts.Input) (contracts.Outpu
 		return contracts.Output{}, err
 	}
 	row, err := dbgen.New(e.Core.Pool).AIGetRun(ctx, dbgen.AIGetRunParams{TenantID: p.TenantID, AccountID: p.Account.ID, ID: id})
-	if errors.Is(err, pgx.ErrNoRows) || err == nil && row.Agent != "orchestration" {
+	if errors.Is(err, pgx.ErrNoRows) || err == nil && (row.Agent != "orchestration" || row.IdentityBindingID != p.IdentityBindingID) {
 		return contracts.Output{}, contracts.Problem("not_found")
 	}
 	if err != nil {
@@ -255,7 +268,10 @@ func (e *Engine) CancelTx(ctx context.Context, tx pgx.Tx, in contracts.Input) (c
 	if err != nil {
 		return contracts.Output{}, err
 	}
-	n, err := dbgen.New(tx).OrchSetStatus(ctx, dbgen.OrchSetStatusParams{TenantID: p.TenantID, AccountID: p.Account.ID, ID: id, Status: "cancelled"})
+	n, err := dbgen.New(tx).OrchCancelRun(ctx, dbgen.OrchCancelRunParams{
+		TenantID: p.TenantID, AccountID: p.Account.ID,
+		IdentityBindingID: p.IdentityBindingID, ID: id,
+	})
 	if err != nil {
 		return contracts.Output{}, err
 	}
@@ -347,11 +363,6 @@ func (e *Engine) execute(ctx context.Context, row dbgen.OrchCandidatesRow) error
 		_, err := q.OrchSetStatus(ctx, dbgen.OrchSetStatusParams{TenantID: row.TenantID, AccountID: row.AccountID, ID: row.ID, Status: value, ErrorCode: code})
 		return err
 	}
-	p, err := e.Core.Identity.PrincipalForTask(ctx, row.TenantID, row.AccountID, row.DepartmentID)
-	if err != nil {
-		return status("failed", "forbidden")
-	}
-	ctx = identity.WithPrincipal(ctx, p)
 	state := execution{ID: row.ID, Tenant: row.TenantID, Account: row.AccountID}
 	ctx = context.WithValue(ctx, executionKey{}, state)
 	store := checkpointStore{core: e.Core, q: q}
@@ -366,6 +377,11 @@ func (e *Engine) execute(ctx context.Context, row dbgen.OrchCandidatesRow) error
 	if json.Unmarshal(raw, &m) != nil || m.Format != 1 || m.Hash != m.Definition.Hash() {
 		return status("failed", "invalid")
 	}
+	p, err := e.workflowPrincipal(ctx, row.TenantID, row.AccountID, row.IdentityBindingID, m)
+	if err != nil {
+		return status("failed", "forbidden")
+	}
+	ctx = identity.WithPrincipal(ctx, p)
 	currentDef, ok := e.definitions[m.Definition.Name+"@"+m.Definition.Version]
 	if !ok || currentDef.Hash() != m.Hash {
 		return status("failed", "version_mismatch")
@@ -374,7 +390,7 @@ func (e *Engine) execute(ctx context.Context, row dbgen.OrchCandidatesRow) error
 		return status("failed", "forbidden")
 	}
 	if m.PlanResult != "" {
-		ctx = gateway.WithTaskReference(ctx, gateway.TaskReference{RunID: state.ID, TenantID: state.Tenant, AccountID: state.Account, DepartmentID: row.DepartmentID})
+		ctx = gateway.WithTaskReference(ctx, gateway.TaskReference{RunID: state.ID, TenantID: state.Tenant, AccountID: state.Account, IdentityBindingID: row.IdentityBindingID})
 	}
 	if m.Definition.FreshContext {
 		stamp, e := authorityStamp(ctx, q, p)
@@ -481,6 +497,16 @@ func (e *Engine) execute(ctx context.Context, row dbgen.OrchCandidatesRow) error
 		}
 	}
 	return status("completed", "")
+}
+
+func (e *Engine) workflowPrincipal(ctx context.Context, tenant string, accountID int64, binding string, m manifest) (*identity.Principal, error) {
+	if m.MachineCredentialID != "" {
+		if binding != "" || m.PlanResult == "" {
+			return nil, contracts.Problem("forbidden")
+		}
+		return e.Core.Identity.PrincipalForMachineInvocation(ctx, tenant, accountID, m.MachineCredentialID, m.AgentDelegationID)
+	}
+	return e.Core.Identity.PrincipalForBoundTask(ctx, tenant, accountID, binding)
 }
 
 // ActivationSources is a pure catalog lookup used before risk approval and again at execution.

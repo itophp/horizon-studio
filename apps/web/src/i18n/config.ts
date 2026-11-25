@@ -5,8 +5,12 @@ import zhShowcase from "./locales/zh-CN/showcase.json";
 import enRuntime from "./locales/en/runtime.json";
 import zhRuntime from "./locales/zh-CN/runtime.json";
 import enArticles from "./locales/en/articles.json";
+import enAutomation from "./locales/en/automation.json";
+import zhAutomation from "./locales/zh-CN/automation.json";
 import enDrive from "./locales/en/drive.json";
 import zhDrive from "./locales/zh-CN/drive.json";
+import enMail from "./locales/en/mail.json";
+import zhMail from "./locales/zh-CN/mail.json";
 import { frontendExtensions } from "@/app/plugins/builtins";
 import { assertTranslationNamespaces } from "@/app/plugins/registry";
 import zhArticles from "./locales/zh-CN/articles.json";
@@ -52,7 +56,9 @@ const coreResources = {
     showcase: enShowcase,
     runtime: enRuntime,
     articles: enArticles,
+    automation: enAutomation,
     drive: enDrive,
+    mail: enMail,
     admin: enAdmin,
     ai: enAi,
     capability: enCapability,
@@ -72,7 +78,9 @@ const coreResources = {
     showcase: zhShowcase,
     runtime: zhRuntime,
     articles: zhArticles,
+    automation: zhAutomation,
     drive: zhDrive,
+    mail: zhMail,
     admin: zhAdmin,
     ai: zhAi,
     capability: zhCapability,

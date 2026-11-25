@@ -27,20 +27,6 @@ func (q *Queries) MCPActiveCount(ctx context.Context, arg MCPActiveCountParams) 
 	return count, err
 }
 
-const mCPAddTokenTool = `-- name: MCPAddTokenTool :exec
-INSERT INTO mcp_token_tools (token_id, tool) VALUES ($1, $2)
-`
-
-type MCPAddTokenToolParams struct {
-	TokenID int64
-	Tool    string
-}
-
-func (q *Queries) MCPAddTokenTool(ctx context.Context, arg MCPAddTokenToolParams) error {
-	_, err := q.db.Exec(ctx, mCPAddTokenTool, arg.TokenID, arg.Tool)
-	return err
-}
-
 const mCPAdminRevokeToken = `-- name: MCPAdminRevokeToken :one
 UPDATE mcp_tokens SET revoked_at=now(),revoked_by=$1
 WHERE tenant_id=$2 AND id=$3 AND revoked_at IS NULL RETURNING id
@@ -60,16 +46,16 @@ func (q *Queries) MCPAdminRevokeToken(ctx context.Context, arg MCPAdminRevokeTok
 }
 
 const mCPAuthenticateToken = `-- name: MCPAuthenticateToken :one
-SELECT id, tenant_id, account_id, department_id, token_hash
+SELECT id, tenant_id, account_id, token_hash, COALESCE(identity_binding_id::text, '')::text AS identity_binding_id
 FROM mcp_tokens WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
 `
 
 type MCPAuthenticateTokenRow struct {
-	ID           int64
-	TenantID     string
-	AccountID    int64
-	DepartmentID int64
-	TokenHash    string
+	ID                int64
+	TenantID          string
+	AccountID         int64
+	TokenHash         string
+	IdentityBindingID string
 }
 
 func (q *Queries) MCPAuthenticateToken(ctx context.Context, tokenHash string) (MCPAuthenticateTokenRow, error) {
@@ -79,85 +65,80 @@ func (q *Queries) MCPAuthenticateToken(ctx context.Context, tokenHash string) (M
 		&i.ID,
 		&i.TenantID,
 		&i.AccountID,
-		&i.DepartmentID,
 		&i.TokenHash,
+		&i.IdentityBindingID,
 	)
 	return i, err
 }
 
 const mCPCreateToken = `-- name: MCPCreateToken :one
-INSERT INTO mcp_tokens (tenant_id, account_id, department_id, name, token_hash, token_prefix, expires_at)
-SELECT $1, $2, $3, $4, $5, $6, COALESCE($7::timestamptz, now()+make_interval(days=>$8::int))
-WHERE EXISTS(SELECT 1 FROM iam_accounts a WHERE a.tenant_id=$1 AND a.id=$2 AND a.status='active'
-AND (a.department_id=$3 OR EXISTS(SELECT 1 FROM iam_department_memberships m WHERE m.tenant_id=a.tenant_id AND m.account_id=a.id AND m.department_id=$3)))
-RETURNING id, tenant_id, account_id, department_id, name, token_prefix, created_at, expires_at, revoked_at, last_used_at
+INSERT INTO mcp_tokens (tenant_id, account_id, name, token_hash, token_prefix, expires_at, identity_binding_id)
+SELECT subject.tenant_id, subject.account_id, $1, $2, $3,
+       COALESCE($4::timestamptz, now() + make_interval(days => $5::int)),
+       NULLIF($6::text, '')::uuid
+FROM iam_active_account_subjects subject
+WHERE subject.tenant_id = $7 AND subject.account_id = $8
+AND ($6::text = '' OR EXISTS (
+    SELECT 1 FROM iam_active_identity_bindings binding
+    WHERE binding.tenant_id = subject.tenant_id AND binding.principal_id = subject.principal_id
+      AND binding.id = NULLIF($6::text, '')::uuid))
+RETURNING id, name, token_prefix, created_at, expires_at
 `
 
 type MCPCreateTokenParams struct {
-	TenantID        string
-	AccountID       int64
-	DepartmentID    int64
-	Name            string
-	TokenHash       string
-	TokenPrefix     string
-	PreservedExpiry pgtype.Timestamptz
-	ValidDays       int32
+	Name              string
+	TokenHash         string
+	TokenPrefix       string
+	PreservedExpiry   pgtype.Timestamptz
+	ValidDays         int32
+	IdentityBindingID string
+	TenantID          string
+	AccountID         int64
 }
 
 type MCPCreateTokenRow struct {
-	ID           int64
-	TenantID     string
-	AccountID    int64
-	DepartmentID int64
-	Name         string
-	TokenPrefix  string
-	CreatedAt    pgtype.Timestamptz
-	ExpiresAt    pgtype.Timestamptz
-	RevokedAt    pgtype.Timestamptz
-	LastUsedAt   pgtype.Timestamptz
+	ID          int64
+	Name        string
+	TokenPrefix string
+	CreatedAt   pgtype.Timestamptz
+	ExpiresAt   pgtype.Timestamptz
 }
 
 func (q *Queries) MCPCreateToken(ctx context.Context, arg MCPCreateTokenParams) (MCPCreateTokenRow, error) {
 	row := q.db.QueryRow(ctx, mCPCreateToken,
-		arg.TenantID,
-		arg.AccountID,
-		arg.DepartmentID,
 		arg.Name,
 		arg.TokenHash,
 		arg.TokenPrefix,
 		arg.PreservedExpiry,
 		arg.ValidDays,
+		arg.IdentityBindingID,
+		arg.TenantID,
+		arg.AccountID,
 	)
 	var i MCPCreateTokenRow
 	err := row.Scan(
 		&i.ID,
-		&i.TenantID,
-		&i.AccountID,
-		&i.DepartmentID,
 		&i.Name,
 		&i.TokenPrefix,
 		&i.CreatedAt,
 		&i.ExpiresAt,
-		&i.RevokedAt,
-		&i.LastUsedAt,
 	)
 	return i, err
 }
 
 const mCPInsertAudit = `-- name: MCPInsertAudit :exec
-INSERT INTO mcp_call_audits (tenant_id, account_id, token_id, department_id, tool, result_code, duration_ms, request_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO mcp_call_audits (tenant_id, account_id, token_id, tool, result_code, duration_ms, request_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type MCPInsertAuditParams struct {
-	TenantID     string
-	AccountID    int64
-	TokenID      int64
-	DepartmentID int64
-	Tool         string
-	ResultCode   string
-	DurationMs   int64
-	RequestID    string
+	TenantID   string
+	AccountID  int64
+	TokenID    int64
+	Tool       string
+	ResultCode string
+	DurationMs int64
+	RequestID  string
 }
 
 func (q *Queries) MCPInsertAudit(ctx context.Context, arg MCPInsertAuditParams) error {
@@ -165,7 +146,6 @@ func (q *Queries) MCPInsertAudit(ctx context.Context, arg MCPInsertAuditParams) 
 		arg.TenantID,
 		arg.AccountID,
 		arg.TokenID,
-		arg.DepartmentID,
 		arg.Tool,
 		arg.ResultCode,
 		arg.DurationMs,
@@ -175,28 +155,31 @@ func (q *Queries) MCPInsertAudit(ctx context.Context, arg MCPInsertAuditParams) 
 }
 
 const mCPListAudits = `-- name: MCPListAudits :many
-SELECT id, token_id, department_id, tool, result_code, duration_ms, request_id, created_at
-FROM mcp_call_audits WHERE tenant_id = $1 AND account_id = $2 ORDER BY id DESC LIMIT 100
+SELECT audit.id, audit.token_id, audit.tool, audit.result_code, audit.duration_ms, audit.request_id, audit.created_at
+FROM mcp_call_audits audit JOIN mcp_tokens token ON token.tenant_id = audit.tenant_id AND token.id = audit.token_id
+WHERE audit.tenant_id = $1 AND audit.account_id = $2
+AND token.identity_binding_id IS NOT DISTINCT FROM NULLIF($3::text, '')::uuid
+ORDER BY audit.id DESC LIMIT 100
 `
 
 type MCPListAuditsParams struct {
-	TenantID  string
-	AccountID int64
+	TenantID          string
+	AccountID         int64
+	IdentityBindingID string
 }
 
 type MCPListAuditsRow struct {
-	ID           int64
-	TokenID      int64
-	DepartmentID int64
-	Tool         string
-	ResultCode   string
-	DurationMs   int64
-	RequestID    string
-	CreatedAt    pgtype.Timestamptz
+	ID         int64
+	TokenID    int64
+	Tool       string
+	ResultCode string
+	DurationMs int64
+	RequestID  string
+	CreatedAt  pgtype.Timestamptz
 }
 
 func (q *Queries) MCPListAudits(ctx context.Context, arg MCPListAuditsParams) ([]MCPListAuditsRow, error) {
-	rows, err := q.db.Query(ctx, mCPListAudits, arg.TenantID, arg.AccountID)
+	rows, err := q.db.Query(ctx, mCPListAudits, arg.TenantID, arg.AccountID, arg.IdentityBindingID)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +190,6 @@ func (q *Queries) MCPListAudits(ctx context.Context, arg MCPListAuditsParams) ([
 		if err := rows.Scan(
 			&i.ID,
 			&i.TokenID,
-			&i.DepartmentID,
 			&i.Tool,
 			&i.ResultCode,
 			&i.DurationMs,
@@ -225,29 +207,31 @@ func (q *Queries) MCPListAudits(ctx context.Context, arg MCPListAuditsParams) ([
 }
 
 const mCPListTokens = `-- name: MCPListTokens :many
-SELECT id, department_id, name, token_prefix, created_at, expires_at, revoked_at, last_used_at, COALESCE(revoked_by,0)::bigint AS revoked_by
-FROM mcp_tokens WHERE tenant_id = $1 AND account_id = $2 ORDER BY (revoked_at IS NULL AND expires_at>now()) DESC, id DESC LIMIT 100
+SELECT id, name, token_prefix, created_at, expires_at, revoked_at, last_used_at, COALESCE(revoked_by,0)::bigint AS revoked_by
+FROM mcp_tokens WHERE tenant_id = $1 AND account_id = $2
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF($3::text, '')::uuid
+ORDER BY (revoked_at IS NULL AND expires_at>now()) DESC, id DESC LIMIT 100
 `
 
 type MCPListTokensParams struct {
-	TenantID  string
-	AccountID int64
+	TenantID          string
+	AccountID         int64
+	IdentityBindingID string
 }
 
 type MCPListTokensRow struct {
-	ID           int64
-	DepartmentID int64
-	Name         string
-	TokenPrefix  string
-	CreatedAt    pgtype.Timestamptz
-	ExpiresAt    pgtype.Timestamptz
-	RevokedAt    pgtype.Timestamptz
-	LastUsedAt   pgtype.Timestamptz
-	RevokedBy    int64
+	ID          int64
+	Name        string
+	TokenPrefix string
+	CreatedAt   pgtype.Timestamptz
+	ExpiresAt   pgtype.Timestamptz
+	RevokedAt   pgtype.Timestamptz
+	LastUsedAt  pgtype.Timestamptz
+	RevokedBy   int64
 }
 
 func (q *Queries) MCPListTokens(ctx context.Context, arg MCPListTokensParams) ([]MCPListTokensRow, error) {
-	rows, err := q.db.Query(ctx, mCPListTokens, arg.TenantID, arg.AccountID)
+	rows, err := q.db.Query(ctx, mCPListTokens, arg.TenantID, arg.AccountID, arg.IdentityBindingID)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +241,6 @@ func (q *Queries) MCPListTokens(ctx context.Context, arg MCPListTokensParams) ([
 		var i MCPListTokensRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.DepartmentID,
 			&i.Name,
 			&i.TokenPrefix,
 			&i.CreatedAt,
@@ -277,7 +260,11 @@ func (q *Queries) MCPListTokens(ctx context.Context, arg MCPListTokensParams) ([
 }
 
 const mCPLockOwner = `-- name: MCPLockOwner :one
-SELECT id,password_hash FROM iam_accounts WHERE tenant_id=$1 AND id=$2 AND status='active' FOR UPDATE
+SELECT placement.id, credential.password_hash
+FROM iam_accounts placement
+JOIN iam_active_account_subjects subject ON subject.tenant_id = placement.tenant_id AND subject.account_id = placement.id
+JOIN iam_password_credentials credential ON credential.login_account_id = subject.login_account_id
+WHERE placement.tenant_id = $1 AND placement.id = $2 FOR UPDATE OF placement, credential
 `
 
 type MCPLockOwnerParams struct {
@@ -320,101 +307,60 @@ func (q *Queries) MCPPruneTokenBatch(ctx context.Context) error {
 }
 
 const mCPRevokeToken = `-- name: MCPRevokeToken :one
-UPDATE mcp_tokens SET revoked_at = now(), revoked_by=account_id
+UPDATE mcp_tokens SET revoked_at = now(), revoked_by = account_id
 WHERE tenant_id = $1 AND account_id = $2 AND id = $3 AND revoked_at IS NULL
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF($4::text, '')::uuid
 RETURNING id
 `
 
 type MCPRevokeTokenParams struct {
-	TenantID  string
-	AccountID int64
-	ID        int64
+	TenantID          string
+	AccountID         int64
+	ID                int64
+	IdentityBindingID string
 }
 
 func (q *Queries) MCPRevokeToken(ctx context.Context, arg MCPRevokeTokenParams) (int64, error) {
-	row := q.db.QueryRow(ctx, mCPRevokeToken, arg.TenantID, arg.AccountID, arg.ID)
+	row := q.db.QueryRow(ctx, mCPRevokeToken,
+		arg.TenantID,
+		arg.AccountID,
+		arg.ID,
+		arg.IdentityBindingID,
+	)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
 }
 
-const mCPRotationDepartment = `-- name: MCPRotationDepartment :one
-SELECT department_id FROM mcp_tokens WHERE tenant_id=$1 AND account_id=$2 AND id=$3 AND revoked_at IS NULL AND expires_at>now()
-`
-
-type MCPRotationDepartmentParams struct {
-	TenantID  string
-	AccountID int64
-	ID        int64
-}
-
-func (q *Queries) MCPRotationDepartment(ctx context.Context, arg MCPRotationDepartmentParams) (int64, error) {
-	row := q.db.QueryRow(ctx, mCPRotationDepartment, arg.TenantID, arg.AccountID, arg.ID)
-	var department_id int64
-	err := row.Scan(&department_id)
-	return department_id, err
-}
-
 const mCPTokenForRotation = `-- name: MCPTokenForRotation :one
-SELECT id, department_id, name, expires_at FROM mcp_tokens
+SELECT name, expires_at FROM mcp_tokens
 WHERE tenant_id = $1 AND account_id = $2 AND id = $3 AND revoked_at IS NULL AND expires_at > now()
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF($4::text, '')::uuid
 FOR UPDATE
 `
 
 type MCPTokenForRotationParams struct {
-	TenantID  string
-	AccountID int64
-	ID        int64
+	TenantID          string
+	AccountID         int64
+	ID                int64
+	IdentityBindingID string
 }
 
 type MCPTokenForRotationRow struct {
-	ID           int64
-	DepartmentID int64
-	Name         string
-	ExpiresAt    pgtype.Timestamptz
+	Name      string
+	ExpiresAt pgtype.Timestamptz
 }
 
 func (q *Queries) MCPTokenForRotation(ctx context.Context, arg MCPTokenForRotationParams) (MCPTokenForRotationRow, error) {
-	row := q.db.QueryRow(ctx, mCPTokenForRotation, arg.TenantID, arg.AccountID, arg.ID)
-	var i MCPTokenForRotationRow
-	err := row.Scan(
-		&i.ID,
-		&i.DepartmentID,
-		&i.Name,
-		&i.ExpiresAt,
+	row := q.db.QueryRow(ctx, mCPTokenForRotation,
+		arg.TenantID,
+		arg.AccountID,
+		arg.ID,
+		arg.IdentityBindingID,
 	)
+	var i MCPTokenForRotationRow
+	err := row.Scan(&i.Name, &i.ExpiresAt)
 	return i, err
-}
-
-const mCPTokenTools = `-- name: MCPTokenTools :many
-SELECT tt.tool FROM mcp_token_tools tt JOIN mcp_tokens t ON t.id = tt.token_id
-WHERE t.tenant_id = $1 AND t.account_id = $2 AND t.id = $3 ORDER BY tt.tool
-`
-
-type MCPTokenToolsParams struct {
-	TenantID  string
-	AccountID int64
-	ID        int64
-}
-
-func (q *Queries) MCPTokenTools(ctx context.Context, arg MCPTokenToolsParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, mCPTokenTools, arg.TenantID, arg.AccountID, arg.ID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []string{}
-	for rows.Next() {
-		var tool string
-		if err := rows.Scan(&tool); err != nil {
-			return nil, err
-		}
-		items = append(items, tool)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const mCPTouchToken = `-- name: MCPTouchToken :exec

@@ -9,7 +9,7 @@ import (
 
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/system/identity"
-	"horizon/internal/repository/dbgen"
+	"horizon/internal/repository/dbgen/studiodb"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -47,12 +47,12 @@ func (m *Module) itemLinkSession(ctx context.Context, tx pgx.Tx, in contracts.In
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
 
-	q := dbgen.New(tx)
-	linked, err := q.StudioItemLinkSession(ctx, dbgen.StudioItemLinkSessionParams{
+	q := studiodb.New(tx)
+	linked, err := q.StudioItemLinkSession(ctx, studiodb.StudioItemLinkSessionParams{
 		TenantID: p.TenantID, CreatedBy: p.Account.ID, ItemID: int64(id), SessionID: sessionID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		row, readErr := q.StudioItemGet(ctx, dbgen.StudioItemGetParams{
+		row, readErr := q.StudioItemGet(ctx, studiodb.StudioItemGetParams{
 			TenantID: p.TenantID, CreatedBy: p.Account.ID, ID: int64(id),
 		})
 		if errors.Is(readErr, pgx.ErrNoRows) || (readErr == nil && !row.DshSessionID.Valid) {
@@ -131,7 +131,7 @@ func (m *Module) sessionContext(ctx context.Context, in contracts.Input) (contra
 	if !valid {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
-	row, err := dbgen.New(m.pool).StudioSessionContext(ctx, dbgen.StudioSessionContextParams{
+	row, err := studiodb.New(m.pool).StudioSessionContext(ctx, studiodb.StudioSessionContextParams{
 		TenantID: p.TenantID, CreatedBy: p.Account.ID, DshSessionID: sessionID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {

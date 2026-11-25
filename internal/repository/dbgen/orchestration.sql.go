@@ -27,18 +27,45 @@ func (q *Queries) OrchCancelPendingApprovals(ctx context.Context, arg OrchCancel
 	return err
 }
 
+const orchCancelRun = `-- name: OrchCancelRun :execrows
+UPDATE ai_runs SET status = 'cancelled', finished_at = now()
+WHERE tenant_id = $1 AND account_id = $2 AND id = $3 AND agent = 'orchestration'
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF($4::text, '')::uuid
+AND status IN ('running','awaiting_approval')
+`
+
+type OrchCancelRunParams struct {
+	TenantID          string
+	AccountID         int64
+	ID                int64
+	IdentityBindingID string
+}
+
+func (q *Queries) OrchCancelRun(ctx context.Context, arg OrchCancelRunParams) (int64, error) {
+	result, err := q.db.Exec(ctx, orchCancelRun,
+		arg.TenantID,
+		arg.AccountID,
+		arg.ID,
+		arg.IdentityBindingID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const orchCandidates = `-- name: OrchCandidates :many
-SELECT r.tenant_id, r.account_id, r.department_id, r.id
+SELECT r.tenant_id, r.account_id, r.id, COALESCE(r.identity_binding_id::text, '')::text AS identity_binding_id
 FROM ai_runs r JOIN orch_checkpoints c ON c.tenant_id = r.tenant_id AND c.run_id = r.id AND c.checkpoint_key = 'manifest'
 WHERE r.agent = 'orchestration' AND r.status IN ('running', 'awaiting_approval') AND c.lease_until < now()
 ORDER BY c.lease_until, r.id LIMIT 16
 `
 
 type OrchCandidatesRow struct {
-	TenantID     string
-	AccountID    int64
-	DepartmentID int64
-	ID           int64
+	TenantID          string
+	AccountID         int64
+	ID                int64
+	IdentityBindingID string
 }
 
 func (q *Queries) OrchCandidates(ctx context.Context) ([]OrchCandidatesRow, error) {
@@ -53,8 +80,8 @@ func (q *Queries) OrchCandidates(ctx context.Context) ([]OrchCandidatesRow, erro
 		if err := rows.Scan(
 			&i.TenantID,
 			&i.AccountID,
-			&i.DepartmentID,
 			&i.ID,
+			&i.IdentityBindingID,
 		); err != nil {
 			return nil, err
 		}
@@ -95,16 +122,23 @@ func (q *Queries) OrchClaim(ctx context.Context, arg OrchClaimParams) (int64, er
 const orchFindStart = `-- name: OrchFindStart :one
 SELECT c.run_id FROM orch_checkpoints c JOIN ai_runs r ON r.tenant_id = c.tenant_id AND r.id = c.run_id
 WHERE c.tenant_id = $1 AND r.account_id = $2 AND c.checkpoint_key = $3
+AND r.identity_binding_id IS NOT DISTINCT FROM NULLIF($4::text, '')::uuid
 `
 
 type OrchFindStartParams struct {
-	TenantID      string
-	AccountID     int64
-	CheckpointKey string
+	TenantID          string
+	AccountID         int64
+	CheckpointKey     string
+	IdentityBindingID string
 }
 
 func (q *Queries) OrchFindStart(ctx context.Context, arg OrchFindStartParams) (int64, error) {
-	row := q.db.QueryRow(ctx, orchFindStart, arg.TenantID, arg.AccountID, arg.CheckpointKey)
+	row := q.db.QueryRow(ctx, orchFindStart,
+		arg.TenantID,
+		arg.AccountID,
+		arg.CheckpointKey,
+		arg.IdentityBindingID,
+	)
 	var run_id int64
 	err := row.Scan(&run_id)
 	return run_id, err

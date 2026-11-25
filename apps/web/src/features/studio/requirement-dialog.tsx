@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NotificationEditor as MarkdownEditor } from "@/features/governance/notification-editor";
-import { ErrorBanner } from "@/features/administration/shared";
+import { ErrorBanner } from "@/features/identity/shared";
 import type { Requirement } from "./api";
 import { RequirementParentPicker } from "./requirement-parent-picker";
 

@@ -22,8 +22,8 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { useSession } from "@/features/administration/auth";
-import { ErrorBanner, Loading } from "@/features/administration/shared";
+import { useSession } from "@/features/identity/auth";
+import { ErrorBanner, Loading } from "@/features/identity/shared";
 import { studioProjectsOptions, studioSummaryOptions } from "./project-queries";
 import { StudioApplicationAccess } from "./access";
 import { studioProjectsPath } from "./routes";
@@ -76,7 +76,7 @@ function StudioWorkbench() {
   const scope = [
     profile.tenantId,
     profile.account.id,
-    profile.activeDepartmentId,
+    profile.identityBindingId,
   ];
   const canWrite = profile.permissions.includes("studio:write");
   const canControl = profile.permissions.includes("studio:control");
@@ -180,12 +180,13 @@ function StudioWorkbench() {
           )}
         </div>
         <div className="flex min-w-0 items-center gap-1.5">
-          {project && (
+          {project && profile.account && (
             <AgentPairing
               key={scope.join(":")}
               sessionScope={scope.join(":")}
               accountId={profile.account.id}
-              departmentId={profile.activeDepartmentId}
+              tenantId={profile.tenantId}
+              identityBindingId={profile.identityBindingId ?? ""}
             />
           )}
           {project && canControl && (

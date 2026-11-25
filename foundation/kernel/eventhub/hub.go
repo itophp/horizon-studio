@@ -27,14 +27,15 @@ type Event struct {
 	Payload       map[string]any
 	InvocationID  string
 	AccountID     int64
-	DepartmentID  int64
-	CorrelationID string
-	CausationID   string
-	Depth         int
-	CreatedAt     time.Time
-	AIStatus      string
-	AIPolicy      string
-	AIRunID       int64
+
+	IdentityBindingID string
+	CorrelationID     string
+	CausationID       string
+	Depth             int
+	CreatedAt         time.Time
+	AIStatus          string
+	AIPolicy          string
+	AIRunID           int64
 }
 
 // Subscriber handles an event. It runs off the request path.
@@ -81,14 +82,16 @@ type Store struct{ pool *pgxpool.Pool }
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
 // List returns the newest events with the outcome of their AI trigger, if any.
-func (s *Store) List(ctx context.Context, tenant string, accountID int64, reviewer bool, limit int) ([]Event, error) {
+func (s *Store) List(ctx context.Context, tenant string, accountID int64, binding string, reviewer bool, limit int) ([]Event, error) {
 	if s == nil || s.pool == nil {
 		return nil, contracts.Problem("unavailable")
 	}
 	if limit <= 0 || limit > 100 {
 		limit = 30
 	}
-	rows, err := dbgen.New(s.pool).CapListEvents(ctx, dbgen.CapListEventsParams{TenantID: tenant, AccountID: accountID, Reviewer: reviewer, MaxRows: int32(limit)})
+	rows, err := dbgen.New(s.pool).CapListEvents(ctx, dbgen.CapListEventsParams{
+		TenantID: tenant, AccountID: accountID, Binding: binding, Reviewer: reviewer, MaxRows: int32(limit),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +100,7 @@ func (s *Store) List(ctx context.Context, tenant string, accountID int64, review
 		out = append(out, Event{
 			ID: row.ID, TenantID: tenant, EventID: row.EventID, Type: row.EventType,
 			AggregateType: row.AggregateType, AggregateID: row.AggregateID, Payload: decode(row.Payload),
-			InvocationID: row.InvocationID, AccountID: row.AccountID, DepartmentID: row.DepartmentID,
+			InvocationID: row.InvocationID, AccountID: row.AccountID,
 			CorrelationID: row.CorrelationID, CausationID: row.CausationID, Depth: int(row.TriggerDepth),
 			CreatedAt: row.CreatedAt.Time, AIStatus: row.AiStatus, AIPolicy: row.AiPolicy, AIRunID: row.AiRunID,
 		})

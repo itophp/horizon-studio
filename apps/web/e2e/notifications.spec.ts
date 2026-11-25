@@ -19,6 +19,8 @@ test("notification center lists title and time, opens the detail page and keeps 
   });
   expect(login.ok()).toBeTruthy();
   const session: LoginResult = await login.json();
+  if (!session.profile.account)
+    throw new Error("Expected an administrator workspace session");
   const headers = { Origin: origin, "X-CSRF-Token": session.profile.csrfToken };
   await resetPreferences(request, headers);
   const unique = Date.now();

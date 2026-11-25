@@ -10,7 +10,7 @@ import { agentOrigin, PROTOCOL } from "./agent-connection";
 import { StudioProjectManagementPage } from "./project-management";
 import { studio, type Summary } from "./api";
 
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant",
     account: { id: 1 },

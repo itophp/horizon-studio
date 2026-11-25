@@ -4,14 +4,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   EditorDialog,
   ErrorBanner,
   ShortDate,
   DataTable,
   type AdminColumn,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import type { ChangeRecord, SettingSchedule } from "@/api/types";
 import {
   settingsPublish,
@@ -43,7 +43,7 @@ export function useGovKey(...parts: (string | number)[]) {
     governanceKey,
     session.tenantId,
     session.account.id,
-    session.activeDepartmentId,
+    session.identityBindingId,
     i18n.resolvedLanguage,
     ...parts,
   ];

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { EditorDialog, ErrorBanner } from "@/features/administration/shared";
+import { EditorDialog, ErrorBanner } from "@/features/identity/shared";
 import {
   driveFileMove,
   driveFileRename,

@@ -1,9 +1,9 @@
 import { Link, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft } from "lucide-react";
-import { PageHeading } from "@/features/administration/shared";
+import { PageHeading } from "@/features/identity/shared";
 import { buttonVariants } from "@/components/ui/button";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import { NoAccess } from "./shared";
 import { NotificationComposer } from "./notification-composer";
 

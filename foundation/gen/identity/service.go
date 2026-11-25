@@ -15,6 +15,17 @@ import (
 
 // Persistent account, organization, department and access administration
 type Service interface {
+	// Accept only a browser-bound SP-initiated signed SAML POST response, then
+	// redirect without assertion or credentials in the URL.
+	SamlCallback(context.Context, *SamlCallbackPayload) (res *FederationStartResult, err error)
+	// CompleteSaml implements complete_saml.
+	CompleteSaml(context.Context, *CompleteSamlPayload) (res *FederationCompleteResult, err error)
+	// FederationProviders implements federation_providers.
+	FederationProviders(context.Context) (res []*FederationProvider, err error)
+	// StartFederation implements start_federation.
+	StartFederation(context.Context, *StartFederationPayload) (res *FederationStartResult, err error)
+	// CompleteFederation implements complete_federation.
+	CompleteFederation(context.Context, *CompleteFederationPayload) (res *FederationCompleteResult, err error)
 	// TemporaryAccess implements temporary_access.
 	TemporaryAccess(context.Context, *TemporaryAccessPayload) (res *TemporaryAccessWorkspace, err error)
 	// RequestTemporaryAccess implements request_temporary_access.
@@ -25,14 +36,30 @@ type Service interface {
 	CancelTemporaryAccess(context.Context, *CancelTemporaryAccessPayload) (res *TemporaryAccessRecord, err error)
 	// RevokeTemporaryAccess implements revoke_temporary_access.
 	RevokeTemporaryAccess(context.Context, *RevokeTemporaryAccessPayload) (res *TemporaryAccessRecord, err error)
-	// SwitchDepartment implements switch_department.
-	SwitchDepartment(context.Context, *SwitchDepartmentPayload) (res *SessionProfile, err error)
+	// ListSignInIdentities implements list_sign_in_identities.
+	ListSignInIdentities(context.Context, *ListSignInIdentitiesPayload) (res []*SignInIdentity, err error)
+	// SelectSignInIdentity implements select_sign_in_identity.
+	SelectSignInIdentity(context.Context, *SelectSignInIdentityPayload) (res *SessionProfile, err error)
+	// Redeem an invitation for the configured tenant from a verified login session.
+	RedeemSignInInvitation(context.Context, *RedeemSignInInvitationPayload) (err error)
 	// Login implements login.
 	Login(context.Context, *LoginPayload) (res *LoginResult, err error)
+	// RequestRegistration implements request_registration.
+	RequestRegistration(context.Context, *RequestRegistrationPayload) (err error)
+	// CompleteRegistration implements complete_registration.
+	CompleteRegistration(context.Context, *CompleteRegistrationPayload) (err error)
+	// Queue a reset message for a verified contact, returning the same result for
+	// every account.
+	RequestPasswordReset(context.Context, *RequestPasswordResetPayload) (err error)
+	// Change a password with a one-use verified contact challenge and the
+	// account's active second factor.
+	CompletePasswordReset(context.Context, *CompletePasswordResetPayload) (err error)
 	// Me implements me.
 	Me(context.Context, *MePayload) (res *SessionProfile, err error)
 	// Logout implements logout.
 	Logout(context.Context, *LogoutPayload) (res *LogoutResult, err error)
+	// Reauthenticate and rotate the current browser session.
+	RefreshSession(context.Context, *RefreshSessionPayload) (res *LoginResult, err error)
 	// Snapshot implements snapshot.
 	Snapshot(context.Context, *SnapshotPayload) (res *AdminSnapshot, err error)
 }
@@ -57,7 +84,7 @@ const ServiceName = "identity"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"temporary_access", "request_temporary_access", "review_temporary_access", "cancel_temporary_access", "revoke_temporary_access", "switch_department", "login", "me", "logout", "snapshot"}
+var MethodNames = [22]string{"saml_callback", "complete_saml", "federation_providers", "start_federation", "complete_federation", "temporary_access", "request_temporary_access", "review_temporary_access", "cancel_temporary_access", "revoke_temporary_access", "list_sign_in_identities", "select_sign_in_identity", "redeem_sign_in_invitation", "login", "request_registration", "complete_registration", "request_password_reset", "complete_password_reset", "me", "logout", "refresh_session", "snapshot"}
 
 type AccountRecord struct {
 	ID             int64
@@ -92,6 +119,40 @@ type CancelTemporaryAccessPayload struct {
 	ID     int64
 }
 
+// CompleteFederationPayload is the payload type of the identity service
+// complete_federation method.
+type CompleteFederationPayload struct {
+	State        string
+	Code         string
+	Cookie       string
+	MfaCode      *string
+	RecoveryCode *string
+}
+
+// CompletePasswordResetPayload is the payload type of the identity service
+// complete_password_reset method.
+type CompletePasswordResetPayload struct {
+	Token        string
+	NewPassword  string
+	MfaCode      *string
+	RecoveryCode *string
+}
+
+// CompleteRegistrationPayload is the payload type of the identity service
+// complete_registration method.
+type CompleteRegistrationPayload struct {
+	Token    string
+	Password string
+}
+
+// CompleteSamlPayload is the payload type of the identity service
+// complete_saml method.
+type CompleteSamlPayload struct {
+	Cookie       string
+	MfaCode      *string
+	RecoveryCode *string
+}
+
 type DepartmentMembership struct {
 	OrganizationID int64
 	DepartmentID   int64
@@ -112,14 +173,42 @@ type DepartmentRecord struct {
 	CreatedAt      string
 }
 
+// FederationCompleteResult is the result type of the identity service
+// complete_saml method.
+type FederationCompleteResult struct {
+	Profile   *SessionProfile
+	Cookie    *string
+	LinkProof *string
+}
+
+type FederationProvider struct {
+	ID   string
+	Name string
+}
+
+// FederationStartResult is the result type of the identity service
+// saml_callback method.
+type FederationStartResult struct {
+	AuthorizationURL string
+	Cookie           string
+}
+
 type IAMProblem struct {
 	Code string
 }
 
+// ListSignInIdentitiesPayload is the payload type of the identity service
+// list_sign_in_identities method.
+type ListSignInIdentitiesPayload struct {
+	Cookie string
+}
+
 // LoginPayload is the payload type of the identity service login method.
 type LoginPayload struct {
-	Username string
-	Password string
+	Username     string
+	Password     string
+	MfaCode      *string
+	RecoveryCode *string
 }
 
 // LoginResult is the result type of the identity service login method.
@@ -164,10 +253,40 @@ type PermissionDefinition struct {
 }
 
 type PermissionGrant struct {
-	Permission    string
-	Effect        string
-	Scope         string
-	DepartmentIds []int64
+	Permission string
+	Effect     string
+	Scope      string
+}
+
+// RedeemSignInInvitationPayload is the payload type of the identity service
+// redeem_sign_in_invitation method.
+type RedeemSignInInvitationPayload struct {
+	Cookie string
+	Code   string
+}
+
+// RefreshSessionPayload is the payload type of the identity service
+// refresh_session method.
+type RefreshSessionPayload struct {
+	Cookie   string
+	Password string
+	Factor   *string
+}
+
+// RequestPasswordResetPayload is the payload type of the identity service
+// request_password_reset method.
+type RequestPasswordResetPayload struct {
+	Username string
+	Channel  string
+}
+
+// RequestRegistrationPayload is the payload type of the identity service
+// request_registration method.
+type RequestRegistrationPayload struct {
+	Username    string
+	DisplayName string
+	Password    string
+	Destination string
 }
 
 // RequestTemporaryAccessPayload is the payload type of the identity service
@@ -208,23 +327,56 @@ type RoleRecord struct {
 	CreatedAt   string
 }
 
-type ScopeDepartmentChoice struct {
-	ID               int64
-	Name             string
-	OrganizationID   int64
-	OrganizationName string
+// SamlCallbackPayload is the payload type of the identity service
+// saml_callback method.
+type SamlCallbackPayload struct {
+	ProviderID   string
+	SAMLResponse string
+	RelayState   string
+	Cookie       string
 }
 
-// SessionProfile is the result type of the identity service switch_department
-// method.
+// SelectSignInIdentityPayload is the payload type of the identity service
+// select_sign_in_identity method.
+type SelectSignInIdentityPayload struct {
+	Cookie               string
+	IdentityBindingID    *string
+	ActingOrganizationID *int64
+	Portal               *string
+}
+
+type SessionAccount struct {
+	ID       int64
+	Username string
+	Status   string
+	IsAdmin  bool
+}
+
+// SessionProfile is the result type of the identity service
+// select_sign_in_identity method.
 type SessionProfile struct {
 	// Opaque non-secret authorization cache revision.
 	AuthorizationVersion *string
-	Account              *AccountRecord
-	CsrfToken            string
-	Permissions          []string
-	TenantID             string
-	ActiveDepartmentID   int64
+	// Platform operator management is available in this session.
+	PlatformOperator *bool
+	// Tenant account when a work context is active.
+	Account           *SessionAccount
+	CsrfToken         string
+	Permissions       []string
+	TenantID          string
+	IdentityBindingID *string
+	// Organization verified for the active portal binding.
+	ActingOrganizationID *int64
+	// Display name of the verified organization.
+	ActingOrganizationName *string
+	// Application portal verified for the active binding.
+	Portal *string
+}
+
+type SignInIdentity struct {
+	IdentityBindingID      *string
+	ActingOrganizationName *string
+	IdentityType           *string
 }
 
 // SnapshotPayload is the payload type of the identity service snapshot method.
@@ -232,11 +384,11 @@ type SnapshotPayload struct {
 	Cookie string
 }
 
-// SwitchDepartmentPayload is the payload type of the identity service
-// switch_department method.
-type SwitchDepartmentPayload struct {
-	Cookie       string
-	DepartmentID int64
+// StartFederationPayload is the payload type of the identity service
+// start_federation method.
+type StartFederationPayload struct {
+	ProviderID string
+	Purpose    string
 }
 
 // TemporaryAccessPayload is the payload type of the identity service
@@ -251,8 +403,6 @@ type TemporaryAccessRecord struct {
 	ID               int64
 	ApplicantID      int64
 	ApplicantName    string
-	DepartmentID     int64
-	DepartmentName   string
 	RequestedGrants  []*PermissionGrant
 	RequestedMinutes int
 	Reason           string
@@ -272,7 +422,6 @@ type TemporaryAccessRecord struct {
 type TemporaryAccessWorkspace struct {
 	Requests        []*TemporaryAccessRecord
 	Catalog         []*PermissionDefinition
-	Departments     []*ScopeDepartmentChoice
 	EffectiveGrants []*PermissionGrant
 	CanReview       bool
 }

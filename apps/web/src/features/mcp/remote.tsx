@@ -21,8 +21,8 @@ import {
   mcpManagementRevoke,
 } from "@/lib/capabilities";
 import { ApiError } from "@/api/client/request";
-import { useAuth } from "@/features/administration/auth";
-import { EditorDialog } from "@/features/administration/shared";
+import { useAuth } from "@/features/identity/auth";
+import { EditorDialog } from "@/features/identity/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -37,10 +37,6 @@ const schema = z.object({
     .int({ message: "days" })
     .min(1, { message: "days" })
     .max(90, { message: "days" }),
-  departmentId: z
-    .number({ message: "department" })
-    .int()
-    .positive({ message: "department" }),
   password: z
     .string({ message: "password" })
     .min(1, { message: "password" })
@@ -118,7 +114,6 @@ export function RemoteMcpSection({
       name: "",
       password: "",
       days: 30,
-      departmentId: auth.profile!.activeDepartmentId,
     },
   });
   const create = useMutation({
@@ -186,12 +181,11 @@ export function RemoteMcpSection({
     setHelperStatus("busy");
     try {
       setPrepared(
-        await prepareInstall(
-          helperForm.getValues("key"),
-          client,
-          auth.profile!.account.id,
-          form.getValues("departmentId"),
-        ),
+        await prepareInstall(helperForm.getValues("key"), client, {
+          accountId: auth.profile!.account.id,
+          tenantId: auth.profile!.tenantId,
+          identityBindingId: auth.profile!.identityBindingId ?? "",
+        }),
       );
       setHelperStatus("ready");
     } catch {
@@ -335,29 +329,6 @@ export function RemoteMcpSection({
               <FieldError
                 id="mcp-days-error"
                 message={errors.days ? t("validation.days") : undefined}
-              />
-            </div>
-            <div className="editor-field">
-              <label htmlFor="mcp-department">{t("department")}</label>
-              <select
-                id="mcp-department"
-                aria-invalid={!!errors.departmentId}
-                aria-describedby={
-                  errors.departmentId ? "mcp-department-error" : undefined
-                }
-                {...form.register("departmentId", { valueAsNumber: true })}
-              >
-                {auth.profile!.account.memberships.map((m) => (
-                  <option key={m.departmentId} value={m.departmentId}>
-                    {m.departmentName || m.departmentId}
-                  </option>
-                ))}
-              </select>
-              <FieldError
-                id="mcp-department-error"
-                message={
-                  errors.departmentId ? t("validation.department") : undefined
-                }
               />
             </div>
             <div className="editor-field">

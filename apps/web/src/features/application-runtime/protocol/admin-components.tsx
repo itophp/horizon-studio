@@ -5,10 +5,12 @@ import { compositeRenderers } from "./shadcn-composites";
 import type { ComponentProps, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
+import { SecurityPanel } from "@/features/identity/security-panel";
+import { PolicyPanel } from "@/features/identity/policy-panel";
 import { Button } from "@/components/ui/button";
 import { Link, useSearchParams } from "react-router";
 import { EntityAvatar } from "@/components/shared/controls";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   DataTable,
   ListSearch,
@@ -16,7 +18,7 @@ import {
   ShortDate,
   StatusBadge,
   type AdminColumn,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import {
   ActionControl,
   isInternalHref,
@@ -37,7 +39,12 @@ import {
 import { AIAnalysisPanel, AIResultComponent } from "./ai-components";
 import { ItemListComponent } from "./item-list";
 import { ChangeListForm } from "./change-list-form";
+import { AIModelSettings } from "./ai-model-settings";
 import { ActionForm } from "./action-form";
+import { ComposePanel } from "./mail-compose";
+import { MailboxFormSlot } from "./mail-mailbox-form";
+import { MessageDetailPanel } from "./mail-message-detail";
+import { MailMessageList } from "./mail-message-list";
 import { BatchImport } from "./batch-import";
 import { FileReviewForm } from "./file-review-form";
 import { DialogComponent } from "./dialog-component";
@@ -108,7 +115,7 @@ function PageHeadingComponent({
           ? t(
               text(props.subtitleKey),
               props.subtitleAccountName === true
-                ? { name: session.account.fullName }
+                ? { name: session.account.username }
                 : {},
             )
           : ""
@@ -414,14 +421,21 @@ export function createAdminRegistry(): ComponentRegistry {
   registry.register("batch-import", "1.0", BatchImport);
   registry.register("file-review-form", "1.0", FileReviewForm);
   registry.register("change-list-form", "1.0", ChangeListForm);
+  registry.register("ai-model-settings", "1.0", AIModelSettings);
   registry.register("metric-value", "1.0", MetricValue);
   registry.register("time-series", "1.0", TimeSeries);
   registry.register("horizontal-bars", "1.0", HorizontalBars);
   registry.register("distribution-pie", "1.0", DistributionPie);
   registry.register("settings-panel", "1.0", SettingsPanel);
+  registry.register("identity-security-panel", "1.0", SecurityPanel);
+  registry.register("identity-governance-panel", "1.0", PolicyPanel);
   registry.register("dictionary-panel", "1.0", DictionaryPanel);
   registry.register("remote-mcp-panel", "1.0", RemoteMcpPanel);
   registry.register("webmcp-panel", "1.0", WebMcpPanel);
+  registry.register("mail-compose-form", "1.0", ComposePanel);
+  registry.register("mail-mailbox-form", "1.0", MailboxFormSlot);
+  registry.register("mail-message-content", "1.0", MessageDetailPanel);
+  registry.register("mail-message-list", "1.0", MailMessageList);
   registry.register("layout-tabs", "1.0", LayoutTabs);
   registry.register("layout-tab-panel", "1.0", LayoutTabPanel);
   registry.register("content-heading", "1.0", ContentHeading);

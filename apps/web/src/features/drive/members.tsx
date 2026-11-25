@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   DataTable,
   EditorDialog,
@@ -17,7 +17,7 @@ import {
   PageHeading,
   RowActions,
   type AdminColumn,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import {
   driveMemberChange,
   driveMemberRemove,
@@ -31,7 +31,7 @@ export function DriveMembersPage() {
   const session = useSession();
   const client = useQueryClient();
   const spaceId = Number(useParams().id);
-  const identity = `${session.tenantId}:${session.account.id}:${session.activeDepartmentId}`;
+  const identity = `${session.tenantId}:${session.account.id}:${session.identityBindingId}`;
   const key = ["drive", identity, spaceId, "members"];
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<DriveMember>();

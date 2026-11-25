@@ -9,7 +9,7 @@ import (
 
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/system/identity"
-	"horizon/internal/repository/dbgen"
+	"horizon/internal/repository/dbgen/studiodb"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -56,7 +56,7 @@ func (m *Module) requirementCreate(ctx context.Context, tx pgx.Tx, in contracts.
 	}
 	var parentID pgtype.Int8
 	if raw, supplied := number(in["parent"]); supplied && raw >= 1 {
-		parent, err := dbgen.New(tx).StudioRequirementGet(ctx, dbgen.StudioRequirementGetParams{
+		parent, err := studiodb.New(tx).StudioRequirementGet(ctx, studiodb.StudioRequirementGetParams{
 			TenantID: p.TenantID, ID: int64(raw), CreatedBy: p.Account.ID,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -70,7 +70,7 @@ func (m *Module) requirementCreate(ctx context.Context, tx pgx.Tx, in contracts.
 		}
 		parentID = pgtype.Int8{Int64: int64(raw), Valid: true}
 	}
-	row, err := dbgen.New(tx).StudioRequirementCreate(ctx, dbgen.StudioRequirementCreateParams{
+	row, err := studiodb.New(tx).StudioRequirementCreate(ctx, studiodb.StudioRequirementCreateParams{
 		TenantID: p.TenantID, ID: projectID, Title: title, ParentID: parentID,
 		Description: stringField(in, "description"), Source: stringField(in, "source"), CreatedBy: p.Account.ID,
 	})
@@ -119,7 +119,7 @@ func (m *Module) requirementArchive(ctx context.Context, tx pgx.Tx, in contracts
 	if !okID || id < 1 {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
-	archived, err := dbgen.New(tx).StudioRequirementArchiveTree(ctx, dbgen.StudioRequirementArchiveTreeParams{
+	archived, err := studiodb.New(tx).StudioRequirementArchiveTree(ctx, studiodb.StudioRequirementArchiveTreeParams{
 		TenantID: p.TenantID, ID: int64(id), CreatedBy: p.Account.ID,
 	})
 	if err != nil {
@@ -186,8 +186,8 @@ func (m *Module) requirementUpdate(ctx context.Context, tx pgx.Tx, in contracts.
 	if title == "" || utf8.RuneCountInString(title) > 200 {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
-	q := dbgen.New(tx)
-	current, err := q.StudioRequirementGet(ctx, dbgen.StudioRequirementGetParams{
+	q := studiodb.New(tx)
+	current, err := q.StudioRequirementGet(ctx, studiodb.StudioRequirementGetParams{
 		TenantID: p.TenantID, ID: int64(id), CreatedBy: p.Account.ID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -213,7 +213,7 @@ func (m *Module) requirementUpdate(ctx context.Context, tx pgx.Tx, in contracts.
 			if parentID.Int64 == current.ID {
 				return contracts.Output{}, contracts.Problem("invalid")
 			}
-			target, err := q.StudioRequirementGet(ctx, dbgen.StudioRequirementGetParams{
+			target, err := q.StudioRequirementGet(ctx, studiodb.StudioRequirementGetParams{
 				TenantID: p.TenantID, ID: parentID.Int64, CreatedBy: p.Account.ID,
 			})
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -225,7 +225,7 @@ func (m *Module) requirementUpdate(ctx context.Context, tx pgx.Tx, in contracts.
 			if target.ProjectID != current.ProjectID || target.Archived || target.ParentID.Valid {
 				return contracts.Output{}, contracts.Problem("invalid")
 			}
-			children, err := q.StudioRequirementChildCount(ctx, dbgen.StudioRequirementChildCountParams{
+			children, err := q.StudioRequirementChildCount(ctx, studiodb.StudioRequirementChildCountParams{
 				TenantID: p.TenantID, ParentID: current.ID,
 			})
 			if err != nil {
@@ -236,7 +236,7 @@ func (m *Module) requirementUpdate(ctx context.Context, tx pgx.Tx, in contracts.
 			}
 		}
 	}
-	row, err := q.StudioRequirementUpdate(ctx, dbgen.StudioRequirementUpdateParams{
+	row, err := q.StudioRequirementUpdate(ctx, studiodb.StudioRequirementUpdateParams{
 		TenantID: p.TenantID, ID: int64(id), ProjectID: projectID, CreatedBy: p.Account.ID,
 		Title: title, Description: optionalText(in, "description"), Source: optionalText(in, "source"),
 		ParentID: parentID,
@@ -290,7 +290,7 @@ func (m *Module) requirementList(ctx context.Context, in contracts.Input) (contr
 	if !p.Can(ReadPermission) {
 		return contracts.Output{}, contracts.Problem("forbidden")
 	}
-	rows, err := dbgen.New(m.pool).StudioRequirementList(ctx, dbgen.StudioRequirementListParams{
+	rows, err := studiodb.New(m.pool).StudioRequirementList(ctx, studiodb.StudioRequirementListParams{
 		TenantID: p.TenantID, ProjectID: project.ID, CreatedBy: p.Account.ID,
 	})
 	if err != nil {
@@ -351,7 +351,7 @@ func (m *Module) requirementSearch(ctx context.Context, in contracts.Input) (con
 	if raw, ok := number(in["exclude"]); ok && raw >= 0 {
 		exclude = int64(raw)
 	}
-	rows, err := dbgen.New(m.pool).StudioRequirementSearch(ctx, dbgen.StudioRequirementSearchParams{
+	rows, err := studiodb.New(m.pool).StudioRequirementSearch(ctx, studiodb.StudioRequirementSearchParams{
 		TenantID: p.TenantID, ProjectID: project.ID, CreatedBy: p.Account.ID,
 		Keyword: keyword, Exclude: exclude,
 	})

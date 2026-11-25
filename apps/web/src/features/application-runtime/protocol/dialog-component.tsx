@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { EditorDialog } from "@/features/administration/shared";
+import { EditorDialog } from "@/features/identity/shared";
 import type { ComponentRendererProps } from "./component-registry";
 
 export function DialogComponent({

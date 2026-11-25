@@ -33,9 +33,14 @@ it("supplies an in-memory CSRF nonce only to mutations and clears it on logout",
     expect(fetch.mock.calls[0][1].credentials).toBe("same-origin");
     await request("/api/admin/snapshot");
     expect(fetch.mock.calls[1][1].headers.has("X-CSRF-Token")).toBe(false);
+    expect(fetch.mock.calls[1][1].headers.get("X-Horizon-Context")).toBe(
+      "verified-nonce",
+    );
+    await request("/api/auth/me");
+    expect(fetch.mock.calls[2][1].headers.has("X-Horizon-Context")).toBe(false);
     setCSRFToken("");
     await request("/api/auth/login", { method: "POST" });
-    expect(fetch.mock.calls[2][1].headers.has("X-CSRF-Token")).toBe(false);
+    expect(fetch.mock.calls[3][1].headers.has("X-CSRF-Token")).toBe(false);
   } finally {
     setCSRFToken("");
     vi.unstubAllGlobals();
@@ -61,6 +66,8 @@ it("keeps the interactive timeout off agent tasks", () => {
   // cancels the request server-side and surfaces as a generic failure.
   expect(requestTimeout("/api/ai/runs")).toBe(180000);
   expect(requestTimeout("/api/assistant/chat")).toBe(180000);
+  expect(requestTimeout("/api/assistant/agent")).toBe(180000);
+  expect(requestTimeout("/api/assistant/status")).toBe(10000);
   expect(requestTimeout("/api/capabilities/file.upload/invocations")).toBe(
     180000,
   );

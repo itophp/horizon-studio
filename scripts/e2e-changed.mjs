@@ -9,8 +9,8 @@ const defaultRoot = fileURLToPath(new URL("../", import.meta.url));
 // reported instead of silently growing into the whole browser suite.
 const routes = [
   {
-    prefix: "apps/web/src/features/administration/",
-    specs: ["administration"],
+    prefix: "apps/web/src/features/identity/",
+    specs: ["identity"],
   },
   { prefix: "apps/web/src/features/governance/", specs: ["governance"] },
   { prefix: "apps/web/src/features/capabilities/", specs: ["capabilities"] },
@@ -48,15 +48,15 @@ const routes = [
     specs: ["capabilities"],
   },
   { prefix: "foundation/ai/", specs: ["ai"] },
+  { prefix: "applications/identity/", specs: ["identity"] },
   { prefix: "applications/", specs: ["capabilities"] },
   { prefix: "foundation/db/query/capability.sql", specs: ["capabilities"] },
-  { prefix: "foundation/db/migrations/00015_", specs: ["capabilities"] },
   {
     prefix: "foundation/system/identity/",
-    specs: ["administration"],
+    specs: ["identity"],
   },
 
-  { prefix: "foundation/runtime/transport/", specs: ["administration"] },
+  { prefix: "foundation/runtime/transport/", specs: ["identity"] },
   { prefix: "foundation/db/query/mcp.sql", specs: ["mcp"] },
   { prefix: "foundation/db/query/governance", specs: ["governance"] },
   {
@@ -91,7 +91,7 @@ const inert = [
   /^_tmp_/,
   /^\.env/,
   /^compose\.yaml$/,
-  /^Makefile$/,
+  /^cmd\/horizon-cli\//,
   /^(pnpm-lock\.yaml|pnpm-workspace\.yaml|package\.json|skills-lock\.json)$/,
   /^apps\/web\/(package\.json|tsconfig\.json|vite\.config\.ts|orval\.config\.ts|eslint)/,
   /^apps\/web\/playwright[^/]*\.config\.ts$/,
@@ -180,7 +180,7 @@ if (
       `未映射、本次未选浏览器文件（请人工确认范围）：${unmapped.join(", ")}`,
     );
   console.log(
-    "这是所选文件的验收，不等于全量浏览器集合；全量用 make test-e2e。",
+    "这是所选文件的验收，不等于全量浏览器集合；全量用 ./horizon-cli test-e2e。",
   );
   if (process.argv.includes("--dry-run")) process.exit(0);
 

@@ -18,14 +18,15 @@ import (
 
 // Server lists the capability service endpoint HTTP handlers.
 type Server struct {
-	Mounts      []*MountPoint
-	Definitions http.Handler
-	Invoke      http.Handler
-	Invocations http.Handler
-	Invocation  http.Handler
-	Approvals   http.Handler
-	Decide      http.Handler
-	Events      http.Handler
+	Mounts        []*MountPoint
+	Definitions   http.Handler
+	Invoke        http.Handler
+	InvokeMachine http.Handler
+	Invocations   http.Handler
+	Invocation    http.Handler
+	Approvals     http.Handler
+	Decide        http.Handler
+	Events        http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -57,19 +58,21 @@ func New(
 		Mounts: []*MountPoint{
 			{"Definitions", "GET", "/api/capabilities"},
 			{"Invoke", "POST", "/api/capabilities/{name}/invocations"},
+			{"InvokeMachine", "POST", "/api/capabilities/{name}/machine-invocations"},
 			{"Invocations", "GET", "/api/capabilities/invocations"},
 			{"Invocation", "GET", "/api/capabilities/invocations/{invocationId}"},
 			{"Approvals", "GET", "/api/capabilities/approvals"},
 			{"Decide", "POST", "/api/capabilities/approvals/{id}/decisions"},
 			{"Events", "GET", "/api/capabilities/events"},
 		},
-		Definitions: NewDefinitionsHandler(e.Definitions, mux, decoder, encoder, errhandler, formatter),
-		Invoke:      NewInvokeHandler(e.Invoke, mux, decoder, encoder, errhandler, formatter),
-		Invocations: NewInvocationsHandler(e.Invocations, mux, decoder, encoder, errhandler, formatter),
-		Invocation:  NewInvocationHandler(e.Invocation, mux, decoder, encoder, errhandler, formatter),
-		Approvals:   NewApprovalsHandler(e.Approvals, mux, decoder, encoder, errhandler, formatter),
-		Decide:      NewDecideHandler(e.Decide, mux, decoder, encoder, errhandler, formatter),
-		Events:      NewEventsHandler(e.Events, mux, decoder, encoder, errhandler, formatter),
+		Definitions:   NewDefinitionsHandler(e.Definitions, mux, decoder, encoder, errhandler, formatter),
+		Invoke:        NewInvokeHandler(e.Invoke, mux, decoder, encoder, errhandler, formatter),
+		InvokeMachine: NewInvokeMachineHandler(e.InvokeMachine, mux, decoder, encoder, errhandler, formatter),
+		Invocations:   NewInvocationsHandler(e.Invocations, mux, decoder, encoder, errhandler, formatter),
+		Invocation:    NewInvocationHandler(e.Invocation, mux, decoder, encoder, errhandler, formatter),
+		Approvals:     NewApprovalsHandler(e.Approvals, mux, decoder, encoder, errhandler, formatter),
+		Decide:        NewDecideHandler(e.Decide, mux, decoder, encoder, errhandler, formatter),
+		Events:        NewEventsHandler(e.Events, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -80,6 +83,7 @@ func (s *Server) Service() string { return "capability" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Definitions = m(s.Definitions)
 	s.Invoke = m(s.Invoke)
+	s.InvokeMachine = m(s.InvokeMachine)
 	s.Invocations = m(s.Invocations)
 	s.Invocation = m(s.Invocation)
 	s.Approvals = m(s.Approvals)
@@ -94,6 +98,7 @@ func (s *Server) MethodNames() []string { return capability.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountDefinitionsHandler(mux, h.Definitions)
 	MountInvokeHandler(mux, h.Invoke)
+	MountInvokeMachineHandler(mux, h.InvokeMachine)
 	MountInvocationsHandler(mux, h.Invocations)
 	MountInvocationHandler(mux, h.Invocation)
 	MountApprovalsHandler(mux, h.Approvals)
@@ -189,6 +194,59 @@ func NewInvokeHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "invoke")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "capability")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountInvokeMachineHandler configures the mux to serve the "capability"
+// service "invoke_machine" endpoint.
+func MountInvokeMachineHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/api/capabilities/{name}/machine-invocations", f)
+}
+
+// NewInvokeMachineHandler creates a HTTP handler which loads the HTTP request
+// and calls the "capability" service "invoke_machine" endpoint.
+func NewInvokeMachineHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeInvokeMachineRequest(mux, decoder)
+		encodeResponse = EncodeInvokeMachineResponse(encoder)
+		encodeError    = EncodeInvokeMachineError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "invoke_machine")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "capability")
 		payload, err := decodeRequest(r)
 		if err != nil {

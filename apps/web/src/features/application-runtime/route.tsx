@@ -3,7 +3,7 @@ import { matchPath, useLocation } from "react-router";
 import { useApplicationCatalog } from "./catalog";
 import { ApplicationPage } from "./page";
 import "./display-adapters";
-import { Loading, ErrorBanner } from "@/features/administration/shared";
+import { Loading, ErrorBanner } from "@/features/identity/shared";
 import { useTranslation } from "react-i18next";
 export function DynamicApplicationRoute() {
   const location = useLocation();

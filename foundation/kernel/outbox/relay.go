@@ -18,12 +18,13 @@ import (
 
 // Meta carries the causal chain of the invocation that produced an event.
 type Meta struct {
-	InvocationID  string
-	AccountID     int64
-	DepartmentID  int64
-	CorrelationID string
-	CausationID   string
-	Depth         int
+	InvocationID string
+	AccountID    int64
+
+	IdentityBindingID string
+	CorrelationID     string
+	CausationID       string
+	Depth             int
 }
 
 // Event is a pending business fact.
@@ -68,8 +69,9 @@ func AppendTx(ctx context.Context, q *dbgen.Queries, event Event) error {
 		TenantID: event.TenantID, EventID: event.EventID, EventType: event.Type,
 		AggregateType: event.AggregateType, AggregateID: event.AggregateID, Payload: raw,
 		InvocationID: event.Meta.InvocationID, AccountID: event.Meta.AccountID,
-		DepartmentID: event.Meta.DepartmentID, CorrelationID: event.Meta.CorrelationID,
-		CausationID: event.Meta.CausationID, TriggerDepth: int32(event.Meta.Depth),
+		CorrelationID:     event.Meta.CorrelationID,
+		IdentityBindingID: event.Meta.IdentityBindingID,
+		CausationID:       event.Meta.CausationID, TriggerDepth: int32(event.Meta.Depth),
 	})
 }
 
@@ -131,11 +133,12 @@ type claimed struct {
 	payload       map[string]any
 	invocationID  string
 	accountID     int64
-	departmentID  int64
-	correlationID string
-	causationID   string
-	depth         int
-	attempts      int
+
+	identityBindingID string
+	correlationID     string
+	causationID       string
+	depth             int
+	attempts          int
 }
 
 func (r *Relay) claim(ctx context.Context) ([]claimed, error) {
@@ -152,8 +155,9 @@ func (r *Relay) claim(ctx context.Context) ([]claimed, error) {
 		out = append(out, claimed{
 			id: row.ID, tenant: row.TenantID, eventID: row.EventID, eventType: row.EventType,
 			aggregateType: row.AggregateType, aggregateID: row.AggregateID, payload: payload,
-			invocationID: row.InvocationID, accountID: row.AccountID, departmentID: row.DepartmentID,
-			correlationID: row.CorrelationID, causationID: row.CausationID, depth: int(row.TriggerDepth),
+			invocationID: row.InvocationID, accountID: row.AccountID,
+			identityBindingID: row.IdentityBindingID,
+			correlationID:     row.CorrelationID, causationID: row.CausationID, depth: int(row.TriggerDepth),
 			attempts: int(row.Attempts),
 		})
 	}
@@ -169,8 +173,9 @@ func (r *Relay) publish(ctx context.Context, row claimed) error {
 	if err = q.CapAppendEvent(ctx, dbgen.CapAppendEventParams{
 		TenantID: row.tenant, EventID: row.eventID, EventType: row.eventType,
 		AggregateType: row.aggregateType, AggregateID: row.aggregateID, Payload: raw,
-		InvocationID: row.invocationID, AccountID: row.accountID, DepartmentID: row.departmentID,
-		CorrelationID: row.correlationID, CausationID: row.causationID, TriggerDepth: int32(row.depth),
+		InvocationID: row.invocationID, AccountID: row.accountID,
+		IdentityBindingID: row.identityBindingID,
+		CorrelationID:     row.correlationID, CausationID: row.causationID, TriggerDepth: int32(row.depth),
 	}); err != nil {
 		return err
 	}
@@ -181,8 +186,9 @@ func (r *Relay) publish(ctx context.Context, row claimed) error {
 		r.hub.Dispatch(ctx, eventhub.Event{
 			TenantID: row.tenant, EventID: row.eventID, Type: row.eventType,
 			AggregateType: row.aggregateType, AggregateID: row.aggregateID, Payload: row.payload,
-			InvocationID: row.invocationID, AccountID: row.accountID, DepartmentID: row.departmentID,
-			CorrelationID: row.correlationID, CausationID: row.causationID, Depth: row.depth,
+			InvocationID: row.invocationID, AccountID: row.accountID,
+			IdentityBindingID: row.identityBindingID,
+			CorrelationID:     row.correlationID, CausationID: row.causationID, Depth: row.depth,
 			CreatedAt: time.Now().UTC(),
 		})
 	}

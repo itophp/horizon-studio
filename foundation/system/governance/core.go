@@ -21,6 +21,7 @@ import (
 	"horizon/internal/repository/dbgen"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -58,6 +59,7 @@ func Code(err error) string {
 type Options struct {
 	KnowledgeRedisURL                       string
 	EncryptionKey                           []byte
+	AuditSigningSeed                        []byte
 	StorageRoot, PublicWorkspace, PublicURL string
 	SMTPHosts                               []string
 	AllowTestSMTP                           bool
@@ -80,7 +82,10 @@ type Core struct {
 }
 
 func New(pool *pgxpool.Pool, iam *identity.Service, options Options) *Core {
-	c := &Core{Definitions: append([]Definition{}, Registry...), Pool: pool, Identity: iam, Options: options}
+	c := &Core{Definitions: slices.DeleteFunc(slices.Clone(Registry), func(d Definition) bool { return IsAISetting(d.Key) }), Pool: pool, Identity: iam, Options: options}
+	registerMu.Lock()
+	registeredCores = append(registeredCores, c)
+	registerMu.Unlock()
 	if pool != nil {
 		c.Q = dbgen.New(pool)
 	}
@@ -186,7 +191,7 @@ func (c *Core) ResolveWith(ctx context.Context, q *dbgen.Queries, tenant, kind s
 		}
 		t.OrgID = d.OrganizationID
 	case "account":
-		if _, err := q.IAMGetAccount(ctx, dbgen.IAMGetAccountParams{TenantID: tenant, ID: id, AllData: true}); err != nil {
+		if _, err := q.IAMGetAuthorityAccount(ctx, dbgen.IAMGetAuthorityAccountParams{TenantID: tenant, ID: id}); err != nil {
 			return t, err
 		}
 	default:
@@ -369,7 +374,7 @@ func (c *Core) Consume(ctx context.Context, q *dbgen.Queries, p *identity.Princi
 	if proof == "" {
 		return Problem("forbidden")
 	}
-	_, err := q.GovConsumeProof(ctx, dbgen.GovConsumeProofParams{TenantID: p.TenantID, TokenHash: Hash(proof), SessionHash: p.TokenHash, DepartmentID: p.Account.DepartmentID, Operation: operation, ResourceID: id, Revision: revision})
+	_, err := q.GovConsumeProof(ctx, dbgen.GovConsumeProofParams{TenantID: p.TenantID, TokenHash: Hash(proof), SessionHash: p.TokenHash, ExpectedCsrf: p.CSRF, Operation: operation, ResourceID: id, Revision: revision})
 	if err != nil {
 		return Problem("forbidden")
 	}
@@ -395,7 +400,7 @@ func (c *Core) ValuesWith(ctx context.Context, q *dbgen.Queries, tenant string, 
 	}
 	for _, key := range chain {
 		for _, row := range rows {
-			if row.ScopeKey != key {
+			if row.ScopeKey != key || IsAISetting(row.ConfigKey) {
 				continue
 			}
 			d := c.Definition(row.ConfigKey)
@@ -475,8 +480,12 @@ func (c *Core) Setting(ctx context.Context, p *identity.Principal, key string) (
 	if !ok {
 		return "", Problem("invalid")
 	}
-	d := c.Definition(key)
-	if d.Secret && v.Source != "default" {
+	return c.settingValue(p.TenantID, key, v)
+}
+
+func (c *Core) settingValue(tenant, key string, v Value) (string, error) {
+	d := FindDefinition(key)
+	if d != nil && d.Secret && v.Source != "default" {
 		encoded, err := String(v.Raw)
 		if err != nil {
 			return "", err
@@ -484,7 +493,7 @@ func (c *Core) Setting(ctx context.Context, p *identity.Principal, key string) (
 		if encoded == "" {
 			return `""`, nil
 		}
-		return c.Unseal(p.TenantID, v.Source, key, encoded)
+		return c.Unseal(tenant, v.Source, key, encoded)
 	}
 	return v.Raw, nil
 }

@@ -1,5 +1,35 @@
 # 版本及官方依据
 
+## 2026-11-24 邮件 HTML 编辑器
+
+将已由 MDXEditor 锁定的 `lexical`、`@lexical/react`、`@lexical/html`、`@lexical/list` 和 `@lexical/rich-text` 提升为 Web 直接依赖，版本统一为 `0.48.0`，沿用 React 19。使用 `RichTextPlugin`、`ListPlugin`、`HistoryPlugin` 和 `$generateHtmlFromNodes`，由服务端白名单清理发送内容。[Lexical 插件文档](https://lexical.dev/docs/react/plugins) · [版本记录](https://github.com/meta/lexical/releases/tag/v0.48.0) · [MIT 许可](https://github.com/meta/lexical/blob/main/LICENSE)
+
+## 2026-11-24 IMAP 收件
+
+锁定 `github.com/emersion/go-imap/v2 v2.0.0-beta.8`（MIT，Go ≥ 1.18），与仓库 Go 1.27.3 和已使用的 `go-message v0.18.2` 兼容。使用版本化客户端的 `NewStartTLS`、只读 `Select`、`UIDSearch` 和 `Fetch`。传递依赖 `github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6`（MIT）由 go.mod/go.sum 锁定。[版本源码](https://github.com/emersion/go-imap/tree/v2.0.0-beta.8) · [客户端文档](https://pkg.go.dev/github.com/emersion/go-imap/v2@v2.0.0-beta.8/imapclient)
+
+## 2026-11-20 IAM SAML
+
+采用 `github.com/crewjam/saml v0.6.3`（BSD-2-Clause，Go >=1.25），与仓库 Go 1.27.3 兼容。已核对 [版本化官方源码](https://github.com/crewjam/saml/tree/v0.6.3) 的 go.mod、LICENSE、`samlsp.ParseMetadata`、`ServiceProvider.MakeAuthenticationRequest`、`AuthnRequest.Redirect`、`ParseXMLResponse` 和 `AssertionReplayCache`。签名使用 SHA-256，启用未知条件拒绝、过期元数据拒绝、SHA-1 拒绝和 CBC 响应签名要求；重放缓存接入 PostgreSQL。没有启用 IdP 主动登录或证书有效期豁免。
+
+XML 签名依赖 `github.com/russellhaering/goxmldsig v1.6.1`（Apache-2.0）、XML 解析 `github.com/beevik/etree v1.8.1`（BSD-2-Clause）；samlsp 传递引入 `github.com/golang-jwt/jwt/v5 v5.3.1`（MIT），均由 go.mod/go.sum 锁定。已核对各模块许可证和选定版本的源码；不另造 XML 签名验证器。部署元数据中的签名证书启动时校验解析、密钥强度及至少一张当前有效，运行时继续校验证书和元数据有效期。
+
+## 2026-11-20 IAM OIDC
+
+采用 `github.com/coreos/go-oidc/v3 v3.21.0`（Apache-2.0，Go >=1.25），与本仓库 Go 1.27.3 兼容。已核对 [官方源码](https://github.com/coreos/go-oidc/tree/v3.21.0)、模块 go.mod、LICENSE、`NewProvider`、`Verifier`、`IDToken.Nonce` 和 `VerifyAccessToken`。其依赖 `github.com/go-jose/go-jose/v4 v4.1.4`（Apache-2.0）及 `golang.org/x/oauth2 v0.36.0`（BSD-3-Clause），由 go.sum 锁定。OAuth2 使用官方 `GenerateVerifier`、`S256ChallengeOption` 和 `VerifierOption`；校验 issuer、audience、签名、过期时间、nonce，身份键使用提供方、issuer 和稳定 sub。
+
+## 2026-11-19 个人邮箱应用
+
+新增固定 Go 依赖并核对本地模块源码与许可证：
+
+| 依赖 | 选定版本 | 官方来源与许可 |
+|---|---|---|
+| `github.com/knadh/go-pop3` | 1.0.2 | [pkg.go.dev](https://pkg.go.dev/github.com/knadh/go-pop3@v1.0.2) · MIT |
+| `github.com/microcosm-cc/bluemonday` | 1.0.27 | [pkg.go.dev](https://pkg.go.dev/github.com/microcosm-cc/bluemonday@v1.0.27) · BSD-3-Clause |
+| `github.com/yuin/goldmark` | 1.8.7 | [pkg.go.dev](https://pkg.go.dev/github.com/yuin/goldmark@v1.8.7) · MIT |
+
+`go-pop3` 传递引入 `github.com/emersion/go-message v0.18.2`（MIT）用于 MIME 解析；bluemonday 传递引入 douceur、gorilla/css 与 `golang.org/x/net`，由 go.sum 固定。goldmark 原为 v1.4.13 间接依赖，因直接用于 Markdown 到 HTML 渲染提升为 v1.8.7 直接依赖。POP3 仅启用 direct TLS；HTML 输入统一经服务端 allowlist 清理，前端仅用 sandboxed iframe 展示。
+
 ## Application Runtime shadcn/ui 组件（2026-11-13）
 
 从 [shadcn 官方 Base Nova Registry](https://ui.shadcn.com/r/styles/base-nova/alert-dialog.json) 引入组件源码，沿用 Base UI、Lucide、cn 和仓库主题。直接依赖固定版本，以下官方 npm 元数据标注 MIT。声明 React peer 的组件支持 React 19，Recharts 的 react-is 与 React 版本对齐。Sonner 沿用仓库的 CSS 主题变量。
@@ -70,7 +100,6 @@
 | goa.design/goa/v3 | v3.35.0 | [来源](https://proxy.golang.org/goa.design/goa/v3/@latest) |
 | github.com/jackc/pgx/v5 | v5.11.0 | [来源](https://proxy.golang.org/github.com/jackc/pgx/v5/@latest) |
 | github.com/sqlc-dev/sqlc | v1.31.1 | [来源](https://proxy.golang.org/github.com/sqlc-dev/sqlc/@latest) |
-| github.com/pressly/goose/v3 | v3.29.0 | [来源](https://proxy.golang.org/github.com/pressly/goose/v3/@latest) |
 | github.com/casbin/casbin/v2 | v2.135.0 | [来源](https://proxy.golang.org/github.com/casbin/casbin/v2/@latest) |
 | go | go1.27.3 | [来源](https://go.dev/dl/?mode=json) |
 | @base-ui/react | 1.9.0 | [来源](https://registry.npmjs.org/@base-ui/react/1.9.0) |
@@ -98,14 +127,13 @@ PostgreSQL 18.6，官方 release notes 确认为稳定主线 18；容器实际�
 - [Goa](https://goa.design/docs/1-goa/quickstart/)
 - [pgx](https://github.com/jackc/pgx)
 - [sqlc](https://docs.sqlc.dev/en/stable/overview/install.html)
-- [Goose](https://pressly.github.io/goose/installation/)
 - [Casbin](https://casbin.org/docs/rbac-with-domains/)
 - [Orval](https://orval.dev/docs/reference/configuration/output/)
 - [Vitest](https://vitest.dev/guide/)
 - [Playwright](https://playwright.dev/docs/test-webserver)
 - [PostgreSQL](https://www.postgresql.org/docs/current/release.html)
 
-Goa 生成器通过 go.mod tool 指令与框架共享版本；sqlc CLI 用 make tools 固定版本。shadcn CLI 新增依赖也在初始化后改为精确版本。官方文档会随时间更新，以锁定版本及可执行验证结果为准。
+Goa 生成器通过 go.mod tool 指令与框架共享版本；sqlc CLI 用 ./horizon-cli tools 固定版本。shadcn CLI 新增依赖也在初始化后改为精确版本。官方文档会随时间更新，以锁定版本及可执行验证结果为准。
 
 Goa 官方 Skill 完整安装，内容 hash 见 skills-lock.json。当前模块的生成器 CLI 和服务依赖共用 go.mod tool 固定版本，安装 skill 不修改工具链版本。
 
@@ -171,3 +199,9 @@ SDK 与 x/time 是应用直接依赖，其余由 SDK 引入；全部由 go.mod/g
 ## 2026-11-06 页面模式前端评审
 
 通过锁定的 shadcn CLI 4.23.0、官方 base-nova Registry 新增 Accordion、Alert、Avatar、Breadcrumb、Popover、Progress、RadioGroup、Sheet、Slider、Switch 源码（MIT）。基于已有 @base-ui/react 1.9.0、React 19.3.1、Tailwind 4；没有新增 npm 依赖或改锁文件，已有 Button 保留不覆盖。新原语已在页面模式中消费，默认关闭/导航辅助名称接现有 i18next。来源：https://ui.shadcn.com/docs/components/base 与 https://ui.shadcn.com/r/styles/base-nova/accordion.json 。
+
+## AI 输入附件的 PDF 解析
+
+服务端通过独立的 Poppler `pdftotext` 进程读取 PDF 文本层，验证使用 26.05.0。部署 AI API 的主机需将系统发行版的 `pdftotext` 放到服务进程 PATH，例如 Debian/Ubuntu 的 `poppler-utils` 或 macOS 的 Homebrew `poppler`。Poppler 以 GPL 发布，通过标准输入和输出与 Go 服务交互。[Poppler 项目](https://poppler.freedesktop.org/) · [pdftotext 手册](https://manpages.debian.org/trixie/poppler-utils/pdftotext.1.en.html)
+
+每轮限一个 2 MiB 文件。PDF 提取文本层，输出上限 12 KiB，解析期限 5 秒。没有可读文本层或受密码保护的文件返回附件错误。附件正文用于当前模型请求，原始附件由请求处理完后释放。

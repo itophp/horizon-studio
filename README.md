@@ -13,10 +13,13 @@ HorizonStudio 工作台位于 `apps/web/src/features/studio`，通过主站的 `
 ```sh
 pnpm install --frozen-lockfile
 docker compose up -d --wait postgres
-make migrate
-make dev-api             # API http://127.0.0.1:8080
+go build -o horizon-cli ./cmd/horizon-cli
+./horizon-cli migrate
+./horizon-cli dev-api             # API http://127.0.0.1:8080
 pnpm dev                 # 应用 http://127.0.0.1:5173/studio
 ```
+
+新版底座的初始化命令需要空的 PostgreSQL schema。已有 Studio 数据需先迁移到新 schema，再切换连接。
 
 打开 [HorizonStudio](http://127.0.0.1:5173/studio)，用 Horizon 主站账号登录。Studio 入口需要 `studio:read` 权限。
 
@@ -34,9 +37,9 @@ pnpm web                  # DSH Agent http://127.0.0.1:3095
 
 会话栏默认按需求分组，点开需求即可查看或新建其会话。切换到「普通」可查看项目内全部 Studio 会话，包括没有关联需求的会话。现有浏览器绑定会在有写权限的用户打开对应会话时同步到后端。
 
-首次启动先应用数据库迁移，启动 Horizon 后端，并执行 `pnpm prepare:web` 和 `pnpm web`。在本机登录时，Studio 使用本次输入的密码自动完成 DSH 配对。已登录时，也可从 Studio 工具栏的「连接 MCP」配对。Studio 会把 30 天凭据保存到本机 DSH，DSH 会自动连接。该 DSH 实例使用配对时的账号和部门查询 Studio 数据。过期后在同一入口重新配对。
+首次启动先应用数据库迁移，启动 Horizon 后端，并执行 `pnpm prepare:web` 和 `pnpm web`。在本机登录时，Studio 使用本次输入的密码自动完成 DSH 配对。已登录时，也可从 Studio 工具栏的「连接 MCP」配对。Studio 会把 30 天凭据保存到本机 DSH，DSH 会自动连接。该 DSH 实例使用配对时的账号和 IAM 身份查询 Studio 数据。过期后在同一入口重新配对。
 
-手工设置时，也可以在「MCP」→「远程 MCP」创建同一账号和部门的 Token，并在 DSH 本机凭据中设置 `HORIZON_STUDIO_MCP_TOKEN`。DSH 的 `studio` MCP 提供会话上下文读取和附件内容读取两个只读工具。
+手工设置时，也可以在「MCP」→「远程 MCP」创建同一租户、账号和 IAM 身份的 Token，并在 DSH 本机凭据中设置 `HORIZON_STUDIO_MCP_TOKEN`。DSH 的 `studio` MCP 提供会话上下文读取和附件内容读取两个只读工具。
 
 `mcp__studio__get_session_context` 接受 DSH `sessionId`，通过 Horizon `/mcp` 读取当前任务、项目开发说明和关联需求；关联需求会附带附件的 `fileId`、文件名、类型和大小。`mcp__studio__read_attachment` 按 `fileId` 读取附件内容（base64，需要 `files:read`；受远程 MCP 结果大小限制，过大的文件返回 `attachment_too_large`）。适配器每次读取时识别 Horizon CLI 管理的后端地址，端口变更后无需重配 DSH。手工启动后端时使用 `.env` 的 `API_ADDR`，也可用 `HORIZONSTUDIO_API` 显式覆盖。
 
@@ -48,13 +51,13 @@ pnpm web                  # DSH Agent http://127.0.0.1:3095
 | `HORIZONSTUDIO_HOME` | Studio 数据根目录（会话绑定等 DSH 侧数据），默认 `.local/studio-home` |
 | `HORIZONSTUDIO_CLI` | 创建新项目使用的 horizon-cli，默认 `resources/horizon-cli/horizon-cli` |
 
-`resources/horizon-cli/` 由本仓库源码构建（`go build -trimpath -o resources/horizon-cli/horizon-cli ./foundation/cmd/horizon-cli`），`source.json` 记录 sha256，`pnpm test` 会校验。
+`resources/horizon-cli/` 由本仓库源码构建（`go build -trimpath -o resources/horizon-cli/horizon-cli ./cmd/horizon-cli`），`source.json` 记录 sha256，`pnpm test` 会校验。
 
 ## 验证
 
 ```sh
 pnpm test               # CLI 清单/目录 + 代理映射测试
-make check-entities     # 实体声明与迁移一致性（当前 0 问题）
+./horizon-cli check-entities     # 实体声明与迁移一致性（当前 0 问题）
 go build ./... && go test ./applications/studio/
 ```
 

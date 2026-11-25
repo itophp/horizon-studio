@@ -9,8 +9,8 @@ import {
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { useSession } from "@/features/administration/auth";
-import { ErrorBanner, Loading } from "@/features/administration/shared";
+import { useSession } from "@/features/identity/auth";
+import { ErrorBanner, Loading } from "@/features/identity/shared";
 import { downloadContent } from "@/features/governance/shared";
 import { filesContent, filesUpload } from "@/lib/capabilities";
 import { studio, type Requirement, type RequirementAttachment } from "./api";
@@ -39,7 +39,7 @@ export function RequirementAttachments({
   const scope = [
     profile.tenantId,
     profile.account.id,
-    profile.activeDepartmentId,
+    profile.identityBindingId,
   ];
   const client = useQueryClient();
   const input = useRef<HTMLInputElement>(null);

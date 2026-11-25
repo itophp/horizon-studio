@@ -12,13 +12,602 @@ import (
 	"errors"
 	identity "horizon/foundation/gen/identity"
 	"io"
+	"mime"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// EncodeSamlCallbackResponse returns an encoder for responses returned by the
+// identity saml_callback endpoint.
+func EncodeSamlCallbackResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*identity.FederationStartResult)
+		w.Header().Set("Location", res.AuthorizationURL)
+		w.Header().Set("Set-Cookie", res.Cookie)
+		w.WriteHeader(http.StatusSeeOther)
+		return nil
+	}
+}
+
+// DecodeSamlCallbackRequest returns a decoder for requests sent to the
+// identity saml_callback endpoint.
+func DecodeSamlCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.SamlCallbackPayload, error) {
+	return func(r *http.Request) (*identity.SamlCallbackPayload, error) {
+		var payload *identity.SamlCallbackPayload
+		var (
+			body SamlCallbackRequestBody
+			err  error
+		)
+		// Read only the body so query parameters cannot supply missing form fields.
+		formBytes, readErr := io.ReadAll(r.Body)
+		err = readErr
+		if err == nil {
+			if len(formBytes) == 0 {
+				err = io.EOF
+			} else {
+				mediaType, _, mediaErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
+				if mediaErr != nil || mediaType != "application/x-www-form-urlencoded" {
+					return payload, goa.DecodePayloadError("expected application/x-www-form-urlencoded request body")
+				}
+				form, parseErr := url.ParseQuery(string(formBytes))
+				if parseErr != nil {
+					return payload, goa.DecodePayloadError("invalid URL-encoded request body")
+				}
+				if values, present := form["SAMLResponse"]; present {
+					if len(values) != 1 {
+						return payload, goa.DecodePayloadError("form field SAMLResponse must occur once")
+					}
+					formValueRaw := values[0]
+					if !utf8.ValidString(formValueRaw) {
+						return payload, goa.DecodePayloadError("form field SAMLResponse must contain UTF-8 text")
+					}
+					formValue := formValueRaw
+					body.SAMLResponse = &formValue
+				}
+				if values, present := form["RelayState"]; present {
+					if len(values) != 1 {
+						return payload, goa.DecodePayloadError("form field RelayState must occur once")
+					}
+					formValueRaw := values[0]
+					if !utf8.ValidString(formValueRaw) {
+						return payload, goa.DecodePayloadError("form field RelayState must contain UTF-8 text")
+					}
+					formValue := formValueRaw
+					body.RelayState = &formValue
+				}
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSamlCallbackRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			providerID string
+			cookie     string
+
+			params = mux.Vars(r)
+		)
+		providerID = params["providerId"]
+		err = goa.MergeErrors(err, goa.ValidatePattern("providerId", providerID, "^[a-zA-Z][a-zA-Z0-9_-]{0,39}$"))
+		cookie = r.Header.Get("Cookie")
+		if cookie == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("cookie", "header"))
+		}
+		if utf8.RuneCountInString(cookie) > 16384 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("cookie", cookie, utf8.RuneCountInString(cookie), 16384, false))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewSamlCallbackPayload(&body, providerID, cookie)
+
+		return payload, nil
+	}
+}
+
+// EncodeSamlCallbackError returns an encoder for errors returned by the
+// saml_callback identity endpoint.
+func EncodeSamlCallbackError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthenticated":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSamlCallbackUnauthenticatedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "rate_limited":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSamlCallbackRateLimitedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusTooManyRequests)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSamlCallbackUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSamlCallbackInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeCompleteSamlResponse returns an encoder for responses returned by the
+// identity complete_saml endpoint.
+func EncodeCompleteSamlResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*identity.FederationCompleteResult)
+		enc := encoder(ctx, w)
+		body := NewCompleteSamlResponseBody(res)
+		if res.Cookie != nil {
+			w.Header().Set("Set-Cookie", *res.Cookie)
+		}
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeCompleteSamlRequest returns a decoder for requests sent to the
+// identity complete_saml endpoint.
+func DecodeCompleteSamlRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.CompleteSamlPayload, error) {
+	return func(r *http.Request) (*identity.CompleteSamlPayload, error) {
+		var payload *identity.CompleteSamlPayload
+		var (
+			body CompleteSamlRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateCompleteSamlRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			cookie string
+		)
+		cookie = r.Header.Get("Cookie")
+		if cookie == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("cookie", "header"))
+		}
+		if utf8.RuneCountInString(cookie) > 16384 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("cookie", cookie, utf8.RuneCountInString(cookie), 16384, false))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewCompleteSamlPayload(&body, cookie)
+
+		return payload, nil
+	}
+}
+
+// EncodeCompleteSamlError returns an encoder for errors returned by the
+// complete_saml identity endpoint.
+func EncodeCompleteSamlError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthenticated":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompleteSamlUnauthenticatedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "rate_limited":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompleteSamlRateLimitedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusTooManyRequests)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompleteSamlUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompleteSamlInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeFederationProvidersResponse returns an encoder for responses returned
+// by the identity federation_providers endpoint.
+func EncodeFederationProvidersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.([]*identity.FederationProvider)
+		enc := encoder(ctx, w)
+		body := NewFederationProvidersResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// EncodeFederationProvidersError returns an encoder for errors returned by the
+// federation_providers identity endpoint.
+func EncodeFederationProvidersError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unavailable":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFederationProvidersUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFederationProvidersInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeStartFederationResponse returns an encoder for responses returned by
+// the identity start_federation endpoint.
+func EncodeStartFederationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*identity.FederationStartResult)
+		enc := encoder(ctx, w)
+		body := NewStartFederationResponseBody(res)
+		w.Header().Set("Set-Cookie", res.Cookie)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeStartFederationRequest returns a decoder for requests sent to the
+// identity start_federation endpoint.
+func DecodeStartFederationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.StartFederationPayload, error) {
+	return func(r *http.Request) (*identity.StartFederationPayload, error) {
+		var payload *identity.StartFederationPayload
+		var (
+			body StartFederationRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateStartFederationRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewStartFederationPayload(&body)
+
+		return payload, nil
+	}
+}
+
+// EncodeStartFederationError returns an encoder for errors returned by the
+// start_federation identity endpoint.
+func EncodeStartFederationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "invalid":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartFederationInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "rate_limited":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartFederationRateLimitedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusTooManyRequests)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartFederationUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStartFederationInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeCompleteFederationResponse returns an encoder for responses returned
+// by the identity complete_federation endpoint.
+func EncodeCompleteFederationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*identity.FederationCompleteResult)
+		enc := encoder(ctx, w)
+		body := NewCompleteFederationResponseBody(res)
+		if res.Cookie != nil {
+			w.Header().Set("Set-Cookie", *res.Cookie)
+		}
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeCompleteFederationRequest returns a decoder for requests sent to the
+// identity complete_federation endpoint.
+func DecodeCompleteFederationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.CompleteFederationPayload, error) {
+	return func(r *http.Request) (*identity.CompleteFederationPayload, error) {
+		var payload *identity.CompleteFederationPayload
+		var (
+			body CompleteFederationRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateCompleteFederationRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			cookie string
+		)
+		cookie = r.Header.Get("Cookie")
+		if cookie == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("cookie", "header"))
+		}
+		if utf8.RuneCountInString(cookie) > 16384 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("cookie", cookie, utf8.RuneCountInString(cookie), 16384, false))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewCompleteFederationPayload(&body, cookie)
+
+		return payload, nil
+	}
+}
+
+// EncodeCompleteFederationError returns an encoder for errors returned by the
+// complete_federation identity endpoint.
+func EncodeCompleteFederationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthenticated":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompleteFederationUnauthenticatedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "rate_limited":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompleteFederationRateLimitedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusTooManyRequests)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompleteFederationUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompleteFederationInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
 
 // EncodeTemporaryAccessResponse returns an encoder for responses returned by
 // the identity temporary_access endpoint.
@@ -825,45 +1414,26 @@ func EncodeRevokeTemporaryAccessError(encoder func(context.Context, http.Respons
 	}
 }
 
-// EncodeSwitchDepartmentResponse returns an encoder for responses returned by
-// the identity switch_department endpoint.
-func EncodeSwitchDepartmentResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeListSignInIdentitiesResponse returns an encoder for responses returned
+// by the identity list_sign_in_identities endpoint.
+func EncodeListSignInIdentitiesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*identity.SessionProfile)
+		res, _ := v.([]*identity.SignInIdentity)
 		enc := encoder(ctx, w)
-		body := NewSwitchDepartmentResponseBody(res)
+		body := NewListSignInIdentitiesResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeSwitchDepartmentRequest returns a decoder for requests sent to the
-// identity switch_department endpoint.
-func DecodeSwitchDepartmentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.SwitchDepartmentPayload, error) {
-	return func(r *http.Request) (*identity.SwitchDepartmentPayload, error) {
-		var payload *identity.SwitchDepartmentPayload
-		var (
-			body SwitchDepartmentRequestBody
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return payload, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return payload, gerr
-			}
-			return payload, goa.DecodePayloadError(err.Error())
-		}
-		err = ValidateSwitchDepartmentRequestBody(&body)
-		if err != nil {
-			return payload, err
-		}
-
+// DecodeListSignInIdentitiesRequest returns a decoder for requests sent to the
+// identity list_sign_in_identities endpoint.
+func DecodeListSignInIdentitiesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.ListSignInIdentitiesPayload, error) {
+	return func(r *http.Request) (*identity.ListSignInIdentitiesPayload, error) {
+		var payload *identity.ListSignInIdentitiesPayload
 		var (
 			cookie string
+			err    error
 		)
 		cookie = r.Header.Get("Cookie")
 		if cookie == "" {
@@ -872,7 +1442,7 @@ func DecodeSwitchDepartmentRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if err != nil {
 			return payload, err
 		}
-		payload = NewSwitchDepartmentPayload(&body, cookie)
+		payload = NewListSignInIdentitiesPayload(cookie)
 		if index := strings.IndexByte(string(payload.Cookie), ' '); index >= 0 {
 			// Remove authorization scheme prefix (e.g. "Bearer")
 			payload.Cookie = payload.Cookie[index+1:]
@@ -882,9 +1452,9 @@ func DecodeSwitchDepartmentRequest(mux goahttp.Muxer, decoder func(*http.Request
 	}
 }
 
-// EncodeSwitchDepartmentError returns an encoder for errors returned by the
-// switch_department identity endpoint.
-func EncodeSwitchDepartmentError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeListSignInIdentitiesError returns an encoder for errors returned by
+// the list_sign_in_identities identity endpoint.
+func EncodeListSignInIdentitiesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -900,23 +1470,10 @@ func EncodeSwitchDepartmentError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSwitchDepartmentUnauthenticatedResponseBody(res)
+				body = NewListSignInIdentitiesUnauthenticatedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "forbidden":
-			var res *identity.IAMProblem
-			errors.As(v, &res)
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewSwitchDepartmentForbiddenResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
 			return enc.Encode(body)
 		case "unavailable":
 			var res *identity.IAMProblem
@@ -926,7 +1483,7 @@ func EncodeSwitchDepartmentError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSwitchDepartmentUnavailableResponseBody(res)
+				body = NewListSignInIdentitiesUnavailableResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -939,7 +1496,254 @@ func EncodeSwitchDepartmentError(encoder func(context.Context, http.ResponseWrit
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSwitchDepartmentInternalResponseBody(res)
+				body = NewListSignInIdentitiesInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeSelectSignInIdentityResponse returns an encoder for responses returned
+// by the identity select_sign_in_identity endpoint.
+func EncodeSelectSignInIdentityResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*identity.SessionProfile)
+		enc := encoder(ctx, w)
+		body := NewSelectSignInIdentityResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSelectSignInIdentityRequest returns a decoder for requests sent to the
+// identity select_sign_in_identity endpoint.
+func DecodeSelectSignInIdentityRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.SelectSignInIdentityPayload, error) {
+	return func(r *http.Request) (*identity.SelectSignInIdentityPayload, error) {
+		var payload *identity.SelectSignInIdentityPayload
+		var (
+			body SelectSignInIdentityRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSelectSignInIdentityRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			cookie string
+		)
+		cookie = r.Header.Get("Cookie")
+		if cookie == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("cookie", "header"))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewSelectSignInIdentityPayload(&body, cookie)
+		if index := strings.IndexByte(string(payload.Cookie), ' '); index >= 0 {
+			// Remove authorization scheme prefix (e.g. "Bearer")
+			payload.Cookie = payload.Cookie[index+1:]
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSelectSignInIdentityError returns an encoder for errors returned by
+// the select_sign_in_identity identity endpoint.
+func EncodeSelectSignInIdentityError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthenticated":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSelectSignInIdentityUnauthenticatedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSelectSignInIdentityForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSelectSignInIdentityUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSelectSignInIdentityInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeRedeemSignInInvitationResponse returns an encoder for responses
+// returned by the identity redeem_sign_in_invitation endpoint.
+func EncodeRedeemSignInInvitationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeRedeemSignInInvitationRequest returns a decoder for requests sent to
+// the identity redeem_sign_in_invitation endpoint.
+func DecodeRedeemSignInInvitationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.RedeemSignInInvitationPayload, error) {
+	return func(r *http.Request) (*identity.RedeemSignInInvitationPayload, error) {
+		var payload *identity.RedeemSignInInvitationPayload
+		var (
+			body RedeemSignInInvitationRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRedeemSignInInvitationRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			cookie string
+		)
+		cookie = r.Header.Get("Cookie")
+		if cookie == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("cookie", "header"))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewRedeemSignInInvitationPayload(&body, cookie)
+		if index := strings.IndexByte(string(payload.Cookie), ' '); index >= 0 {
+			// Remove authorization scheme prefix (e.g. "Bearer")
+			payload.Cookie = payload.Cookie[index+1:]
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeRedeemSignInInvitationError returns an encoder for errors returned by
+// the redeem_sign_in_invitation identity endpoint.
+func EncodeRedeemSignInInvitationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthenticated":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRedeemSignInInvitationUnauthenticatedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRedeemSignInInvitationForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRedeemSignInInvitationUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRedeemSignInInvitationInternalResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1064,6 +1868,434 @@ func EncodeLoginError(encoder func(context.Context, http.ResponseWriter) goahttp
 				body = formatter(ctx, res)
 			} else {
 				body = NewLoginInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeRequestRegistrationResponse returns an encoder for responses returned
+// by the identity request_registration endpoint.
+func EncodeRequestRegistrationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeRequestRegistrationRequest returns a decoder for requests sent to the
+// identity request_registration endpoint.
+func DecodeRequestRegistrationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.RequestRegistrationPayload, error) {
+	return func(r *http.Request) (*identity.RequestRegistrationPayload, error) {
+		var payload *identity.RequestRegistrationPayload
+		var (
+			body RequestRegistrationRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRequestRegistrationRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewRequestRegistrationPayload(&body)
+
+		return payload, nil
+	}
+}
+
+// EncodeRequestRegistrationError returns an encoder for errors returned by the
+// request_registration identity endpoint.
+func EncodeRequestRegistrationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "invalid":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRequestRegistrationInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "rate_limited":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRequestRegistrationRateLimitedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusTooManyRequests)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRequestRegistrationUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRequestRegistrationInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeCompleteRegistrationResponse returns an encoder for responses returned
+// by the identity complete_registration endpoint.
+func EncodeCompleteRegistrationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeCompleteRegistrationRequest returns a decoder for requests sent to the
+// identity complete_registration endpoint.
+func DecodeCompleteRegistrationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.CompleteRegistrationPayload, error) {
+	return func(r *http.Request) (*identity.CompleteRegistrationPayload, error) {
+		var payload *identity.CompleteRegistrationPayload
+		var (
+			body CompleteRegistrationRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateCompleteRegistrationRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewCompleteRegistrationPayload(&body)
+
+		return payload, nil
+	}
+}
+
+// EncodeCompleteRegistrationError returns an encoder for errors returned by
+// the complete_registration identity endpoint.
+func EncodeCompleteRegistrationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "forbidden":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompleteRegistrationForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "rate_limited":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompleteRegistrationRateLimitedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusTooManyRequests)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompleteRegistrationUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompleteRegistrationInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeRequestPasswordResetResponse returns an encoder for responses returned
+// by the identity request_password_reset endpoint.
+func EncodeRequestPasswordResetResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeRequestPasswordResetRequest returns a decoder for requests sent to the
+// identity request_password_reset endpoint.
+func DecodeRequestPasswordResetRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.RequestPasswordResetPayload, error) {
+	return func(r *http.Request) (*identity.RequestPasswordResetPayload, error) {
+		var payload *identity.RequestPasswordResetPayload
+		var (
+			body RequestPasswordResetRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRequestPasswordResetRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewRequestPasswordResetPayload(&body)
+
+		return payload, nil
+	}
+}
+
+// EncodeRequestPasswordResetError returns an encoder for errors returned by
+// the request_password_reset identity endpoint.
+func EncodeRequestPasswordResetError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "rate_limited":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRequestPasswordResetRateLimitedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusTooManyRequests)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRequestPasswordResetUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRequestPasswordResetInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeCompletePasswordResetResponse returns an encoder for responses
+// returned by the identity complete_password_reset endpoint.
+func EncodeCompletePasswordResetResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeCompletePasswordResetRequest returns a decoder for requests sent to
+// the identity complete_password_reset endpoint.
+func DecodeCompletePasswordResetRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.CompletePasswordResetPayload, error) {
+	return func(r *http.Request) (*identity.CompletePasswordResetPayload, error) {
+		var payload *identity.CompletePasswordResetPayload
+		var (
+			body CompletePasswordResetRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateCompletePasswordResetRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewCompletePasswordResetPayload(&body)
+
+		return payload, nil
+	}
+}
+
+// EncodeCompletePasswordResetError returns an encoder for errors returned by
+// the complete_password_reset identity endpoint.
+func EncodeCompletePasswordResetError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "invalid":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompletePasswordResetInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompletePasswordResetForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "rate_limited":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompletePasswordResetRateLimitedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusTooManyRequests)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompletePasswordResetUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompletePasswordResetInternalResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1259,6 +2491,145 @@ func EncodeLogoutError(encoder func(context.Context, http.ResponseWriter) goahtt
 	}
 }
 
+// EncodeRefreshSessionResponse returns an encoder for responses returned by
+// the identity refresh_session endpoint.
+func EncodeRefreshSessionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*identity.LoginResult)
+		enc := encoder(ctx, w)
+		body := NewRefreshSessionResponseBody(res)
+		w.Header().Set("Set-Cookie", res.Cookie)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeRefreshSessionRequest returns a decoder for requests sent to the
+// identity refresh_session endpoint.
+func DecodeRefreshSessionRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*identity.RefreshSessionPayload, error) {
+	return func(r *http.Request) (*identity.RefreshSessionPayload, error) {
+		var payload *identity.RefreshSessionPayload
+		var (
+			body RefreshSessionRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRefreshSessionRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			cookie string
+		)
+		cookie = r.Header.Get("Cookie")
+		if cookie == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("cookie", "header"))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewRefreshSessionPayload(&body, cookie)
+		if index := strings.IndexByte(string(payload.Cookie), ' '); index >= 0 {
+			// Remove authorization scheme prefix (e.g. "Bearer")
+			payload.Cookie = payload.Cookie[index+1:]
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeRefreshSessionError returns an encoder for errors returned by the
+// refresh_session identity endpoint.
+func EncodeRefreshSessionError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "invalid":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshSessionInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "unauthenticated":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshSessionUnauthenticatedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshSessionForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshSessionUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "internal":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRefreshSessionInternalResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeSnapshotResponse returns an encoder for responses returned by the
 // identity snapshot endpoint.
 func EncodeSnapshotResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1320,6 +2691,19 @@ func EncodeSnapshotError(encoder func(context.Context, http.ResponseWriter) goah
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
 			return enc.Encode(body)
+		case "forbidden":
+			var res *identity.IAMProblem
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSnapshotForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
 		case "unavailable":
 			var res *identity.IAMProblem
 			errors.As(v, &res)
@@ -1352,6 +2736,61 @@ func EncodeSnapshotError(encoder func(context.Context, http.ResponseWriter) goah
 	}
 }
 
+// marshalIdentitySessionProfileToSessionProfileResponseBody builds a value of
+// type *SessionProfileResponseBody from a value of type
+// *identity.SessionProfile.
+func marshalIdentitySessionProfileToSessionProfileResponseBody(v *identity.SessionProfile) *SessionProfileResponseBody {
+	res := &SessionProfileResponseBody{
+		AuthorizationVersion:   v.AuthorizationVersion,
+		PlatformOperator:       v.PlatformOperator,
+		CsrfToken:              v.CsrfToken,
+		TenantID:               v.TenantID,
+		IdentityBindingID:      v.IdentityBindingID,
+		ActingOrganizationID:   v.ActingOrganizationID,
+		ActingOrganizationName: v.ActingOrganizationName,
+		Portal:                 v.Portal,
+	}
+	if v.Account != nil {
+		res.Account = marshalIdentitySessionAccountToSessionAccountResponseBody(v.Account)
+	}
+	if v.Permissions != nil {
+		res.Permissions = make([]string, len(v.Permissions))
+		for i, val := range v.Permissions {
+			res.Permissions[i] = val
+		}
+	} else {
+		res.Permissions = []string{}
+	}
+
+	return res
+}
+
+// marshalIdentitySessionAccountToSessionAccountResponseBody builds a value of
+// type *SessionAccountResponseBody from a value of type
+// *identity.SessionAccount.
+func marshalIdentitySessionAccountToSessionAccountResponseBody(v *identity.SessionAccount) *SessionAccountResponseBody {
+	res := &SessionAccountResponseBody{
+		ID:       v.ID,
+		Username: v.Username,
+		Status:   v.Status,
+		IsAdmin:  v.IsAdmin,
+	}
+
+	return res
+}
+
+// marshalIdentityFederationProviderToFederationProviderResponse builds a value
+// of type *FederationProviderResponse from a value of type
+// *identity.FederationProvider.
+func marshalIdentityFederationProviderToFederationProviderResponse(v *identity.FederationProvider) *FederationProviderResponse {
+	res := &FederationProviderResponse{
+		ID:   v.ID,
+		Name: v.Name,
+	}
+
+	return res
+}
+
 // marshalIdentityTemporaryAccessRecordToTemporaryAccessRecordResponseBody
 // builds a value of type *TemporaryAccessRecordResponseBody from a value of
 // type *identity.TemporaryAccessRecord.
@@ -1360,8 +2799,6 @@ func marshalIdentityTemporaryAccessRecordToTemporaryAccessRecordResponseBody(v *
 		ID:               v.ID,
 		ApplicantID:      v.ApplicantID,
 		ApplicantName:    v.ApplicantName,
-		DepartmentID:     v.DepartmentID,
-		DepartmentName:   v.DepartmentName,
 		RequestedMinutes: v.RequestedMinutes,
 		Reason:           v.Reason,
 		Status:           v.Status,
@@ -1410,14 +2847,6 @@ func marshalIdentityPermissionGrantToPermissionGrantResponseBody(v *identity.Per
 		Effect:     v.Effect,
 		Scope:      v.Scope,
 	}
-	if v.DepartmentIds != nil {
-		res.DepartmentIds = make([]int64, len(v.DepartmentIds))
-		for i, val := range v.DepartmentIds {
-			res.DepartmentIds[i] = val
-		}
-	} else {
-		res.DepartmentIds = []int64{}
-	}
 
 	return res
 }
@@ -1438,20 +2867,6 @@ func marshalIdentityPermissionDefinitionToPermissionDefinitionResponseBody(v *id
 	return res
 }
 
-// marshalIdentityScopeDepartmentChoiceToScopeDepartmentChoiceResponseBody
-// builds a value of type *ScopeDepartmentChoiceResponseBody from a value of
-// type *identity.ScopeDepartmentChoice.
-func marshalIdentityScopeDepartmentChoiceToScopeDepartmentChoiceResponseBody(v *identity.ScopeDepartmentChoice) *ScopeDepartmentChoiceResponseBody {
-	res := &ScopeDepartmentChoiceResponseBody{
-		ID:               v.ID,
-		Name:             v.Name,
-		OrganizationID:   v.OrganizationID,
-		OrganizationName: v.OrganizationName,
-	}
-
-	return res
-}
-
 // unmarshalPermissionGrantRequestBodyToIdentityPermissionGrant builds a value
 // of type *identity.PermissionGrant from a value of type
 // *PermissionGrantRequestBody.
@@ -1461,9 +2876,17 @@ func unmarshalPermissionGrantRequestBodyToIdentityPermissionGrant(v *PermissionG
 		Effect:     *v.Effect,
 		Scope:      *v.Scope,
 	}
-	res.DepartmentIds = make([]int64, len(v.DepartmentIds))
-	for i, val := range v.DepartmentIds {
-		res.DepartmentIds[i] = val
+
+	return res
+}
+
+// marshalIdentitySignInIdentityToSignInIdentityResponse builds a value of type
+// *SignInIdentityResponse from a value of type *identity.SignInIdentity.
+func marshalIdentitySignInIdentityToSignInIdentityResponse(v *identity.SignInIdentity) *SignInIdentityResponse {
+	res := &SignInIdentityResponse{
+		IdentityBindingID:      v.IdentityBindingID,
+		ActingOrganizationName: v.ActingOrganizationName,
+		IdentityType:           v.IdentityType,
 	}
 
 	return res
@@ -1548,31 +2971,6 @@ func marshalIdentityDepartmentMembershipToDepartmentMembershipResponseBody(v *id
 		}
 	} else {
 		res.Overrides = []*PermissionGrantResponseBody{}
-	}
-
-	return res
-}
-
-// marshalIdentitySessionProfileToSessionProfileResponseBody builds a value of
-// type *SessionProfileResponseBody from a value of type
-// *identity.SessionProfile.
-func marshalIdentitySessionProfileToSessionProfileResponseBody(v *identity.SessionProfile) *SessionProfileResponseBody {
-	res := &SessionProfileResponseBody{
-		AuthorizationVersion: v.AuthorizationVersion,
-		CsrfToken:            v.CsrfToken,
-		TenantID:             v.TenantID,
-		ActiveDepartmentID:   v.ActiveDepartmentID,
-	}
-	if v.Account != nil {
-		res.Account = marshalIdentityAccountRecordToAccountRecordResponseBody(v.Account)
-	}
-	if v.Permissions != nil {
-		res.Permissions = make([]string, len(v.Permissions))
-		for i, val := range v.Permissions {
-			res.Permissions[i] = val
-		}
-	} else {
-		res.Permissions = []string{}
 	}
 
 	return res

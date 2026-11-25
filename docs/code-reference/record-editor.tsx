@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { EditorDialog } from "@/features/administration/shared";
+import { EditorDialog } from "@/features/identity/shared";
 
 const schema = z.object({ name: z.string().trim().min(2).max(80) });
 type Values = z.infer<typeof schema>;

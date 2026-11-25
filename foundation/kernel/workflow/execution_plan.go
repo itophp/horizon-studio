@@ -39,6 +39,12 @@ func (e *Engine) ValidatePlanWithQueries(ctx context.Context, q *dbgen.Queries, 
 	}
 	result := []string{}
 	for _, s := range d.Steps {
+		if s.Agent != nil {
+			if !e.planAgentToolsAllowed(s, p, target.Key()) {
+				return "", contracts.Problem("forbidden")
+			}
+			continue
+		}
 		if s.Graph != nil {
 			graph, err := e.graphDefinition(s.Graph)
 			if err != nil {
@@ -50,7 +56,7 @@ func (e *Engine) ValidatePlanWithQueries(ctx context.Context, q *dbgen.Queries, 
 			continue
 		}
 		entry, ok := e.registry.Resolve(s.Capability, s.Version)
-		if !ok || s.Agent != nil || s.Compensation != nil || entry.Definition.TransientResult || (entry.Definition.Permission != "" && !p.Can(entry.Definition.Permission)) || !entry.Definition.AllowsOrigin(contracts.OriginWorkflow) || slices.Contains(entry.Definition.Tags, "manual-only") || slices.Contains(entry.Definition.Tags, "internal-only") || slices.Contains(entry.Definition.Tags, "system-only") {
+		if !ok || s.Compensation != nil || entry.Definition.TransientResult || (entry.Definition.Permission != "" && !p.Can(entry.Definition.Permission)) || !entry.Definition.AllowsOrigin(contracts.OriginWorkflow) || slices.Contains(entry.Definition.Tags, "manual-only") || slices.Contains(entry.Definition.Tags, "internal-only") || slices.Contains(entry.Definition.Tags, "system-only") {
 			return "", contracts.Problem("forbidden")
 		}
 		if target.ReadOnly && !entry.Definition.ReadOnly {
@@ -124,8 +130,37 @@ func (e *Engine) ValidatePlanWithQueries(ctx context.Context, q *dbgen.Queries, 
 	}
 	return d.Hash(), nil
 }
+
+func (e *Engine) planAgentToolsAllowed(step Step, p *identity.Principal, target string) bool {
+	if step.Agent.Output == nil || !p.Can("assistant:use") {
+		return false
+	}
+	for _, key := range step.Agent.Tools {
+		name, version, _ := strings.Cut(key, "@")
+		entry, ok := e.registry.Resolve(name, version)
+		d := entry.Definition
+		if !ok || key == target || !d.ReadOnly || d.TransientResult || d.Layer != contracts.LayerAtomic ||
+			d.Risk != contracts.RiskLow || d.Approval != contracts.ApprovalAuto || !d.AllowsOrigin(contracts.OriginAgent) ||
+			(d.Permission != "" && !p.Can(d.Permission)) || slices.Contains(d.Tags, "manual-only") ||
+			slices.Contains(d.Tags, "system-only") || slices.Contains(d.Tags, "internal-only") {
+			return false
+		}
+		if p.MachineCredentialID() != "" && (!gateway.MachineDirectEntry(entry) || !p.MachineAllowsCapability(d, contracts.OriginAgent)) {
+			return false
+		}
+	}
+	return true
+}
+
 func (e *Engine) StartPlanTx(ctx context.Context, tx pgx.Tx, b contracts.ExecutionBinding, in contracts.Input) (int64, error) {
+	p, err := identity.Current(ctx)
+	if err != nil {
+		return 0, err
+	}
 	if b.Plan.Mode == "graph" {
+		if p.MachineCredentialID() != "" {
+			return 0, contracts.Problem("forbidden")
+		}
 		return e.startGraphPlanTx(ctx, tx, b, in)
 	}
 	d, ok := e.definitions[b.Plan.ImplementationRef]
@@ -137,11 +172,21 @@ func (e *Engine) StartPlanTx(ctx context.Context, tx pgx.Tx, b contracts.Executi
 		return 0, contracts.Problem("unavailable")
 	}
 	hash, err := e.ValidatePlanWithQueries(ctx, dbgen.New(tx), target.Definition, b.Plan.ImplementationRef)
-	if err != nil || hash != b.Plan.WorkflowHash {
+	if err != nil {
+		return 0, err
+	}
+	if hash != b.Plan.WorkflowHash {
 		return 0, contracts.Problem("invalid")
 	}
 	result := []string{}
 	for _, s := range d.Steps {
+		if p.MachineCredentialID() != "" && s.Agent == nil {
+			entry, registered := e.registry.Resolve(s.Capability, s.Version)
+			if !registered || s.Graph != nil || s.Compensation != nil ||
+				!gateway.MachineDirectEntry(entry) || !p.MachineAllowsCapability(entry.Definition, contracts.OriginWorkflow) {
+				return 0, contracts.Problem("forbidden")
+			}
+		}
 		if s.CallMode == "invoke_native" {
 			result = append(result, s.ID)
 		}
@@ -184,7 +229,7 @@ func (e *Engine) planDependencies(ctx context.Context, q *dbgen.Queries, tenant,
 		return contracts.Problem("unavailable")
 	}
 	for _, s := range d.Steps {
-		if s.CallMode == "invoke_native" || s.Graph != nil {
+		if s.CallMode == "invoke_native" || s.Graph != nil || s.Agent != nil {
 			continue
 		}
 		var id string

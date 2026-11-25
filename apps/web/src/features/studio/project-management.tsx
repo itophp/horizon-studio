@@ -8,9 +8,9 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useParams, useSearchParams } from "react-router";
-import { AdminPageTabs } from "@/features/administration/page-tabs";
-import { useSession } from "@/features/administration/auth";
-import { ErrorBanner, Loading } from "@/features/administration/shared";
+import { AdminPageTabs } from "@/features/identity/page-tabs";
+import { useSession } from "@/features/identity/auth";
+import { ErrorBanner, Loading } from "@/features/identity/shared";
 import { StudioApplicationAccess } from "./access";
 import type { Project } from "./api";
 import {
@@ -48,7 +48,7 @@ function ProjectManagement() {
   const scope = [
     profile.tenantId,
     profile.account.id,
-    profile.activeDepartmentId,
+    profile.identityBindingId,
   ];
   const projects = useQuery(studioProjectsOptions(scope));
   const canWrite = profile.permissions.includes("studio:write");

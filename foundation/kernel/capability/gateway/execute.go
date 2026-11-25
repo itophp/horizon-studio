@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"horizon/foundation/kernel/audit"
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/kernel/capability/registry"
 	"horizon/foundation/kernel/executionplan"
@@ -43,7 +44,9 @@ func (g *Gateway) run(ctx context.Context, p *identity.Principal, entry registry
 		if err != nil {
 			return nil, err
 		}
-		if entry.Definition.TransientResult && request.executionBinding.Plan.Mode != "direct" {
+		if entry.Definition.TransientResult && request.executionBinding.Plan.Mode != "direct" ||
+			p.MachineCredentialID() != "" && request.executionBinding.Plan.Mode != "direct" &&
+				(request.executionBinding.Plan.Mode != "workflow" || request.authorizationOrigin == contracts.OriginWorkflow) {
 			return nil, contracts.Problem("unavailable")
 		}
 
@@ -58,8 +61,12 @@ func (g *Gateway) run(ctx context.Context, p *identity.Principal, entry registry
 			input = json.RawMessage(`{}`)
 		}
 		if _, err := q.CapCreateInvocation(ctx, dbgen.CapCreateInvocationParams{
-			TenantID: p.TenantID, AccountID: p.Account.ID, DepartmentID: p.Account.DepartmentID,
-			InvocationID: invocationID, Capability: entry.Definition.Name, CapabilityVersion: entry.Definition.Version,
+			ActingOrganizationID: p.ActingOrganization.OrganizationID, ActorPortal: p.ActingOrganization.Portal,
+			TenantID: p.TenantID, AccountID: p.Account.ID,
+			IdentityBindingID:   p.IdentityBindingID,
+			MachineCredentialID: p.MachineCredentialID(),
+			AgentDelegationID:   p.AgentDelegationID(),
+			InvocationID:        invocationID, Capability: entry.Definition.Name, CapabilityVersion: entry.Definition.Version,
 			Origin: string(request.Origin), IdempotencyKey: request.IdempotencyKey,
 			Status: string(contracts.StatusExecuting), Input: input, InputDigest: digest,
 			CorrelationID: traceID, CausationID: request.CausationID,
@@ -126,18 +133,38 @@ func (g *Gateway) execute(ctx context.Context, p *identity.Principal, entry regi
 	if binding.Plan.Mode != "direct" || binding.Plan.ImplementationRef != entry.Definition.Key() {
 		return contracts.Output{}, nil, contracts.Problem("unavailable")
 	}
-	ctx = withInvocation(ctx, InvocationContext{ExecutionBinding: binding, Runtime: request.Runtime, CausationID: request.CausationID, Capability: entry.Definition.Name, Version: entry.Definition.Version, InvocationID: invocationID, CorrelationID: traceID, Depth: request.TriggerDepth, IdempotencyKey: request.IdempotencyKey, Origin: request.Origin, InTransaction: entry.Handler.ExecuteTx != nil})
+	transactional := entry.Handler.ExecuteTx != nil || entry.Handler.ExecuteScopedTx != nil
+	var authorization identity.AuthorizationDecision
+	request.authorization = &authorization
+	ctx = audit.WithCorrelation(ctx, traceID)
+	ctx = withInvocation(ctx, InvocationContext{ExecutionBinding: binding, Runtime: request.Runtime, CausationID: request.CausationID, Capability: entry.Definition.Name, Version: entry.Definition.Version, InvocationID: invocationID, CorrelationID: traceID, Depth: request.TriggerDepth, IdempotencyKey: request.IdempotencyKey, Origin: request.Origin, InTransaction: transactional})
 	meta := outbox.Meta{
-		InvocationID: invocationID, AccountID: p.Account.ID, DepartmentID: p.Account.DepartmentID,
-		CorrelationID: traceID, CausationID: request.CausationID, Depth: request.TriggerDepth,
+		InvocationID: invocationID, AccountID: p.Account.ID,
+		IdentityBindingID: p.IdentityBindingID,
+		CorrelationID:     traceID, CausationID: request.CausationID, Depth: request.TriggerDepth,
 	}
-	if entry.Handler.ExecuteTx != nil {
+	if transactional {
 		tx, err := g.pool.Begin(ctx)
 		if err != nil {
 			return contracts.Output{}, nil, err
 		}
 		defer tx.Rollback(ctx)
-		if err = g.checkEntry(ctx, dbgen.New(tx), p, entry, request.Input, true); err != nil {
+		if p.MachineCredentialID() != "" {
+			p, err = g.identity.WithReadQueries(dbgen.New(tx)).RefreshMachine(ctx, p, true)
+			if err != nil {
+				return contracts.Output{}, nil, err
+			}
+			if err = checkInputAccess(p, entry.Definition, request.Input); err != nil {
+				return contracts.Output{}, nil, err
+			}
+			ctx = identity.WithPrincipal(ctx, p)
+			if task, ok := CurrentTaskReference(ctx); ok || request.Origin == contracts.OriginWorkflow {
+				if !ok || !g.activeMachineRun(ctx, dbgen.New(tx), p, task, request.CausationID) {
+					return contracts.Output{}, nil, contracts.Problem("forbidden")
+				}
+			}
+		}
+		if err = g.checkEntry(ctx, dbgen.New(tx), p, entry, request, true); err != nil {
 			return contracts.Output{}, nil, err
 		}
 		if request.Runtime != nil {
@@ -145,9 +172,30 @@ func (g *Gateway) execute(ctx context.Context, p *identity.Principal, entry regi
 				return contracts.Output{}, nil, err
 			}
 		}
-		output, execErr := entry.Handler.ExecuteTx(ctx, tx, request.Input)
-		if execErr != nil {
-			return contracts.Output{}, nil, execErr
+		if p.AgentDelegationID() != "" {
+			if err = g.identity.ConsumeAgentDelegation(ctx, dbgen.New(tx), p); err != nil {
+				return contracts.Output{}, nil, err
+			}
+		}
+		var output contracts.Output
+		if entry.Handler.ExecuteScopedTx != nil {
+			output, err = entry.Handler.ExecuteScopedTx(ctx, tx, request.Input, authorization.RowPredicates)
+		} else {
+			output, err = entry.Handler.ExecuteTx(ctx, tx, request.Input)
+		}
+		if err != nil {
+			return contracts.Output{}, nil, err
+		}
+		if p.MachineCredentialID() != "" || len(authorization.MaskedOutput) > 0 {
+			output.Data, err = projectOutput(p, entry.Definition, output.Data, authorization.MaskedOutput...)
+			if err != nil {
+				return contracts.Output{}, nil, err
+			}
+		}
+		if p.MachineCredentialID() != "" {
+			if err = g.identity.AuditMachineExecution(ctx, dbgen.New(tx), p, entry.Definition.Name, traceID); err != nil {
+				return contracts.Output{}, nil, err
+			}
 		}
 		eventIDs, eventErr := appendEvents(ctx, dbgen.New(tx), entry.Definition, output.Events, p.TenantID, meta)
 		if eventErr != nil {
@@ -158,12 +206,18 @@ func (g *Gateway) execute(ctx context.Context, p *identity.Principal, entry regi
 		}
 		return output, eventIDs, nil
 	}
-	if err := g.checkEntry(ctx, dbgen.New(g.pool), p, entry, request.Input, false); err != nil {
+	if err := g.checkEntry(ctx, dbgen.New(g.pool), p, entry, request, false); err != nil {
 		return contracts.Output{}, nil, err
 	}
 	output, err := entry.Handler.Execute(ctx, request.Input)
 	if err != nil {
 		return contracts.Output{}, nil, err
+	}
+	if len(authorization.MaskedOutput) > 0 {
+		output.Data, err = projectOutput(p, entry.Definition, output.Data, authorization.MaskedOutput...)
+		if err != nil {
+			return contracts.Output{}, nil, err
+		}
 	}
 	tx, err := g.pool.Begin(ctx)
 	if err != nil {

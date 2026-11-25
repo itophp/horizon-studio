@@ -74,10 +74,10 @@ export function apply(ctx) {
 }
 
 
-async function verifyStudioMcp(token, { accountId, departmentId } = {}) {
+async function verifyStudioMcp(token, { accountId, tenantId, identityBindingId } = {}) {
   if (typeof token !== 'string' || !/^bmcp_[a-f0-9]{64}$/.test(token) ||
       !Number.isSafeInteger(accountId) || accountId <= 0 ||
-      !Number.isSafeInteger(departmentId) || departmentId <= 0) {
+      typeof tenantId !== 'string' || !tenantId || typeof identityBindingId !== 'string') {
     throw new Error('Invalid Studio MCP credential')
   }
   const root = process.env.HORIZONSTUDIO_ROOT
@@ -86,7 +86,7 @@ async function verifyStudioMcp(token, { accountId, departmentId } = {}) {
     fromStudio('studio-mcp.mjs'),
     fromStudio('mcp-business-helper.mjs'),
   ])
-  await diagnose((await backendURL()).href, token, { accountId, departmentId }, 'studio_session_context')
+  await diagnose((await backendURL()).href, token, { accountId, tenantId, identityBindingId }, 'studio_session_context')
 }
 
 async function checkStudioMcp(credentials, identity) {

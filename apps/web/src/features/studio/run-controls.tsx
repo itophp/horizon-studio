@@ -14,7 +14,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select";
-import { errorText } from "@/features/administration/shared";
+import { errorText } from "@/features/identity/shared";
 import { studio, type Project, type ProjectService } from "./api";
 import { isRunning, isStopped, serviceStatusOptions } from "./service-status";
 import { ServiceActions, type ServiceAction } from "./service-actions";

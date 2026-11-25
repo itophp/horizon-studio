@@ -13,8 +13,6 @@ export interface TemporaryAccessRecord {
   approvedGrants: PermissionGrant[];
   approvedMinutes: number;
   createdAt: string;
-  departmentId: number;
-  departmentName: string;
   expiresAt: string;
   id: number;
   reason: string;

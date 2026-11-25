@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ErrorBanner } from "@/features/administration/shared";
+import { ErrorBanner } from "@/features/identity/shared";
 import { ApiError } from "@/api/client/request";
 import { capabilityLabel, formatMoment } from "@/lib/capability";
 import { ApprovalCard } from "./shared";
@@ -32,9 +32,9 @@ export function Workbench(props: {
     error,
   } = state;
   return (
-    <div className="grid min-w-0 items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_260px]">
-      <Card className="min-w-0 gap-0 py-0">
-        <CardHeader className="flex flex-row items-center gap-3 border-b p-4">
+    <div className="ai-session-layout">
+      <Card className="min-h-0 min-w-0 gap-0 py-0">
+        <CardHeader className="flex shrink-0 flex-row items-center gap-3 border-b p-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted">
             <Sparkles className="size-4" />
           </span>
@@ -59,7 +59,7 @@ export function Workbench(props: {
           loading={Boolean(props.sessionId && state.history.isPending)}
           onSuggestion={state.setDraft}
         />
-        <div className="space-y-3 px-4 empty:hidden">
+        <div className="ai-session-notices space-y-3 px-3 empty:hidden">
           {state.history.isError && (
             <ErrorBanner
               error={state.history.error}
@@ -75,10 +75,30 @@ export function Workbench(props: {
           {blocked && (
             <p className="ai-empty-note" role="status">
               {t("workbench.disabled")}{" "}
-              <Link to="/settings">{t("workbench.openSettings")}</Link>
+              <Link
+                to={
+                  snapshot?.enabled
+                    ? "/ai-settings"
+                    : "/ai-settings?tab=general"
+                }
+              >
+                {t("workbench.openAISettings")}
+              </Link>
             </p>
           )}
-          {!!error && <ErrorBanner error={error} />}
+          {error instanceof ApiError &&
+          (error.code === "ai_attachment_invalid" ||
+            error.code === "ai_pdf_unavailable") ? (
+            <p role="alert" className="text-sm text-destructive">
+              {t(
+                error.code === "ai_pdf_unavailable"
+                  ? "runtime:ai.pdfUnavailable"
+                  : "runtime:ai.attachmentInvalid",
+              )}
+            </p>
+          ) : (
+            !!error && <ErrorBanner error={error} />
+          )}
           {error instanceof ApiError && error.code === "unavailable" && (
             <p className="ai-empty-note" role="status">
               {t("workbench.modelFailed")}
@@ -100,13 +120,15 @@ export function Workbench(props: {
         <PromptInput
           draft={state.draft}
           onChange={state.setDraft}
+          file={state.file}
+          onFileChange={state.setFile}
           busy={busy}
           blocked={blocked}
           onSend={(value) => void state.send(value)}
           onStop={state.stop}
         />
       </Card>
-      <Card className="min-w-0">
+      <Card className="ai-session-approvals min-w-0">
         <CardHeader>
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">{t("workbench.pending")}</h2>
@@ -154,10 +176,6 @@ export function Workbench(props: {
             </ul>
           )}
           <dl className="ai-side-meta">
-            <div>
-              <dt>{t("workbench.department")}</dt>
-              <dd>{state.session.activeDepartmentId}</dd>
-            </div>
             <div>
               <dt>{t("workbench.registry")}</dt>
               <dd>{snapshot?.registryVersion ?? "—"}</dd>

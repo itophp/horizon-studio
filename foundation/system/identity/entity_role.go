@@ -15,6 +15,7 @@ func roleEntity() contracts.Entity {
 			{Name: "name", Kind: contracts.AttributeBusiness, Type: contracts.TypeString, Required: true},
 			{Name: "code", Kind: contracts.AttributeBusiness, Type: contracts.TypeString, Required: true},
 			{Name: "description", Kind: contracts.AttributeBusiness, Type: contracts.TypeString, Required: true},
+			{Name: "templateKey", Kind: contracts.AttributeSystem, Type: contracts.TypeEnum, Required: true, Enum: []string{"custom", "tenant-admin"}},
 			{Name: "status", Kind: contracts.AttributeBusiness, Type: contracts.TypeEnum, Required: true,
 				Enum: []string{"active", "inactive"}},
 			{Name: "grants", Kind: contracts.AttributeSystem, Type: contracts.TypeJSON, Shape: "array", Required: true,

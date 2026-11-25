@@ -23,7 +23,7 @@ import type {
   CapabilityApproval,
   CapabilityInvocation,
 } from "@/api/generated/models";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import { capabilityLabel, formatMoment } from "@/lib/capability";
 
 // Query keys include the trusted session scope so switching account or
@@ -34,7 +34,7 @@ export function useAiKey(...parts: (string | number)[]) {
     "ai",
     session.tenantId,
     session.account.id,
-    session.activeDepartmentId,
+    session.identityBindingId,
     ...parts,
   ] as const;
 }

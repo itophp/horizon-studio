@@ -1,7 +1,7 @@
 import { useId, cloneElement, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { useConfiguration } from "@/features/governance/runtime";
-import { validationText } from "@/features/administration/shared";
+import { validationText } from "@/features/identity/shared";
 
 export function FormField({
   label,

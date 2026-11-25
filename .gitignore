@@ -13,5 +13,10 @@ coverage/
 .workbuddy/
 /horizon-cli
 /horizon-cli.exe
-.local/
-resources/horizon-cli/horizon-cli
+/horizon-studio/
+/website/
+.gocache/
+.pnpm-store/
+
+/resources/horizon-cli/horizon-cli
+/dsh/

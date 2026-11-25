@@ -3,32 +3,59 @@ import { z } from "zod";
 export const runtimeDeploymentCandidates = [
   {
     dependencyVersions: [],
-    pluginId: "builtin:articles",
-    version: "2.0.0",
-    digest: "79b707f4bcfcc996ecac4e5c2d66b961e4af0166390ec0bc78f76973b037c841",
-    applications: ["articles"],
+    pluginId: "builtin:automation",
+    version: "1.0.1",
+    digest: "5cb20085bf644b5d25946dda091d277f0ca2c7581e475331749da8d53ddefc4e",
+    applications: ["automation"],
     dependencies: [],
+    base: true,
+    labelKeys: {
+      automation: "automation:heading",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:account-security",
+    version: "1.0.0",
+    digest: "ac5c0493a4e13ffcdb177545178df1ddbbf9ff625fa6e3423afddbf5b8fa2154",
+    applications: ["account-security"],
+    dependencies: [],
+    base: true,
+    labelKeys: {
+      "account-security": "admin:security.title",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:iam-governance",
+    version: "1.0.0",
+    digest: "283f25015f8cdbb4bb5ed8bfaf1cee94c10b0918863387b69766fd2f49228057",
+    applications: ["iam-governance"],
+    dependencies: [],
+    base: true,
+    labelKeys: {
+      "iam-governance": "admin:policy.title",
+    },
   },
   {
     dependencyVersions: [],
     pluginId: "system.identity",
     version: "2.3.0",
-    digest: "350d42d713fdff90a3f0735ca9b58f31e8a170e1a19629562c9439e6c4e948f9",
+    digest: "c964962998f2b7db40fa7d1c725e08fffbc5c8893d35948bfe8f6f6e52867a9a",
     applications: [
-      "permissions",
-      "organizations",
-      "accounts",
       "runtime-protocol",
+      "accounts",
+      "organizations",
+      "permissions",
     ],
     dependencies: [],
-  },
-  {
-    dependencyVersions: [],
-    pluginId: "builtin:capabilities",
-    version: "1.0.1",
-    digest: "8cd89fbd041c3f9c20bd4943a2889aeef638abf91f344c159eca16ded1757b57",
-    applications: ["capabilities"],
-    dependencies: [],
+    base: true,
+    labelKeys: {
+      accounts: "admin:accounts.title",
+      organizations: "admin:organizations.title",
+      permissions: "admin:permissions.title",
+      "runtime-protocol": "runtime:protocol.heading",
+    },
   },
   {
     dependencyVersions: [],
@@ -37,6 +64,10 @@ export const runtimeDeploymentCandidates = [
     digest: "e1bab3048f153d85e7e8131b3c6ad0391087d5c8ec4cc5fadd0b8b6a5757ce61",
     applications: ["analytics"],
     dependencies: [],
+    base: true,
+    labelKeys: {
+      analytics: "admin:nav.statistics",
+    },
   },
   {
     dependencyVersions: [],
@@ -45,30 +76,58 @@ export const runtimeDeploymentCandidates = [
     digest: "718e020fd465cd652a8acbc6d6cf78b8e940b4c40499bcb324b2efd9fda53275",
     applications: ["analytics"],
     dependencies: [],
+    base: true,
+    labelKeys: {
+      analytics: "admin:nav.statistics",
+    },
   },
   {
     dependencyVersions: [],
     pluginId: "builtin:agent-collaboration",
     version: "1.0.0",
-    digest: "26687aa606b98c903034ebd3284118cbb40629f6bed85cb73b9ffdc014fa5189",
+    digest: "20d02bd61e7a02ea0e5e71011a73e8b35918b28b5b80fb3d02e6ef240d130535",
     applications: ["agent-collaboration"],
     dependencies: [],
+    base: true,
+    labelKeys: {
+      "agent-collaboration": "mcp:hub.title",
+    },
   },
   {
     dependencyVersions: [],
     pluginId: "builtin:agent-collaboration",
     version: "1.0.1",
-    digest: "4655dc9c397da9b577483a1176689a293876651db1067cc7c62298847ce67f65",
+    digest: "f4be1dc4ea2bda664789c96b1dc3a0b6503104eb12d49d22648382e0c6639d0d",
     applications: ["agent-collaboration"],
     dependencies: [],
+    base: true,
+    labelKeys: {
+      "agent-collaboration": "mcp:hub.title",
+    },
   },
   {
     dependencyVersions: [],
     pluginId: "builtin:agent-collaboration",
     version: "1.0.2",
-    digest: "4aec1dff200e190d88665c0cb5d0cbcb70d29b032ba6075aec2b358dd7d81e3c",
+    digest: "ed6a344a8c47c5ee9c7efda9ca29bfeaaaf7966373a04f295bd73711aa81aba6",
     applications: ["agent-collaboration"],
     dependencies: [],
+    base: true,
+    labelKeys: {
+      "agent-collaboration": "mcp:hub.title",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:agent-collaboration",
+    version: "1.0.3",
+    digest: "31f20e0ba3bbae787be6ba6388c307069ff0680d3ffda15536c217969497d184",
+    applications: ["agent-collaboration"],
+    dependencies: [],
+    base: true,
+    labelKeys: {
+      "agent-collaboration": "mcp:hub.title",
+    },
   },
   {
     dependencyVersions: [],
@@ -77,6 +136,10 @@ export const runtimeDeploymentCandidates = [
     digest: "2a3963f06b330feca87779ec56ce0b589ff7475238c064579633e1accd8990e9",
     applications: ["personal-preferences"],
     dependencies: [],
+    base: true,
+    labelKeys: {
+      "personal-preferences": "governance:preferences",
+    },
   },
   {
     dependencyVersions: [],
@@ -85,22 +148,166 @@ export const runtimeDeploymentCandidates = [
     digest: "6148a35590188950bac9206ba917a2493acb141a93dab8e7c4ce5e36c303c1f6",
     applications: ["personal-preferences"],
     dependencies: [],
+    base: true,
+    labelKeys: {
+      "personal-preferences": "governance:preferences",
+    },
   },
   {
     dependencyVersions: [],
     pluginId: "builtin:system-settings",
     version: "1.0.0",
-    digest: "7f1821650d96254ee52f856abff305dac37a32a7a45f1e0a1d314b7195487009",
+    digest: "8dc299a337c5b596b09179f583e98634dad6fd818e31fcd18a2616ef3ef97675",
     applications: ["system-settings"],
     dependencies: [],
+    base: true,
+    labelKeys: {
+      "system-settings": "governance:settings",
+    },
   },
   {
     dependencyVersions: [],
     pluginId: "builtin:system-settings",
     version: "1.0.1",
-    digest: "cec0642312b29fbdbc9195a19661cf60335ff86cf256b1d736ce7d1e3f96adea",
+    digest: "a4e8b0db49be0b3ada4c47dd4d71187696c35d41474d7464dec4d501cd90d66f",
     applications: ["system-settings"],
     dependencies: [],
+    base: true,
+    labelKeys: {
+      "system-settings": "governance:settings",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:system-settings",
+    version: "1.0.2",
+    digest: "a082c334bc0a90a45d5aea5a2c0b5ebe1cf963d19cd798fa02a5fbe553a1d9ba",
+    applications: ["system-settings"],
+    dependencies: [],
+    base: true,
+    labelKeys: {
+      "system-settings": "governance:settings",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:system-settings",
+    version: "1.0.3",
+    digest: "f8ab8be54075be1109468b0f077e31ed0c683c212744b430bcf2494918fd5502",
+    applications: ["system-settings"],
+    dependencies: [],
+    base: true,
+    labelKeys: {
+      "system-settings": "governance:settings",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:system-settings",
+    version: "1.0.4",
+    digest: "ab6fc2b36157562b35d35afc29b4f1ccef997507fff364476fb15fb28cc12e34",
+    applications: ["system-settings"],
+    dependencies: [],
+    base: true,
+    labelKeys: {
+      "system-settings": "governance:settings",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:system-settings",
+    version: "1.0.5",
+    digest: "a17567dc1aa81b6b01fa5cc1ade232d163a384acf715ea4e1114095416bbd9de",
+    applications: ["system-settings"],
+    dependencies: [],
+    base: true,
+    labelKeys: {
+      "system-settings": "governance:settings",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:ai-settings",
+    version: "1.0.0",
+    digest: "35d9a61944393f26a6a82f2d6d922866a20ef216509b982bd2acf036b341e037",
+    applications: ["ai-settings"],
+    dependencies: [],
+    base: true,
+    labelKeys: {
+      "ai-settings": "governance:aiSettings.title",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:ai-settings",
+    version: "1.0.1",
+    digest: "827c111b02dc6e17e664ed1bd68a579fa84dc06d99d18cf54d75af5235a70ebf",
+    applications: ["ai-settings"],
+    dependencies: [],
+    base: true,
+    labelKeys: {
+      "ai-settings": "governance:aiSettings.title",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:ai-settings",
+    version: "1.0.2",
+    digest: "65f7334b5e187e3c367e719ec03ccd1efaf013a0af0d7b5b4c34e14c23f0dbdf",
+    applications: ["ai-settings"],
+    dependencies: [],
+    base: true,
+    labelKeys: {
+      "ai-settings": "governance:aiSettings.title",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:ai-settings",
+    version: "1.0.3",
+    digest: "290c487f1d9cf356c5f037e729fbd716c4849a42dd003064b118669a94ad49e7",
+    applications: ["ai-settings"],
+    dependencies: [],
+    base: true,
+    labelKeys: {
+      "ai-settings": "governance:aiSettings.title",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:capabilities",
+    version: "1.1.0",
+    digest: "17db45122a083f9a0fdf4cdbed8aca09d2bfae39929c46c7b5f9d8059ffe573d",
+    applications: ["capabilities"],
+    dependencies: [],
+    base: true,
+    labelKeys: {
+      capabilities: "capability:title",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "com.horizon.example",
+    version: "1.0.2",
+    digest: "d6bf942e4161bb5768e77cf3b6e2fa8c8126058d4caac086f846ee31e5200979",
+    applications: ["example-playground"],
+    dependencies: [],
+    base: false,
+    labelKeys: {
+      "example-playground": "capability:demo.title",
+    },
+  },
+  {
+    dependencyVersions: [],
+    pluginId: "builtin:mail",
+    version: "1.1.11",
+    digest: "6ba48271968dbb8b3fad155193939a5712f6cd42fc86e21eaecd0c361d4b26b0",
+    applications: ["mail"],
+    dependencies: [],
+    base: false,
+    labelKeys: {
+      mail: "mail:heading",
+    },
   },
   {
     dependencyVersions: [],
@@ -109,30 +316,46 @@ export const runtimeDeploymentCandidates = [
     digest: "310af6a5671a3d73aa67877eca1eb3d3c401de1d019c2876003d98bad8f0734f",
     applications: ["projects"],
     dependencies: [],
+    base: false,
+    labelKeys: {
+      projects: "projects:heading",
+    },
   },
   {
     dependencyVersions: [],
     pluginId: "com.horizon.projects",
     version: "2.0.1",
-    digest: "a645d132f592cf5c25c774dd58dc3d6761c55e1737ad135269c013b162d246ff",
+    digest: "40e086097ec6c09c534775597ebceaea129d8d4c01fdce5a8d47745059f32327",
     applications: ["projects"],
     dependencies: [],
+    base: false,
+    labelKeys: {
+      projects: "projects:heading",
+    },
   },
   {
     dependencyVersions: [],
     pluginId: "com.horizon.projects",
     version: "2.0.2",
-    digest: "45ea249e632d68d8bde7684efd291131e04e96735fd9526639840d5ecd0a7cd9",
+    digest: "18e4ba993ff058e1141f87d2eba92aedb4c4b7d9a9a8adfd2110a56ba0d6774d",
     applications: ["projects"],
     dependencies: [],
+    base: false,
+    labelKeys: {
+      projects: "projects:heading",
+    },
   },
   {
     dependencyVersions: [],
     pluginId: "com.horizon.projects",
     version: "2.0.3",
-    digest: "8c826fb84e1ac54edb1f24a7f2fd6483e33402d3582ffffdc518891568e4da1e",
+    digest: "2259aec91f8cf9435ded12b298d45e27c1ee73405a46be960fcf38639885ecc6",
     applications: ["projects"],
     dependencies: [],
+    base: false,
+    labelKeys: {
+      projects: "projects:heading",
+    },
   },
   {
     dependencyVersions: [],
@@ -141,6 +364,10 @@ export const runtimeDeploymentCandidates = [
     digest: "3c1d9da792e89ac7f96b0cdeb4929b344a630a0dbe4b5a09e06600520515c520",
     applications: ["studio"],
     dependencies: [],
+    base: false,
+    labelKeys: {
+      studio: "studio:title",
+    },
   },
 ] as const;
 export const runtimeUIContracts = [
@@ -649,6 +876,21 @@ export const runtimeUIContracts = [
       "Preserve presentation; Gateway rechecks every provider and action.",
     example:
       '{"type":"element","id":"file-review-form","element":{"kind":"file-review-form","version":"1.0"}}',
+  },
+  {
+    name: "ai-model-settings",
+    version: "1.0",
+    category: "element",
+    description: "Trusted ApplicationRuntime protocol element contract.",
+    propsSchema:
+      '{"additionalProperties":false,"properties":{"disabled":{"type":"boolean"},"view":{"enum":["default","models","routes"],"type":"string"}},"required":["view"],"type":"object"}',
+    slots: [],
+    events: ["submit"],
+    binding: "data",
+    readOnly:
+      "Preserve presentation; Gateway rechecks every provider and action.",
+    example:
+      '{"type":"element","id":"ai-model-settings","element":{"kind":"ai-model-settings","version":"1.0"}}',
   },
   {
     name: "settings-panel",
@@ -1859,8 +2101,102 @@ export const runtimeUIContracts = [
     example:
       '{"component":{"id":"typography","kind":"typography","props":{"labelKey":"runtime:components.loading"},"version":"1.0"},"type":"component"}',
   },
+  {
+    name: "mail-message-list",
+    version: "1.0",
+    category: "element",
+    description:
+      "Message summaries, read state and page navigation for one folder.",
+    propsSchema:
+      '{"type":"object","properties":{"folder":{"type":"string","enum":["inbox","sent"]}},"required":["folder"],"additionalProperties":false}',
+    slots: [],
+    events: ["open", "recommend"],
+    binding: "data",
+    readOnly: "Disable mutations and local file operations.",
+    example:
+      '{"type":"component","component":{"id":"mail-messages","kind":"mail-message-list","version":"1.0","props":{"folder":"inbox"}}}',
+  },
+  {
+    name: "mail-compose-form",
+    version: "1.0",
+    category: "element",
+    description:
+      "Compose fields and local attachment selection. Reads authorized sender choices from its bound Provider.",
+    propsSchema: '{"type":"object","additionalProperties":false}',
+    slots: [],
+    events: ["submit", "sent", "suggest-draft"],
+    binding: "data",
+    readOnly: "Disable mutations and local file operations.",
+    example:
+      '{"type":"component","component":{"id":"mail-compose-form","kind":"mail-compose-form","version":"1.0","props":{}}}',
+  },
+  {
+    name: "mail-mailbox-form",
+    version: "1.0",
+    category: "element",
+    description:
+      "Mailbox connection and credential fields with ephemeral submission.",
+    propsSchema: '{"type":"object","additionalProperties":false}',
+    slots: [],
+    events: ["connect", "update", "replace", "close", "refresh", "feedback"],
+    binding: "data",
+    readOnly: "Disable mutations and local file operations.",
+    example:
+      '{"type":"component","component":{"id":"mail-mailbox-form","kind":"mail-mailbox-form","version":"1.0","props":{}}}',
+  },
+  {
+    name: "mail-message-content",
+    version: "1.0",
+    category: "element",
+    description:
+      "Message headers, sandboxed body, reply preparation and private attachment download.",
+    propsSchema: '{"type":"object","additionalProperties":false}',
+    slots: [],
+    events: ["read", "analyze", "translate"],
+    binding: "data",
+    readOnly: "Disable mutations and local file operations.",
+    example:
+      '{"type":"component","component":{"id":"mail-message-content","kind":"mail-message-content","version":"1.0","props":{}}}',
+  },
+  {
+    name: "identity-security-panel",
+    version: "1.0",
+    category: "element",
+    description:
+      "Personal account security, scoped audit browsing and export, with in-memory credential disclosure and Gateway reauthentication.",
+    propsSchema:
+      '{"type":"object","properties":{},"additionalProperties":false}',
+    slots: [],
+    events: [],
+    binding: "",
+    readOnly:
+      "Preview shows no credentials or personal data and performs no calls.",
+    example:
+      '{"type":"component","id":"security","component":{"kind":"identity-security-panel","version":"1.0","props":{}}}',
+  },
+  {
+    name: "identity-governance-panel",
+    version: "1.0",
+    category: "element",
+    description:
+      "Authorization policy history, structured draft, diff, current-subject simulation and separate-administrator publication through Gateway.",
+    propsSchema:
+      '{"type":"object","properties":{},"additionalProperties":false}',
+    slots: [],
+    events: [],
+    binding: "",
+    readOnly: "Preview performs no policy queries or mutations.",
+    example:
+      '{"type":"component","id":"governance","component":{"kind":"identity-governance-panel","version":"1.0","props":{}}}',
+  },
 ] as const;
 export const runtimeProtocolRoutes = [
+  {
+    applicationId: "account-security",
+    pageId: "account-security.home",
+    route: "/account-security",
+    permission: "authenticated",
+  },
   {
     applicationId: "accounts",
     pageId: "accounts.console",
@@ -1874,40 +2210,88 @@ export const runtimeProtocolRoutes = [
     permission: "authenticated",
   },
   {
+    applicationId: "ai-settings",
+    pageId: "ai-settings.home",
+    route: "/ai-settings",
+    permission: "aiConfig:read",
+  },
+  {
     applicationId: "analytics",
     pageId: "analytics.dashboard",
     route: "/analytics",
     permission: "authenticated",
   },
   {
-    applicationId: "articles",
-    pageId: "article.list",
-    route: "/articles",
-    permission: "articles:read",
+    applicationId: "automation",
+    pageId: "automation.list",
+    route: "/automation",
+    permission: "automation:read",
   },
   {
-    applicationId: "articles",
-    pageId: "article.detail",
-    route: "/articles/:id",
-    permission: "articles:read",
+    applicationId: "automation",
+    pageId: "automation.detail",
+    route: "/automation/:id",
+    permission: "automation:read",
   },
   {
-    applicationId: "articles",
-    pageId: "article.create-page",
-    route: "/articles/new",
-    permission: "articles:write",
-  },
-  {
-    applicationId: "articles",
-    pageId: "article.edit-page",
-    route: "/articles/:id/edit",
-    permission: "articles:write",
+    applicationId: "automation",
+    pageId: "automation.run.detail",
+    route: "/automation/runs/:runId",
+    permission: "automation:read",
   },
   {
     applicationId: "capabilities",
     pageId: "capabilities.console",
     route: "/capabilities",
     permission: "authenticated",
+  },
+  {
+    applicationId: "example-playground",
+    pageId: "example.playground",
+    route: "/example",
+    permission: "example:read",
+  },
+  {
+    applicationId: "iam-governance",
+    pageId: "iam-governance.policies",
+    route: "/iam-governance",
+    permission: "access:manage",
+  },
+  {
+    applicationId: "mail",
+    pageId: "mail.inbox",
+    route: "/mail",
+    permission: "mail:read",
+  },
+  {
+    applicationId: "mail",
+    pageId: "mail.sent-page",
+    route: "/mail/sent",
+    permission: "mail:read",
+  },
+  {
+    applicationId: "mail",
+    pageId: "mail.compose-page",
+    route: "/mail/compose",
+    permission: "mail:send",
+  },
+  {
+    applicationId: "mail",
+    pageId: "mail.delivery-page",
+    route: "/mail/deliveries",
+    permission: "mail:read",
+  },
+  {
+    applicationId: "mail",
+    pageId: "mail.mailbox-page",
+    route: "/mail/mailboxes",
+    permission: "mail:configure",
+  },
+  {
+    applicationId: "mail",
+    pageId: "mail.detail-page",
+    route: "/mail/:id",
+    permission: "mail:read",
   },
   {
     applicationId: "organizations",
@@ -2387,6 +2771,7 @@ export interface RuntimeFormV2 {
   tags: string[];
 }
 export interface RuntimeAIFormAssistant {
+  defaultExpanded?: boolean;
   labelKey: string;
   action: string;
   inputFields: string[];
@@ -2500,6 +2885,8 @@ export interface RuntimeCandidate {
   digest: string;
   applications: string[];
   dependencies: string[];
+  base: boolean;
+  labelKeys: Record<string, string>;
 }
 export interface RuntimeCompatibilityReport {
   compatible: boolean;
@@ -3050,6 +3437,7 @@ export const runtimeFormV2Schema: z.ZodType<RuntimeFormV2> = z
   .strict();
 export const runtimeAIFormAssistantSchema: z.ZodType<RuntimeAIFormAssistant> = z
   .object({
+    defaultExpanded: z.boolean().optional(),
     labelKey: z.string(),
     action: z.string(),
     inputFields: z.array(z.string()),
@@ -3179,6 +3567,8 @@ export const runtimeCandidateSchema: z.ZodType<RuntimeCandidate> = z
     digest: z.string(),
     applications: z.array(z.string()),
     dependencies: z.array(z.string()),
+    base: z.boolean(),
+    labelKeys: z.record(z.string(), z.string()),
   })
   .strict();
 export const runtimeCompatibilityReportSchema: z.ZodType<RuntimeCompatibilityReport> =

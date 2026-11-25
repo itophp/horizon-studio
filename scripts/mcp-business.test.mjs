@@ -141,7 +141,8 @@ test("helper pins origin and service, verifies credentials before installing, co
         await request("/prepare", {
           client: "shell",
           accountId: 1,
-          departmentId: 2,
+          tenantId: "tenant-a",
+          identityBindingId: "",
         })
       ).status,
       400,
@@ -149,7 +150,8 @@ test("helper pins origin and service, verifies credentials before installing, co
     const response = await request("/prepare", {
       client: "codex",
       accountId: 1,
-      departmentId: 2,
+      tenantId: "tenant-a",
+      identityBindingId: "",
     });
     assert.equal(response.status, 200);
     const prepared = await response.json();

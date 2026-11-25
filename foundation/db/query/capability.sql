@@ -1,18 +1,36 @@
 -- name: CapCreateInvocation :one
 WITH invocation AS (
-INSERT INTO cap_invocations (tenant_id, account_id, department_id, invocation_id, capability, capability_version, origin, idempotency_key, status, input, input_digest, correlation_id, causation_id, trigger_depth, trace_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+INSERT INTO cap_invocations (tenant_id, account_id, invocation_id, capability, capability_version, origin, idempotency_key, status, input, input_digest, correlation_id, causation_id, trigger_depth, trace_id, identity_binding_id, machine_credential_id, agent_delegation_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULLIF(sqlc.arg(identity_binding_id)::text, '')::uuid,
+        NULLIF(sqlc.arg(machine_credential_id)::text, '')::uuid, NULLIF(sqlc.arg(agent_delegation_id)::text, '')::uuid)
 RETURNING id, created_at, tenant_id, invocation_id, account_id
 ), record AS (
-INSERT INTO cap_execution_records(tenant_id,invocation_id,account_id,binding)
-SELECT tenant_id,invocation_id,account_id,COALESCE(sqlc.arg(execution_binding)::jsonb,'{}'::jsonb) FROM invocation
+INSERT INTO cap_execution_records(tenant_id,invocation_id,account_id,binding,actor_context)
+SELECT tenant_id,invocation_id,account_id,COALESCE(sqlc.arg(execution_binding)::jsonb,'{}'::jsonb),
+       CASE WHEN sqlc.arg(acting_organization_id)::bigint > 0
+            THEN jsonb_build_object('actingOrganizationId', sqlc.arg(acting_organization_id)::bigint,
+                                    'portal', sqlc.arg(actor_portal)::text)
+            ELSE '{}'::jsonb END
+FROM invocation
 )
 SELECT id,created_at FROM invocation;
 
 -- name: CapFindIdempotent :one
-SELECT id, invocation_id, capability, capability_version, status, result, error_code, approval_id, trace_id, created_at, finished_at, account_id, input_digest
+SELECT id, invocation_id, capability, capability_version, status, result, error_code, approval_id, trace_id, created_at, finished_at, account_id, input_digest,
+       COALESCE(identity_binding_id::text, '')::text AS identity_binding_id,
+       COALESCE(machine_credential_id::text, '')::text AS machine_credential_id,
+       COALESCE(agent_delegation_id::text, '')::text AS agent_delegation_id,
+       EXISTS (
+           SELECT 1 FROM iam_accounts placement
+           LEFT JOIN iam_login_accounts login ON login.id = placement.login_account_id
+           JOIN iam_tenant_memberships member ON member.tenant_id = placement.tenant_id
+                AND member.principal_id = COALESCE(login.principal_id, placement.machine_principal_id)
+           WHERE placement.tenant_id = cap_invocations.tenant_id AND placement.id = cap_invocations.account_id
+             AND member.access_revoked_at >= cap_invocations.created_at
+       ) AS membership_revoked_since_invocation
 FROM cap_invocations
-WHERE tenant_id = $1 AND capability = $2 AND idempotency_key = $3 AND idempotency_key <> '';
+WHERE cap_invocations.tenant_id = $1 AND cap_invocations.capability = $2
+    AND cap_invocations.idempotency_key = $3 AND cap_invocations.idempotency_key <> '';
 
 -- name: CapFinishInvocation :exec
 UPDATE cap_invocations
@@ -29,7 +47,8 @@ SELECT id, invocation_id, capability, capability_version, origin, status, input,
        result, error_code, approval_id, correlation_id, causation_id, trigger_depth,
        duration_ms, trace_id, created_at, finished_at
 FROM cap_invocations
-WHERE tenant_id = $1 AND account_id = $2 AND invocation_id = $3;
+WHERE tenant_id = $1 AND account_id = $2 AND invocation_id = $3
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF(sqlc.arg(binding)::text, '')::uuid;
 
 -- name: CapListInvocations :many
 SELECT id, invocation_id, capability, capability_version, origin, status, input, input_digest,
@@ -37,12 +56,13 @@ SELECT id, invocation_id, capability, capability_version, origin, status, input,
        duration_ms, trace_id, created_at, finished_at
 FROM cap_invocations
 WHERE tenant_id = $1 AND account_id = $2
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF(sqlc.arg(binding)::text, '')::uuid
 ORDER BY id DESC
 LIMIT sqlc.arg(max_rows)::int;
 
 -- name: CapAppendOutbox :exec
-INSERT INTO cap_outbox (tenant_id, event_id, event_type, aggregate_type, aggregate_id, payload, invocation_id, account_id, department_id, correlation_id, causation_id, trigger_depth)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+INSERT INTO cap_outbox (tenant_id, event_id, event_type, aggregate_type, aggregate_id, payload, invocation_id, account_id, correlation_id, causation_id, trigger_depth, identity_binding_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF(sqlc.arg(identity_binding_id)::text, '')::uuid)
 ON CONFLICT (tenant_id, event_id) DO NOTHING;
 
 -- name: CapClaimOutbox :many
@@ -56,7 +76,8 @@ WITH claimed AS (
 UPDATE cap_outbox o SET attempts = o.attempts + 1
 FROM claimed c WHERE o.id = c.id
 RETURNING o.id, o.tenant_id, o.event_id, o.event_type, o.aggregate_type, o.aggregate_id, o.payload,
-          o.invocation_id, o.account_id, o.department_id, o.correlation_id, o.causation_id, o.trigger_depth, o.attempts;
+          o.invocation_id, o.account_id, o.correlation_id, o.causation_id, o.trigger_depth, o.attempts,
+          COALESCE(o.identity_binding_id::text, '')::text AS identity_binding_id;
 
 -- name: CapMarkOutboxPublished :exec
 UPDATE cap_outbox SET status = 'published', published_at = now() WHERE id = $1;
@@ -69,13 +90,13 @@ UPDATE cap_outbox SET available_at = now() + make_interval(secs => sqlc.arg(dela
 WHERE id = $1 AND status = 'pending';
 
 -- name: CapAppendEvent :exec
-INSERT INTO cap_events (tenant_id, event_id, event_type, aggregate_type, aggregate_id, payload, invocation_id, account_id, department_id, correlation_id, causation_id, trigger_depth)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+INSERT INTO cap_events (tenant_id, event_id, event_type, aggregate_type, aggregate_id, payload, invocation_id, account_id, correlation_id, causation_id, trigger_depth, identity_binding_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF(sqlc.arg(identity_binding_id)::text, '')::uuid)
 ON CONFLICT (tenant_id, event_id) DO NOTHING;
 
 -- name: CapListEvents :many
 SELECT e.id, e.event_id, e.event_type, e.aggregate_type, e.aggregate_id, e.payload, e.invocation_id,
-       e.account_id, e.department_id, e.correlation_id, e.causation_id, e.trigger_depth, e.created_at,
+       e.account_id, e.correlation_id, e.causation_id, e.trigger_depth, e.created_at,
        COALESCE((SELECT x.status FROM ai_trigger_executions x
                  WHERE x.tenant_id = e.tenant_id AND x.event_id = e.event_id
                  ORDER BY x.id DESC LIMIT 1), '')::text AS ai_status,
@@ -86,30 +107,38 @@ SELECT e.id, e.event_id, e.event_type, e.aggregate_type, e.aggregate_id, e.paylo
                  WHERE x.tenant_id = e.tenant_id AND x.event_id = e.event_id
                  ORDER BY x.id DESC LIMIT 1), 0)::bigint AS ai_run_id
 FROM cap_events e
-WHERE e.tenant_id = $1 AND (e.account_id = $2 OR sqlc.arg(reviewer)::bool)
+WHERE e.tenant_id = $1 AND (sqlc.arg(reviewer)::bool OR (
+    e.account_id = $2
+    AND e.identity_binding_id IS NOT DISTINCT FROM NULLIF(sqlc.arg(binding)::text, '')::uuid
+))
 ORDER BY e.id DESC
 LIMIT sqlc.arg(max_rows)::int;
 
 -- name: CapCreateApproval :one
-INSERT INTO cap_approvals (tenant_id, account_id, department_id, capability, capability_version, invocation_id, risk, approval, status, arguments, arguments_digest, expires_at, action_key)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, now() + make_interval(mins => sqlc.arg(expires_minutes)::int), sqlc.arg(action_key))
-ON CONFLICT (tenant_id, capability, account_id, arguments_digest, action_key) WHERE status = 'pending'
+INSERT INTO cap_approvals (tenant_id, account_id, capability, capability_version, invocation_id, risk, approval, status, arguments, arguments_digest, expires_at, action_key, identity_binding_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, now() + make_interval(mins => sqlc.arg(expires_minutes)::int), sqlc.arg(action_key), NULLIF(sqlc.arg(identity_binding_id)::text, '')::uuid)
+ON CONFLICT (tenant_id, capability, account_id, arguments_digest, action_key, identity_binding_id) WHERE status = 'pending'
 DO UPDATE SET expires_at = cap_approvals.expires_at
 RETURNING id;
 
 -- name: CapGetApproval :one
-SELECT id, tenant_id, account_id, department_id, capability, capability_version, invocation_id, risk, approval,
+SELECT id, tenant_id, account_id, capability, capability_version, invocation_id, risk, approval,
        arguments, arguments_digest, status, requested_at, expires_at, decided_by, decided_at,
-       decision_note, execution_code, action_key
+       decision_note, execution_code, action_key, identity_binding_id
 FROM cap_approvals
 WHERE tenant_id = $1 AND id = $2;
 
 -- name: CapListApprovals :many
-SELECT id, tenant_id, account_id, department_id, capability, capability_version, invocation_id, risk, approval,
+SELECT id, tenant_id, account_id, capability, capability_version, invocation_id, risk, approval,
        arguments, arguments_digest, status, requested_at, expires_at, decided_by, decided_at,
-       decision_note, execution_code, action_key
+       decision_note, execution_code, action_key, identity_binding_id
 FROM cap_approvals
-WHERE tenant_id = $1 AND status = 'pending' AND (account_id = $2 OR sqlc.arg(reviewer)::bool)
+WHERE tenant_id = $1 AND status = 'pending' AND (
+    (sqlc.arg(reviewer)::bool AND account_id <> $2) OR (
+        account_id = $2
+        AND identity_binding_id IS NOT DISTINCT FROM NULLIF(sqlc.arg(binding)::text, '')::uuid
+    )
+)
 ORDER BY id DESC
 LIMIT 100;
 
@@ -120,7 +149,7 @@ WHERE tenant_id = $1 AND id = $2 AND status = 'pending' AND expires_at > now();
 
 -- name: CapCompleteApproval :exec
 UPDATE cap_approvals SET status = sqlc.arg(status), execution_code = sqlc.arg(execution_code)
-WHERE tenant_id = $1 AND id = $2;
+WHERE tenant_id = $1 AND id = $2 AND status = 'approved';
 
 -- name: CapExpireApprovals :exec
 UPDATE cap_approvals SET status = 'expired'
@@ -173,7 +202,9 @@ WHERE tenant_id = $1 AND id = $2 AND status <> 'archived'
 RETURNING id, tenant_id, title, status, created_by, created_at, updated_at;
 
 -- name: CapInvocationTrace :one
-SELECT trace_id, correlation_id, causation_id, trigger_depth, capability, capability_version
+SELECT trace_id, correlation_id, causation_id, trigger_depth, capability, capability_version, origin,
+       COALESCE(machine_credential_id::text, '')::text AS machine_credential_id,
+       COALESCE(agent_delegation_id::text, '')::text AS agent_delegation_id
 FROM cap_invocations
 WHERE tenant_id = $1 AND invocation_id = $2;
 
@@ -194,4 +225,7 @@ SELECT a.id, a.invocation_id, i.trace_id
 FROM cap_approvals a
 JOIN cap_invocations i ON i.tenant_id = a.tenant_id AND i.invocation_id = a.invocation_id
 WHERE a.tenant_id = $1 AND a.capability = $2 AND a.account_id = $3 AND a.arguments_digest = $4 AND a.action_key = $5 AND a.status = 'pending'
+AND a.identity_binding_id IS NOT DISTINCT FROM NULLIF(sqlc.arg(identity_binding_id)::text, '')::uuid
+AND i.machine_credential_id IS NOT DISTINCT FROM NULLIF(sqlc.arg(machine_credential_id)::text, '')::uuid
+AND i.agent_delegation_id IS NOT DISTINCT FROM NULLIF(sqlc.arg(agent_delegation_id)::text, '')::uuid
 LIMIT 1;

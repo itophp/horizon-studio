@@ -7,7 +7,7 @@ import (
 
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/system/identity"
-	"horizon/internal/repository/dbgen"
+	"horizon/internal/repository/dbgen/studiodb"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -46,7 +46,7 @@ func (m *Module) itemPin(ctx context.Context, tx pgx.Tx, in contracts.Input) (co
 	if !okProject || !okID || id < 1 || !okPinned {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
-	row, err := dbgen.New(tx).StudioItemSetPinned(ctx, dbgen.StudioItemSetPinnedParams{
+	row, err := studiodb.New(tx).StudioItemSetPinned(ctx, studiodb.StudioItemSetPinnedParams{
 		TenantID: p.TenantID, ID: int64(id), Project: project,
 		Pinned: pinned, CreatedBy: p.Account.ID,
 	})
@@ -101,7 +101,7 @@ func (m *Module) itemArchive(ctx context.Context, tx pgx.Tx, in contracts.Input)
 	if !okProject || !okID || id < 1 || !okArchived {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
-	row, err := dbgen.New(tx).StudioItemSetArchived(ctx, dbgen.StudioItemSetArchivedParams{
+	row, err := studiodb.New(tx).StudioItemSetArchived(ctx, studiodb.StudioItemSetArchivedParams{
 		TenantID: p.TenantID, ID: int64(id), Project: project,
 		Archived: archived, CreatedBy: p.Account.ID,
 	})

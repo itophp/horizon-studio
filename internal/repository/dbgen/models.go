@@ -8,6 +8,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AccountProfileDirectory struct {
+	ID                 int64
+	TenantID           string
+	Username           string
+	FullName           string
+	Email              string
+	Status             string
+	Overrides          []byte
+	IsAdmin            bool
+	CreatedAt          pgtype.Timestamptz
+	LastLogin          pgtype.Timestamptz
+	LoginAccountID     pgtype.UUID
+	MachinePrincipalID pgtype.UUID
+}
+
+type AiConfiguration struct {
+	TenantID   string
+	Revision   int64
+	ValuesJson []byte
+}
+
 type AiConversation struct {
 	ID         int64
 	TenantID   string
@@ -46,6 +67,7 @@ type AiRun struct {
 	TriggerDepth       int32
 	TriggerPolicy      string
 	EventID            string
+	IdentityBindingID  pgtype.UUID
 }
 
 type AiRunEvent struct {
@@ -100,11 +122,47 @@ type Article struct {
 	UpdatedAt  pgtype.Timestamptz
 }
 
+type AutomationRun struct {
+	ID               int64
+	TenantID         string
+	TaskID           int64
+	OccurrenceKey    string
+	ScheduledFor     pgtype.Timestamptz
+	TriggerKind      string
+	Status           string
+	ErrorCode        string
+	AiRunID          pgtype.Int8
+	CreatedAt        pgtype.Timestamptz
+	StartedAt        pgtype.Timestamptz
+	FinishedAt       pgtype.Timestamptz
+	ServiceExecution pgtype.Text
+}
+
+type AutomationTask struct {
+	ID                int64
+	TenantID          string
+	OwnerID           int64
+	DepartmentID      int64
+	Name              string
+	Description       string
+	ScheduleKind      string
+	RunAt             pgtype.Timestamptz
+	Timezone          string
+	Enabled           bool
+	NextRunAt         pgtype.Timestamptz
+	LastRunAt         pgtype.Timestamptz
+	FailureCount      int32
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	ScheduleDay       pgtype.Int4
+	IdentityBindingID pgtype.UUID
+	ServiceExecution  pgtype.Text
+}
+
 type CapApproval struct {
 	ID                int64
 	TenantID          string
 	AccountID         int64
-	DepartmentID      int64
 	Capability        string
 	CapabilityVersion string
 	InvocationID      string
@@ -120,23 +178,24 @@ type CapApproval struct {
 	DecisionNote      string
 	ExecutionCode     string
 	ActionKey         string
+	IdentityBindingID pgtype.UUID
 }
 
 type CapEvent struct {
-	ID            int64
-	TenantID      string
-	EventID       string
-	EventType     string
-	AggregateType string
-	AggregateID   string
-	Payload       []byte
-	InvocationID  string
-	AccountID     int64
-	DepartmentID  int64
-	CorrelationID string
-	CausationID   string
-	TriggerDepth  int32
-	CreatedAt     pgtype.Timestamptz
+	ID                int64
+	TenantID          string
+	EventID           string
+	EventType         string
+	AggregateType     string
+	AggregateID       string
+	Payload           []byte
+	InvocationID      string
+	AccountID         int64
+	CorrelationID     string
+	CausationID       string
+	TriggerDepth      int32
+	CreatedAt         pgtype.Timestamptz
+	IdentityBindingID pgtype.UUID
 }
 
 type CapExecutionBinding struct {
@@ -189,52 +248,55 @@ type CapExecutionRecord struct {
 	AccountID    int64
 	Binding      []byte
 	RunID        pgtype.Int8
+	ActorContext []byte
 }
 
 type CapInvocation struct {
-	ID                int64
-	TenantID          string
-	AccountID         int64
-	DepartmentID      int64
-	InvocationID      string
-	Capability        string
-	CapabilityVersion string
-	Origin            string
-	IdempotencyKey    string
-	Status            string
-	Input             []byte
-	InputDigest       string
-	Result            []byte
-	ErrorCode         string
-	ApprovalID        int64
-	CorrelationID     string
-	CausationID       string
-	TriggerDepth      int32
-	DurationMs        int32
-	TraceID           string
-	CreatedAt         pgtype.Timestamptz
-	FinishedAt        pgtype.Timestamptz
+	ID                  int64
+	TenantID            string
+	AccountID           int64
+	InvocationID        string
+	Capability          string
+	CapabilityVersion   string
+	Origin              string
+	IdempotencyKey      string
+	Status              string
+	Input               []byte
+	InputDigest         string
+	Result              []byte
+	ErrorCode           string
+	ApprovalID          int64
+	CorrelationID       string
+	CausationID         string
+	TriggerDepth        int32
+	DurationMs          int32
+	TraceID             string
+	CreatedAt           pgtype.Timestamptz
+	FinishedAt          pgtype.Timestamptz
+	IdentityBindingID   pgtype.UUID
+	MachineCredentialID pgtype.UUID
+	AgentDelegationID   pgtype.UUID
 }
 
 type CapOutbox struct {
-	ID            int64
-	TenantID      string
-	EventID       string
-	EventType     string
-	AggregateType string
-	AggregateID   string
-	Payload       []byte
-	InvocationID  string
-	AccountID     int64
-	DepartmentID  int64
-	CorrelationID string
-	CausationID   string
-	TriggerDepth  int32
-	Status        string
-	Attempts      int32
-	AvailableAt   pgtype.Timestamptz
-	PublishedAt   pgtype.Timestamptz
-	CreatedAt     pgtype.Timestamptz
+	ID                int64
+	TenantID          string
+	EventID           string
+	EventType         string
+	AggregateType     string
+	AggregateID       string
+	Payload           []byte
+	InvocationID      string
+	AccountID         int64
+	CorrelationID     string
+	CausationID       string
+	TriggerDepth      int32
+	Status            string
+	Attempts          int32
+	AvailableAt       pgtype.Timestamptz
+	PublishedAt       pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	IdentityBindingID pgtype.UUID
 }
 
 type DriveFile struct {
@@ -321,6 +383,20 @@ type DriveUploadChunk struct {
 	ExpectedSize int64
 	Sha256       pgtype.Text
 	UploadedAt   pgtype.Timestamptz
+}
+
+type ExampleAccessibleOrder struct {
+	ID         int64
+	TenantID   string
+	SupplierID int64
+	Title      string
+}
+
+type ExampleOrder struct {
+	ID         int64
+	TenantID   string
+	SupplierID int64
+	Title      string
 }
 
 type ExampleRecord struct {
@@ -476,7 +552,7 @@ type GovNotification struct {
 	TenantID       string
 	EventID        pgtype.Int8
 	RecipientID    int64
-	DepartmentID   int64
+	DepartmentID   pgtype.Int8
 	Payload        []byte
 	ReadAt         pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
@@ -499,17 +575,6 @@ type GovNotificationTarget struct {
 	AccountID      int64
 	DepartmentID   int64
 	OrganizationID int64
-}
-
-type GovReauth struct {
-	TokenHash    string
-	TenantID     string
-	SessionHash  string
-	DepartmentID int64
-	Operation    string
-	ResourceID   int64
-	Revision     int64
-	ExpiresAt    pgtype.Timestamptz
 }
 
 type GovRevision struct {
@@ -544,6 +609,7 @@ type GovSettingsSchedule struct {
 	VersionID          pgtype.Int8
 	CreatedAt          pgtype.Timestamptz
 	FinishedAt         pgtype.Timestamptz
+	IdentityBindingID  pgtype.UUID
 }
 
 type GovStorageProfile struct {
@@ -576,54 +642,222 @@ type GovVersion struct {
 	CreatedAt   pgtype.Timestamptz
 }
 
+type HorizonDatabaseInitialized struct {
+	InitializedAt pgtype.Timestamptz
+}
+
+type IamAccessReview struct {
+	ID              int64
+	TenantID        string
+	PrincipalID     pgtype.UUID
+	Kind            string
+	TargetID        pgtype.UUID
+	RoleID          pgtype.Int8
+	TargetExpiresAt pgtype.Timestamptz
+	TargetRevokedAt pgtype.Timestamptz
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	ReviewerID      pgtype.Int8
+	ReviewedAt      pgtype.Timestamptz
+	Reason          pgtype.Text
+}
+
 type IamAccount struct {
-	ID             int64
-	TenantID       string
-	Username       string
-	FullName       string
-	Email          string
-	PasswordHash   string
-	Status         string
-	OrganizationID int64
-	DepartmentID   int64
-	Overrides      []byte
-	IsAdmin        bool
-	CreatedAt      pgtype.Timestamptz
-	LastLogin      pgtype.Timestamptz
+	ID                 int64
+	TenantID           string
+	Username           string
+	Status             string
+	Overrides          []byte
+	IsAdmin            bool
+	CreatedAt          pgtype.Timestamptz
+	LastLogin          pgtype.Timestamptz
+	LoginAccountID     pgtype.UUID
+	MachinePrincipalID pgtype.UUID
 }
 
 type IamAccountRole struct {
 	TenantID  string
 	AccountID int64
 	RoleID    int64
+	ID        pgtype.UUID
 }
 
-type IamDepartment struct {
-	ID             int64
-	TenantID       string
-	OrganizationID int64
-	ParentID       pgtype.Int8
-	Name           string
-	Code           string
-	Manager        string
-	Status         string
-	Description    string
-	CreatedAt      pgtype.Timestamptz
-}
-
-type IamDepartmentMembership struct {
+type IamActiveAccountSubject struct {
 	TenantID       string
 	AccountID      int64
-	OrganizationID int64
-	DepartmentID   int64
-	Overrides      []byte
+	Username       string
+	LoginAccountID pgtype.UUID
+	PrincipalID    pgtype.UUID
+	MembershipID   pgtype.UUID
 }
 
-type IamDepartmentMembershipRole struct {
+type IamActiveIdentityBinding struct {
+	ID              pgtype.UUID
+	TenantID        string
+	PrincipalID     pgtype.UUID
+	IdentityType    string
+	IdentityVersion string
+	EntityID        int64
+}
+
+type IamActiveMachineSubject struct {
 	TenantID     string
 	AccountID    int64
-	DepartmentID int64
-	RoleID       int64
+	PrincipalID  pgtype.UUID
+	Kind         string
+	MembershipID pgtype.UUID
+}
+
+type IamAgentDelegation struct {
+	ID                     pgtype.UUID
+	TenantID               string
+	AgentAccountID         int64
+	DelegatorAccountID     int64
+	DelegatorBindingID     pgtype.UUID
+	Capability             string
+	ResourceID             int64
+	MaxRisk                string
+	RemainingUses          int32
+	CreatedAt              pgtype.Timestamptz
+	ExpiresAt              pgtype.Timestamptz
+	RevokedAt              pgtype.Timestamptz
+	AdditionalCapabilities []byte
+}
+
+type IamAuditExportPermit struct {
+	TenantID     string
+	AccountID    int64
+	MembershipID pgtype.UUID
+	FilterDigest string
+	Filters      []byte
+	RequestID    string
+	BindingID    string
+	ExpiresAt    pgtype.Timestamptz
+}
+
+type IamContactChallenge struct {
+	ID               pgtype.UUID
+	LoginAccountID   pgtype.UUID
+	Channel          string
+	Destination      string
+	Purpose          string
+	TokenHash        string
+	SessionHash      string
+	ContextHash      string
+	SealedToken      string
+	CreatedAt        pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+	DeliveryDueAt    pgtype.Timestamptz
+	DeliveryAttempts int32
+	DeliveredAt      pgtype.Timestamptz
+	ConsumedAt       pgtype.Timestamptz
+}
+
+type IamContextRoleGrant struct {
+	ID                pgtype.UUID
+	TenantID          string
+	PrincipalID       pgtype.UUID
+	IdentityBindingID pgtype.UUID
+	RoleID            int64
+	GrantedBy         int64
+	Reason            string
+	CreatedAt         pgtype.Timestamptz
+	ExpiresAt         pgtype.Timestamptz
+	RevokedAt         pgtype.Timestamptz
+}
+
+type IamDisabledResource struct {
+	TenantID string
+	Resource string
+}
+
+type IamExternalIdentity struct {
+	ID             pgtype.UUID
+	ProviderID     string
+	Issuer         string
+	Subject        string
+	LoginAccountID pgtype.UUID
+	LinkedAt       pgtype.Timestamptz
+	RevokedAt      pgtype.Timestamptz
+}
+
+type IamExternalIdentityProof struct {
+	ProofHash  string
+	ProviderID string
+	Issuer     string
+	Subject    string
+	ExpiresAt  pgtype.Timestamptz
+	ConsumedAt pgtype.Timestamptz
+	Purpose    string
+	Completion bool
+}
+
+type IamExternalIdentityReview struct {
+	ID                 pgtype.UUID
+	TenantID           string
+	ExternalIdentityID pgtype.UUID
+	OriginalLoginID    pgtype.UUID
+	RequestedLoginID   pgtype.UUID
+	Status             string
+	CreatedAt          pgtype.Timestamptz
+	ExpiresAt          pgtype.Timestamptz
+	DecidedBy          pgtype.UUID
+	Reason             pgtype.Text
+	AppliedAt          pgtype.Timestamptz
+	OriginalLinkedAt   pgtype.Timestamptz
+}
+
+type IamFederationAssertionUse struct {
+	ProviderID    string
+	AssertionHash string
+	ExpiresAt     pgtype.Timestamptz
+}
+
+type IamFederationFlow struct {
+	StateHash      string
+	BrowserHash    string
+	ProviderID     string
+	Issuer         string
+	Purpose        string
+	NonceHash      string
+	SealedVerifier string
+	ExpiresAt      pgtype.Timestamptz
+	ConsumedAt     pgtype.Timestamptz
+}
+
+type IamIdentityBinding struct {
+	ID                pgtype.UUID
+	TenantID          string
+	PrincipalID       pgtype.UUID
+	IdentityType      string
+	IdentityVersion   string
+	RevocationEvent   string
+	EntityID          int64
+	Status            string
+	CreatedAt         pgtype.Timestamptz
+	RevokedAt         pgtype.Timestamptz
+	VerificationLevel string
+	Source            string
+	ValidUntil        pgtype.Timestamptz
+}
+
+type IamLoginAccount struct {
+	ID          pgtype.UUID
+	PrincipalID pgtype.UUID
+	Username    string
+	Status      string
+	CreatedAt   pgtype.Timestamptz
+	Realm       string
+}
+
+type IamLoginAssociation struct {
+	ID                  pgtype.UUID
+	PrincipalID         pgtype.UUID
+	OriginalPrincipalID pgtype.UUID
+	PrimaryLoginID      pgtype.UUID
+	AssociatedLoginID   pgtype.UUID
+	CreatedAt           pgtype.Timestamptz
+	RevokedAt           pgtype.Timestamptz
 }
 
 type IamLoginAttempt struct {
@@ -632,16 +866,117 @@ type IamLoginAttempt struct {
 	LockedUntil pgtype.Timestamptz
 }
 
-type IamOrganization struct {
-	ID          int64
+type IamLoginMergeReview struct {
+	ID                   pgtype.UUID
+	TenantID             string
+	PrimaryLoginID       pgtype.UUID
+	SecondaryLoginID     pgtype.UUID
+	PrimaryPrincipalID   pgtype.UUID
+	SecondaryPrincipalID pgtype.UUID
+	Status               string
+	CreatedAt            pgtype.Timestamptz
+	ExpiresAt            pgtype.Timestamptz
+	PrimaryDeviceID      pgtype.UUID
+	SecondaryDeviceID    pgtype.UUID
+	AssociationID        pgtype.UUID
+	Reason               string
+	DecisionReason       pgtype.Text
+}
+
+type IamLoginSession struct {
+	TokenHash          string
+	LoginAccountID     pgtype.UUID
+	CsrfToken          string
+	DeviceLabel        string
+	CreatedAt          pgtype.Timestamptz
+	ExpiresAt          pgtype.Timestamptz
+	ExternalIdentityID pgtype.UUID
+}
+
+type IamMachineCredential struct {
+	ID           pgtype.UUID
+	TenantID     string
+	AccountID    int64
+	IssuerID     int64
+	TokenHash    string
+	Audience     string
+	Capabilities []byte
+	CreatedAt    pgtype.Timestamptz
+	ExpiresAt    pgtype.Timestamptz
+	RevokedAt    pgtype.Timestamptz
+}
+
+type IamMembershipInvitation struct {
+	ID               pgtype.UUID
+	TenantID         string
+	InviterAccountID int64
+	Username         string
+	TokenHash        string
+	CreatedAt        pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+	AcceptedAt       pgtype.Timestamptz
+	RecipientRealm   string
+}
+
+type IamPasswordCredential struct {
+	LoginAccountID pgtype.UUID
+	PasswordHash   string
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type IamPendingRegistration struct {
+	LoginAccountID pgtype.UUID
+	TenantID       string
+	Channel        string
+	ExpiresAt      pgtype.Timestamptz
+}
+
+type IamPolicyHead struct {
+	TenantID  string
+	VersionID int64
+}
+
+type IamPolicyVersion struct {
+	ID                  int64
+	TenantID            string
+	AuthorID            int64
+	BaseVersion         int64
+	Rules               []byte
+	Reason              string
+	CreatedAt           pgtype.Timestamptz
+	PublishedAt         pgtype.Timestamptz
+	ReviewerID          pgtype.Int8
+	AuthorPrincipalID   pgtype.UUID
+	ReviewerPrincipalID pgtype.UUID
+}
+
+type IamPrincipal struct {
+	ID              pgtype.UUID
+	Kind            string
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	DisplayName     string
+	CreationSource  string
+	CreatedInTenant pgtype.Text
+	SecurityNotes   string
+	RiskLevel       string
+}
+
+type IamReauthenticationProof struct {
+	TokenHash   string
 	TenantID    string
-	Name        string
-	Code        string
-	Kind        string
-	ParentID    pgtype.Int8
-	Status      string
-	Description string
-	CreatedAt   pgtype.Timestamptz
+	SessionHash string
+	Operation   string
+	ResourceID  int64
+	Revision    int64
+	ExpiresAt   pgtype.Timestamptz
+	ContextHash []byte
+}
+
+type IamRecoveryCode struct {
+	LoginAccountID pgtype.UUID
+	CodeHash       string
+	UsedAt         pgtype.Timestamptz
 }
 
 type IamRole struct {
@@ -653,6 +988,69 @@ type IamRole struct {
 	Status      string
 	Grants      []byte
 	CreatedAt   pgtype.Timestamptz
+	TemplateKey string
+}
+
+type IamSecurityCheckpoint struct {
+	LastID         int64
+	PreviousID     int64
+	PreviousDigest []byte
+	Digest         []byte
+	Signature      []byte
+	CreatedAt      pgtype.Timestamptz
+	KeyID          string
+}
+
+type IamSecurityEvent struct {
+	ID            int64
+	TenantID      string
+	AccountID     int64
+	BindingID     pgtype.UUID
+	Action        string
+	Outcome       string
+	Reason        string
+	CorrelationID string
+	ResourceType  string
+	ResourceID    string
+	CreatedAt     pgtype.Timestamptz
+	Authority     []byte
+}
+
+type IamSecurityEventArchive struct {
+	ID            int64
+	TenantID      string
+	AccountID     int64
+	BindingID     pgtype.UUID
+	Action        string
+	Outcome       string
+	Reason        string
+	CorrelationID string
+	ResourceType  string
+	ResourceID    string
+	CreatedAt     pgtype.Timestamptz
+	Authority     []byte
+}
+
+type IamSecurityEventHistory struct {
+	ID            int64
+	TenantID      string
+	AccountID     int64
+	BindingID     pgtype.UUID
+	Action        string
+	Outcome       string
+	Reason        string
+	CorrelationID string
+	ResourceType  string
+	ResourceID    string
+	CreatedAt     pgtype.Timestamptz
+	Authority     []byte
+}
+
+type IamSecurityRetentionReceipt struct {
+	CheckpointID int64
+	Cutoff       pgtype.Timestamptz
+	Signature    []byte
+	KeyID        string
 }
 
 type IamSession struct {
@@ -662,8 +1060,12 @@ type IamSession struct {
 	CsrfToken          string
 	ExpiresAt          pgtype.Timestamptz
 	CreatedAt          pgtype.Timestamptz
-	ActiveDepartmentID pgtype.Int8
 	LastSeenAt         pgtype.Timestamptz
+	IdentityBindingID  pgtype.UUID
+	PublicID           pgtype.UUID
+	DeviceLabel        string
+	ExternalIdentityID pgtype.UUID
+	RefreshedAt        pgtype.Timestamptz
 }
 
 type IamTemporaryRequest struct {
@@ -685,7 +1087,114 @@ type IamTemporaryRequest struct {
 	CancelledAt      pgtype.Timestamptz
 	RevokedAt        pgtype.Timestamptz
 	RevokedBy        pgtype.Int8
-	DepartmentID     int64
+}
+
+type IamTenant struct {
+	ID                  string
+	Status              string
+	CreatedAt           pgtype.Timestamptz
+	ReviewIntervalDays  int32
+	NextReviewAt        pgtype.Timestamptz
+	RegistrationChannel string
+	ResourceRevision    int64
+	AuditExportApproval bool
+}
+
+type IamTenantAccountAuthority struct {
+	TenantID  string
+	AccountID int64
+	IsAdmin   bool
+}
+
+type IamTenantMembership struct {
+	ID              pgtype.UUID
+	TenantID        string
+	PrincipalID     pgtype.UUID
+	Status          string
+	ExpiresAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	AccessRevokedAt pgtype.Timestamptz
+}
+
+type IamTotpCredential struct {
+	LoginAccountID         pgtype.UUID
+	SealedSecret           string
+	EnrollmentContextHash  string
+	ActivatedAt            pgtype.Timestamptz
+	EnrollExpiresAt        pgtype.Timestamptz
+	LastCounter            int64
+	ReplacementSecret      pgtype.Text
+	ReplacementContextHash pgtype.Text
+	ReplacementExpiresAt   pgtype.Timestamptz
+}
+
+type IamVerifiedContact struct {
+	LoginAccountID pgtype.UUID
+	Channel        string
+	Destination    string
+	VerifiedAt     pgtype.Timestamptz
+}
+
+type IdentityAccountProfile struct {
+	ID          int64
+	TenantID    string
+	AccountID   int64
+	DisplayName string
+	Email       string
+}
+
+type IdentityDepartment struct {
+	ID             int64
+	TenantID       string
+	OrganizationID int64
+	ParentID       pgtype.Int8
+	Name           string
+	Code           string
+	Manager        string
+	Status         string
+	Description    string
+	CreatedAt      pgtype.Timestamptz
+}
+
+type IdentityDepartmentDirectory struct {
+	ID             int64
+	TenantID       string
+	OrganizationID int64
+	ParentID       pgtype.Int8
+	Name           string
+	Code           string
+	Manager        string
+	Status         string
+	Description    string
+	CreatedAt      pgtype.Timestamptz
+}
+
+type IdentityDepartmentMembership struct {
+	TenantID       string
+	AccountID      int64
+	OrganizationID int64
+	DepartmentID   int64
+	Overrides      []byte
+}
+
+type IdentityDepartmentMembershipRole struct {
+	TenantID     string
+	AccountID    int64
+	DepartmentID int64
+	RoleID       int64
+	ID           pgtype.UUID
+}
+
+type IdentityOrganization struct {
+	ID          int64
+	TenantID    string
+	Name        string
+	Code        string
+	Kind        string
+	ParentID    pgtype.Int8
+	Status      string
+	Description string
+	CreatedAt   pgtype.Timestamptz
 }
 
 type KbChunk struct {
@@ -705,34 +1214,157 @@ type KbDocument struct {
 	CreatedAt pgtype.Timestamptz
 	Chunks    int32
 	Content   string
+	Version   string
+}
+
+type MailChannel struct {
+	ID                 int64
+	TenantID           string
+	MailboxID          int64
+	Direction          string
+	Protocol           string
+	Host               string
+	Port               int32
+	TlsMode            string
+	Username           string
+	CredentialID       int64
+	VerificationStatus string
+	LastErrorCode      string
+	LastVerifiedAt     pgtype.Timestamptz
+	NextSyncAt         pgtype.Timestamptz
+	ImapUidValidity    int64
+	ImapLastUid        int64
+	LeaseUntil         pgtype.Timestamptz
+	LeaseOwner         string
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
+type MailCredential struct {
+	ID          int64
+	TenantID    string
+	MailboxID   int64
+	Purpose     string
+	Ciphertext  string
+	Fingerprint string
+	Version     int32
+	CreatedAt   pgtype.Timestamptz
+	RotatedAt   pgtype.Timestamptz
+	LastUsedAt  pgtype.Timestamptz
+}
+
+type MailInboxSync struct {
+	ID             int64
+	TenantID       string
+	MailboxID      int64
+	Status         string
+	FetchedCount   int32
+	ImportedCount  int32
+	DuplicateCount int32
+	ErrorCode      string
+	StartedAt      pgtype.Timestamptz
+	FinishedAt     pgtype.Timestamptz
+}
+
+type MailMailbox struct {
+	ID             int64
+	TenantID       string
+	OwnerAccountID int64
+	Name           string
+	EmailAddress   string
+	DefaultSend    bool
+	Status         string
+	Revision       int64
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type MailMessage struct {
+	ID             int64
+	TenantID       string
+	MailboxID      int64
+	OwnerAccountID int64
+	Direction      string
+	Folder         string
+	ProviderUid    string
+	RfcMessageID   string
+	Subject        string
+	FromAddress    string
+	ReplyTo        string
+	BodyText       string
+	BodyHtml       string
+	Snippet        string
+	OccurredAt     pgtype.Timestamptz
+	ReadAt         pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type MailMessageAttachment struct {
+	ID          int64
+	TenantID    string
+	MessageID   int64
+	FileID      int64
+	ContentID   string
+	Filename    string
+	MimeType    string
+	Size        int64
+	Disposition string
+	CreatedAt   pgtype.Timestamptz
+}
+
+type MailMessageRecipient struct {
+	ID          int64
+	TenantID    string
+	MessageID   int64
+	Kind        string
+	Address     string
+	DisplayName string
+	CreatedAt   pgtype.Timestamptz
+}
+
+type MailOutboundDelivery struct {
+	ID            int64
+	TenantID      string
+	MailboxID     int64
+	MessageID     int64
+	Status        string
+	Attempts      int32
+	NextAttemptAt pgtype.Timestamptz
+	LeaseUntil    pgtype.Timestamptz
+	LeaseOwner    string
+	ErrorCode     string
+	SubmittedBy   int64
+	SentAt        pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
 }
 
 type McpCallAudit struct {
-	ID           int64
-	TenantID     string
-	AccountID    int64
-	TokenID      int64
-	DepartmentID int64
-	Tool         string
-	ResultCode   string
-	DurationMs   int64
-	RequestID    string
-	CreatedAt    pgtype.Timestamptz
+	ID         int64
+	TenantID   string
+	AccountID  int64
+	TokenID    int64
+	Tool       string
+	ResultCode string
+	DurationMs int64
+	RequestID  string
+	CreatedAt  pgtype.Timestamptz
 }
 
 type McpToken struct {
-	ID           int64
-	TenantID     string
-	AccountID    int64
-	DepartmentID int64
-	Name         string
-	TokenHash    string
-	TokenPrefix  string
-	CreatedAt    pgtype.Timestamptz
-	ExpiresAt    pgtype.Timestamptz
-	RevokedAt    pgtype.Timestamptz
-	LastUsedAt   pgtype.Timestamptz
-	RevokedBy    pgtype.Int8
+	ID                int64
+	TenantID          string
+	AccountID         int64
+	Name              string
+	TokenHash         string
+	TokenPrefix       string
+	CreatedAt         pgtype.Timestamptz
+	ExpiresAt         pgtype.Timestamptz
+	RevokedAt         pgtype.Timestamptz
+	LastUsedAt        pgtype.Timestamptz
+	RevokedBy         pgtype.Int8
+	IdentityBindingID pgtype.UUID
 }
 
 type McpTokenTool struct {
@@ -1025,82 +1657,6 @@ type RuntimeRunDependency struct {
 	TenantID string
 	RunID    int64
 	PluginID string
-}
-
-type StudioItem struct {
-	ID            int64
-	TenantID      string
-	ProjectID     int64
-	RequirementID pgtype.Int8
-	Kind          string
-	Title         string
-	Stage         string
-	Reference     string
-	ReferenceKind string
-	Checks        string
-	Evidence      []byte
-	CreatedBy     int64
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	CatalogTarget string
-	SubjectItemID pgtype.Int8
-	DshSessionID  pgtype.Text
-	Pinned        bool
-	Archived      bool
-}
-
-type StudioProject struct {
-	ID               int64
-	TenantID         string
-	Root             string
-	ApiOrigin        string
-	WebOrigin        string
-	CreatedBy        int64
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	Name             string
-	AiAnalysis       string
-	AiAnalyzedAt     pgtype.Timestamptz
-	DevelopmentBrief string
-}
-
-type StudioRequirement struct {
-	ID          int64
-	TenantID    string
-	ProjectID   int64
-	Title       string
-	Description string
-	Source      string
-	Archived    bool
-	CreatedBy   int64
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	ParentID    pgtype.Int8
-}
-
-type StudioRequirementFile struct {
-	ID            int64
-	TenantID      string
-	RequirementID int64
-	FileID        int64
-	CreatedBy     int64
-	CreatedAt     pgtype.Timestamptz
-}
-
-type StudioRun struct {
-	ID           int64
-	TenantID     string
-	ProjectID    int64
-	Mode         string
-	Capability   string
-	Version      string
-	RequestKey   string
-	Status       string
-	InvocationID string
-	ApprovalID   int64
-	RunID        int64
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
 }
 
 type TechnicalDemoRecord struct {

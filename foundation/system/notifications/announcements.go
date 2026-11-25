@@ -166,7 +166,7 @@ func (s *Service) Send(ctx context.Context, payload *SendPayload) (res *SentNoti
 			if e != nil {
 				return e
 			}
-			id, e := q.GovAddAnnouncementMessage(ctx, dbgen.GovAddAnnouncementMessageParams{TenantID: p.TenantID, AnnouncementID: governance.Int(created.ID), RecipientID: r.AccountID, DepartmentID: r.DepartmentID, Payload: raw})
+			id, e := q.GovAddAnnouncementMessage(ctx, dbgen.GovAddAnnouncementMessageParams{TenantID: p.TenantID, AnnouncementID: governance.Int(created.ID), RecipientID: r.AccountID, DepartmentID: governance.Int(r.DepartmentID), Payload: raw})
 			if e != nil {
 				return e
 			}
@@ -244,7 +244,7 @@ func (s *Service) Message(ctx context.Context, payload *MessagePayload) (res *In
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.Q.GovInboxMessage(ctx, dbgen.GovInboxMessageParams{TenantID: p.TenantID, RecipientID: p.Account.ID, ID: payload.ID, DepartmentID: p.Account.DepartmentID})
+	row, err := s.Q.GovInboxMessage(ctx, dbgen.GovInboxMessageParams{TenantID: p.TenantID, RecipientID: p.Account.ID, ID: payload.ID, DepartmentID: p.Account.DepartmentID, TenantBase: p.IdentityBindingID == "", CanReview: p.CanPermanent("temporary:approve")})
 	if err != nil {
 		return nil, err
 	}

@@ -25,6 +25,14 @@ type InvokeRequestBody struct {
 	Runtime        *RuntimeInvocationReferenceRequestBody `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 }
 
+// InvokeMachineRequestBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP request body.
+type InvokeMachineRequestBody struct {
+	Version        *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	Input          any     `form:"input,omitempty" json:"input,omitempty" xml:"input,omitempty"`
+	IdempotencyKey *string `form:"idempotencyKey,omitempty" json:"idempotencyKey,omitempty" xml:"idempotencyKey,omitempty"`
+}
+
 // DecideRequestBody is the type of the "capability" service "decide" endpoint
 // HTTP request body.
 type DecideRequestBody struct {
@@ -39,6 +47,19 @@ type DefinitionsResponseBody []*CapabilityContractResponse
 // InvokeResponseBody is the type of the "capability" service "invoke" endpoint
 // HTTP response body.
 type InvokeResponseBody struct {
+	InvocationID string   `form:"invocationId" json:"invocationId" xml:"invocationId"`
+	Status       string   `form:"status" json:"status" xml:"status"`
+	Data         any      `form:"data,omitempty" json:"data,omitempty" xml:"data,omitempty"`
+	EventIds     []string `form:"eventIds" json:"eventIds" xml:"eventIds"`
+	ApprovalID   *int64   `form:"approvalId,omitempty" json:"approvalId,omitempty" xml:"approvalId,omitempty"`
+	ErrorCode    string   `form:"errorCode" json:"errorCode" xml:"errorCode"`
+	TraceID      string   `form:"traceId" json:"traceId" xml:"traceId"`
+	Replayed     bool     `form:"replayed" json:"replayed" xml:"replayed"`
+}
+
+// InvokeMachineResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body.
+type InvokeMachineResponseBody struct {
 	InvocationID string   `form:"invocationId" json:"invocationId" xml:"invocationId"`
 	Status       string   `form:"status" json:"status" xml:"status"`
 	Data         any      `form:"data,omitempty" json:"data,omitempty" xml:"data,omitempty"`
@@ -178,6 +199,49 @@ type InvokeUnavailableResponseBody struct {
 // InvokeInternalResponseBody is the type of the "capability" service "invoke"
 // endpoint HTTP response body for the "internal" error.
 type InvokeInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// InvokeMachineUnauthenticatedResponseBody is the type of the "capability"
+// service "invoke_machine" endpoint HTTP response body for the
+// "unauthenticated" error.
+type InvokeMachineUnauthenticatedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// InvokeMachineForbiddenResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body for the "forbidden" error.
+type InvokeMachineForbiddenResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// InvokeMachineInvalidResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body for the "invalid" error.
+type InvokeMachineInvalidResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// InvokeMachineNotFoundResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body for the "not_found" error.
+type InvokeMachineNotFoundResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// InvokeMachineConflictResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body for the "conflict" error.
+type InvokeMachineConflictResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// InvokeMachineUnavailableResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body for the "unavailable" error.
+type InvokeMachineUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// InvokeMachineInternalResponseBody is the type of the "capability" service
+// "invoke_machine" endpoint HTTP response body for the "internal" error.
+type InvokeMachineInternalResponseBody struct {
 	Code string `form:"code" json:"code" xml:"code"`
 }
 
@@ -524,6 +588,29 @@ func NewInvokeResponseBody(res *capability.CapabilityResult) *InvokeResponseBody
 	return body
 }
 
+// NewInvokeMachineResponseBody builds the HTTP response body from the result
+// of the "invoke_machine" endpoint of the "capability" service.
+func NewInvokeMachineResponseBody(res *capability.CapabilityResult) *InvokeMachineResponseBody {
+	body := &InvokeMachineResponseBody{
+		InvocationID: res.InvocationID,
+		Status:       res.Status,
+		Data:         res.Data,
+		ApprovalID:   res.ApprovalID,
+		ErrorCode:    res.ErrorCode,
+		TraceID:      res.TraceID,
+		Replayed:     res.Replayed,
+	}
+	if res.EventIds != nil {
+		body.EventIds = make([]string, len(res.EventIds))
+		for i, val := range res.EventIds {
+			body.EventIds[i] = val
+		}
+	} else {
+		body.EventIds = []string{}
+	}
+	return body
+}
+
 // NewInvocationsResponseBody builds the HTTP response body from the result of
 // the "invocations" endpoint of the "capability" service.
 func NewInvocationsResponseBody(res []*capability.CapabilityInvocation) []*CapabilityInvocationResponse {
@@ -735,6 +822,69 @@ func NewInvokeUnavailableResponseBody(res *capability.IAMProblem) *InvokeUnavail
 // of the "invoke" endpoint of the "capability" service.
 func NewInvokeInternalResponseBody(res *capability.IAMProblem) *InvokeInternalResponseBody {
 	body := &InvokeInternalResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewInvokeMachineUnauthenticatedResponseBody builds the HTTP response body
+// from the result of the "invoke_machine" endpoint of the "capability" service.
+func NewInvokeMachineUnauthenticatedResponseBody(res *capability.IAMProblem) *InvokeMachineUnauthenticatedResponseBody {
+	body := &InvokeMachineUnauthenticatedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewInvokeMachineForbiddenResponseBody builds the HTTP response body from the
+// result of the "invoke_machine" endpoint of the "capability" service.
+func NewInvokeMachineForbiddenResponseBody(res *capability.IAMProblem) *InvokeMachineForbiddenResponseBody {
+	body := &InvokeMachineForbiddenResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewInvokeMachineInvalidResponseBody builds the HTTP response body from the
+// result of the "invoke_machine" endpoint of the "capability" service.
+func NewInvokeMachineInvalidResponseBody(res *capability.IAMProblem) *InvokeMachineInvalidResponseBody {
+	body := &InvokeMachineInvalidResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewInvokeMachineNotFoundResponseBody builds the HTTP response body from the
+// result of the "invoke_machine" endpoint of the "capability" service.
+func NewInvokeMachineNotFoundResponseBody(res *capability.IAMProblem) *InvokeMachineNotFoundResponseBody {
+	body := &InvokeMachineNotFoundResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewInvokeMachineConflictResponseBody builds the HTTP response body from the
+// result of the "invoke_machine" endpoint of the "capability" service.
+func NewInvokeMachineConflictResponseBody(res *capability.IAMProblem) *InvokeMachineConflictResponseBody {
+	body := &InvokeMachineConflictResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewInvokeMachineUnavailableResponseBody builds the HTTP response body from
+// the result of the "invoke_machine" endpoint of the "capability" service.
+func NewInvokeMachineUnavailableResponseBody(res *capability.IAMProblem) *InvokeMachineUnavailableResponseBody {
+	body := &InvokeMachineUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewInvokeMachineInternalResponseBody builds the HTTP response body from the
+// result of the "invoke_machine" endpoint of the "capability" service.
+func NewInvokeMachineInternalResponseBody(res *capability.IAMProblem) *InvokeMachineInternalResponseBody {
+	body := &InvokeMachineInternalResponseBody{
 		Code: res.Code,
 	}
 	return body
@@ -1082,6 +1232,21 @@ func NewInvokePayload(body *InvokeRequestBody, name string, cookie string) *capa
 	return v
 }
 
+// NewInvokeMachinePayload builds a capability service invoke_machine endpoint
+// payload.
+func NewInvokeMachinePayload(body *InvokeMachineRequestBody, name string, authorization string, delegationID *string) *capability.InvokeMachinePayload {
+	v := &capability.InvokeMachinePayload{
+		Version:        *body.Version,
+		Input:          body.Input,
+		IdempotencyKey: body.IdempotencyKey,
+	}
+	v.Name = name
+	v.Authorization = authorization
+	v.DelegationID = delegationID
+
+	return v
+}
+
 // NewInvocationsPayload builds a capability service invocations endpoint
 // payload.
 func NewInvocationsPayload(limit int, cookie string) *capability.InvocationsPayload {
@@ -1158,6 +1323,31 @@ func ValidateInvokeRequestBody(body *InvokeRequestBody) (err error) {
 	if body.Runtime != nil {
 		if err2 := validateRuntimeInvocationReferenceRequestBody(body.Runtime, "body.runtime"); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateInvokeMachineRequestBody runs the validations defined on
+// InvokeMachineRequestBody
+func ValidateInvokeMachineRequestBody(body *InvokeMachineRequestBody) (err error) {
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Input == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input", "body"))
+	}
+	if body.Version != nil {
+		if utf8.RuneCountInString(*body.Version) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *body.Version, utf8.RuneCountInString(*body.Version), 1, true))
+		}
+		if utf8.RuneCountInString(*body.Version) > 16 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *body.Version, utf8.RuneCountInString(*body.Version), 16, false))
+		}
+	}
+	if body.IdempotencyKey != nil {
+		if utf8.RuneCountInString(*body.IdempotencyKey) > 120 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotencyKey", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 120, false))
 		}
 	}
 	return

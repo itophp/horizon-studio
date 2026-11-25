@@ -7,7 +7,7 @@ import (
 
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/system/identity"
-	"horizon/internal/repository/dbgen"
+	"horizon/internal/repository/dbgen/studiodb"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -92,8 +92,8 @@ func (m *Module) requirementAttachmentAdd(ctx context.Context, tx pgx.Tx, in con
 	if !okRequirement || requirementID < 1 || !okFile || fileID < 1 {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
-	q := dbgen.New(tx)
-	current, err := q.StudioRequirementGet(ctx, dbgen.StudioRequirementGetParams{
+	q := studiodb.New(tx)
+	current, err := q.StudioRequirementGet(ctx, studiodb.StudioRequirementGetParams{
 		TenantID: p.TenantID, ID: int64(requirementID), CreatedBy: p.Account.ID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -108,14 +108,14 @@ func (m *Module) requirementAttachmentAdd(ctx context.Context, tx pgx.Tx, in con
 	if current.Archived {
 		return contracts.Output{}, contracts.Problem("conflict")
 	}
-	if _, err := q.StudioOwnedAttachment(ctx, dbgen.StudioOwnedAttachmentParams{
+	if _, err := q.StudioOwnedAttachment(ctx, studiodb.StudioOwnedAttachmentParams{
 		TenantID: p.TenantID, ID: int64(fileID), OwnerID: p.Account.ID,
 	}); errors.Is(err, pgx.ErrNoRows) {
 		return contracts.Output{}, contracts.Problem("invalid")
 	} else if err != nil {
 		return contracts.Output{}, err
 	}
-	row, err := q.StudioRequirementAttachmentAdd(ctx, dbgen.StudioRequirementAttachmentAddParams{
+	row, err := q.StudioRequirementAttachmentAdd(ctx, studiodb.StudioRequirementAttachmentAddParams{
 		TenantID: p.TenantID, RequirementID: int64(requirementID), ProjectID: projectID,
 		FileID: int64(fileID), CreatedBy: p.Account.ID,
 	})
@@ -172,8 +172,8 @@ func (m *Module) requirementAttachmentRemove(ctx context.Context, tx pgx.Tx, in 
 	if !okRequirement || requirementID < 1 || !okFile || fileID < 1 {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
-	q := dbgen.New(tx)
-	current, err := q.StudioRequirementGet(ctx, dbgen.StudioRequirementGetParams{
+	q := studiodb.New(tx)
+	current, err := q.StudioRequirementGet(ctx, studiodb.StudioRequirementGetParams{
 		TenantID: p.TenantID, ID: int64(requirementID), CreatedBy: p.Account.ID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -188,7 +188,7 @@ func (m *Module) requirementAttachmentRemove(ctx context.Context, tx pgx.Tx, in 
 	if current.Archived {
 		return contracts.Output{}, contracts.Problem("conflict")
 	}
-	removed, err := q.StudioRequirementAttachmentRemove(ctx, dbgen.StudioRequirementAttachmentRemoveParams{
+	removed, err := q.StudioRequirementAttachmentRemove(ctx, studiodb.StudioRequirementAttachmentRemoveParams{
 		TenantID: p.TenantID, RequirementID: int64(requirementID), FileID: int64(fileID), CreatedBy: p.Account.ID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -211,7 +211,7 @@ func (m *Module) requirementAttachmentRemove(ctx context.Context, tx pgx.Tx, in 
 // requirementAttachments is shared by the list capability and the session
 // context read so the Agent sees the same attachment projection as the page.
 func (m *Module) requirementAttachments(ctx context.Context, tenant string, createdBy, projectID, requirementID int64) ([]map[string]any, error) {
-	rows, err := dbgen.New(m.pool).StudioRequirementAttachmentList(ctx, dbgen.StudioRequirementAttachmentListParams{
+	rows, err := studiodb.New(m.pool).StudioRequirementAttachmentList(ctx, studiodb.StudioRequirementAttachmentListParams{
 		TenantID: tenant, RequirementID: requirementID, ProjectID: projectID, CreatedBy: createdBy,
 	})
 	if err != nil {

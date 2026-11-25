@@ -15,7 +15,7 @@ const applications = JSON.parse(
   readFileSync("../../docs/generated/runtime/applications.json", "utf8"),
 ) as RuntimeApplicationV2[];
 const collaboration = applications.find(
-  (app) => app.id === "agent-collaboration" && app.version === "1.0.2",
+  (app) => app.id === "agent-collaboration" && app.version === "1.0.3",
 )!;
 
 const fixture = vi.hoisted(() => ({
@@ -26,7 +26,7 @@ const fixture = vi.hoisted(() => ({
   install: vi.fn(async () => {}),
   failed: false,
 }));
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({ tenantId: "test", account: { id: 1 }, permissions: [] }),
 }));
 vi.mock("@/lib/capabilities", async (original) => ({

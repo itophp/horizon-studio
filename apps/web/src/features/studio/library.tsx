@@ -9,7 +9,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { ErrorBanner, Loading } from "@/features/administration/shared";
+import { ErrorBanner, Loading } from "@/features/identity/shared";
 
 export type Selection = (id: string) => void;
 type RecordRow = { id: string; title: string; subtitle?: string };

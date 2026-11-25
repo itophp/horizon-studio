@@ -11,10 +11,20 @@
  */
 export interface LoginRequestBody {
   /**
+   * @minLength 6
+   * @maxLength 6
+   */
+  mfaCode?: string;
+  /**
    * @minLength 1
    * @maxLength 128
    */
   password: string;
+  /**
+   * @minLength 32
+   * @maxLength 32
+   */
+  recoveryCode?: string;
   /**
    * @minLength 3
    * @maxLength 80

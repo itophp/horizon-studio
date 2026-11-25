@@ -14,6 +14,36 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SamlCallbackRequestBody is the type of the "identity" service
+// "saml_callback" endpoint HTTP request body.
+type SamlCallbackRequestBody struct {
+	SAMLResponse *string `form:"SAMLResponse,omitempty" json:"SAMLResponse,omitempty" xml:"SAMLResponse,omitempty"`
+	RelayState   *string `form:"RelayState,omitempty" json:"RelayState,omitempty" xml:"RelayState,omitempty"`
+}
+
+// CompleteSamlRequestBody is the type of the "identity" service
+// "complete_saml" endpoint HTTP request body.
+type CompleteSamlRequestBody struct {
+	MfaCode      *string `form:"mfaCode,omitempty" json:"mfaCode,omitempty" xml:"mfaCode,omitempty"`
+	RecoveryCode *string `form:"recoveryCode,omitempty" json:"recoveryCode,omitempty" xml:"recoveryCode,omitempty"`
+}
+
+// StartFederationRequestBody is the type of the "identity" service
+// "start_federation" endpoint HTTP request body.
+type StartFederationRequestBody struct {
+	ProviderID *string `form:"providerId,omitempty" json:"providerId,omitempty" xml:"providerId,omitempty"`
+	Purpose    *string `form:"purpose,omitempty" json:"purpose,omitempty" xml:"purpose,omitempty"`
+}
+
+// CompleteFederationRequestBody is the type of the "identity" service
+// "complete_federation" endpoint HTTP request body.
+type CompleteFederationRequestBody struct {
+	State        *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	Code         *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+	MfaCode      *string `form:"mfaCode,omitempty" json:"mfaCode,omitempty" xml:"mfaCode,omitempty"`
+	RecoveryCode *string `form:"recoveryCode,omitempty" json:"recoveryCode,omitempty" xml:"recoveryCode,omitempty"`
+}
+
 // RequestTemporaryAccessRequestBody is the type of the "identity" service
 // "request_temporary_access" endpoint HTTP request body.
 type RequestTemporaryAccessRequestBody struct {
@@ -31,17 +61,90 @@ type ReviewTemporaryAccessRequestBody struct {
 	Note     *string                       `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
 }
 
-// SwitchDepartmentRequestBody is the type of the "identity" service
-// "switch_department" endpoint HTTP request body.
-type SwitchDepartmentRequestBody struct {
-	DepartmentID *int64 `form:"departmentId,omitempty" json:"departmentId,omitempty" xml:"departmentId,omitempty"`
+// SelectSignInIdentityRequestBody is the type of the "identity" service
+// "select_sign_in_identity" endpoint HTTP request body.
+type SelectSignInIdentityRequestBody struct {
+	IdentityBindingID    *string `form:"identityBindingId,omitempty" json:"identityBindingId,omitempty" xml:"identityBindingId,omitempty"`
+	ActingOrganizationID *int64  `form:"actingOrganizationId,omitempty" json:"actingOrganizationId,omitempty" xml:"actingOrganizationId,omitempty"`
+	Portal               *string `form:"portal,omitempty" json:"portal,omitempty" xml:"portal,omitempty"`
+}
+
+// RedeemSignInInvitationRequestBody is the type of the "identity" service
+// "redeem_sign_in_invitation" endpoint HTTP request body.
+type RedeemSignInInvitationRequestBody struct {
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
 }
 
 // LoginRequestBody is the type of the "identity" service "login" endpoint HTTP
 // request body.
 type LoginRequestBody struct {
-	Username *string `form:"username,omitempty" json:"username,omitempty" xml:"username,omitempty"`
+	Username     *string `form:"username,omitempty" json:"username,omitempty" xml:"username,omitempty"`
+	Password     *string `form:"password,omitempty" json:"password,omitempty" xml:"password,omitempty"`
+	MfaCode      *string `form:"mfaCode,omitempty" json:"mfaCode,omitempty" xml:"mfaCode,omitempty"`
+	RecoveryCode *string `form:"recoveryCode,omitempty" json:"recoveryCode,omitempty" xml:"recoveryCode,omitempty"`
+}
+
+// RequestRegistrationRequestBody is the type of the "identity" service
+// "request_registration" endpoint HTTP request body.
+type RequestRegistrationRequestBody struct {
+	Username    *string `form:"username,omitempty" json:"username,omitempty" xml:"username,omitempty"`
+	DisplayName *string `form:"displayName,omitempty" json:"displayName,omitempty" xml:"displayName,omitempty"`
+	Password    *string `form:"password,omitempty" json:"password,omitempty" xml:"password,omitempty"`
+	Destination *string `form:"destination,omitempty" json:"destination,omitempty" xml:"destination,omitempty"`
+}
+
+// CompleteRegistrationRequestBody is the type of the "identity" service
+// "complete_registration" endpoint HTTP request body.
+type CompleteRegistrationRequestBody struct {
+	Token    *string `form:"token,omitempty" json:"token,omitempty" xml:"token,omitempty"`
 	Password *string `form:"password,omitempty" json:"password,omitempty" xml:"password,omitempty"`
+}
+
+// RequestPasswordResetRequestBody is the type of the "identity" service
+// "request_password_reset" endpoint HTTP request body.
+type RequestPasswordResetRequestBody struct {
+	Username *string `form:"username,omitempty" json:"username,omitempty" xml:"username,omitempty"`
+	Channel  *string `form:"channel,omitempty" json:"channel,omitempty" xml:"channel,omitempty"`
+}
+
+// CompletePasswordResetRequestBody is the type of the "identity" service
+// "complete_password_reset" endpoint HTTP request body.
+type CompletePasswordResetRequestBody struct {
+	Token        *string `form:"token,omitempty" json:"token,omitempty" xml:"token,omitempty"`
+	NewPassword  *string `form:"newPassword,omitempty" json:"newPassword,omitempty" xml:"newPassword,omitempty"`
+	MfaCode      *string `form:"mfaCode,omitempty" json:"mfaCode,omitempty" xml:"mfaCode,omitempty"`
+	RecoveryCode *string `form:"recoveryCode,omitempty" json:"recoveryCode,omitempty" xml:"recoveryCode,omitempty"`
+}
+
+// RefreshSessionRequestBody is the type of the "identity" service
+// "refresh_session" endpoint HTTP request body.
+type RefreshSessionRequestBody struct {
+	Password *string `form:"password,omitempty" json:"password,omitempty" xml:"password,omitempty"`
+	Factor   *string `form:"factor,omitempty" json:"factor,omitempty" xml:"factor,omitempty"`
+}
+
+// CompleteSamlResponseBody is the type of the "identity" service
+// "complete_saml" endpoint HTTP response body.
+type CompleteSamlResponseBody struct {
+	Profile   *SessionProfileResponseBody `form:"profile,omitempty" json:"profile,omitempty" xml:"profile,omitempty"`
+	LinkProof *string                     `form:"linkProof,omitempty" json:"linkProof,omitempty" xml:"linkProof,omitempty"`
+}
+
+// FederationProvidersResponseBody is the type of the "identity" service
+// "federation_providers" endpoint HTTP response body.
+type FederationProvidersResponseBody []*FederationProviderResponse
+
+// StartFederationResponseBody is the type of the "identity" service
+// "start_federation" endpoint HTTP response body.
+type StartFederationResponseBody struct {
+	AuthorizationURL string `form:"authorizationUrl" json:"authorizationUrl" xml:"authorizationUrl"`
+}
+
+// CompleteFederationResponseBody is the type of the "identity" service
+// "complete_federation" endpoint HTTP response body.
+type CompleteFederationResponseBody struct {
+	Profile   *SessionProfileResponseBody `form:"profile,omitempty" json:"profile,omitempty" xml:"profile,omitempty"`
+	LinkProof *string                     `form:"linkProof,omitempty" json:"linkProof,omitempty" xml:"linkProof,omitempty"`
 }
 
 // TemporaryAccessResponseBody is the type of the "identity" service
@@ -49,7 +152,6 @@ type LoginRequestBody struct {
 type TemporaryAccessResponseBody struct {
 	Requests        []*TemporaryAccessRecordResponseBody `form:"requests" json:"requests" xml:"requests"`
 	Catalog         []*PermissionDefinitionResponseBody  `form:"catalog" json:"catalog" xml:"catalog"`
-	Departments     []*ScopeDepartmentChoiceResponseBody `form:"departments" json:"departments" xml:"departments"`
 	EffectiveGrants []*PermissionGrantResponseBody       `form:"effectiveGrants" json:"effectiveGrants" xml:"effectiveGrants"`
 	CanReview       bool                                 `form:"canReview" json:"canReview" xml:"canReview"`
 }
@@ -60,8 +162,6 @@ type RequestTemporaryAccessResponseBody struct {
 	ID               int64                          `form:"id" json:"id" xml:"id"`
 	ApplicantID      int64                          `form:"applicantId" json:"applicantId" xml:"applicantId"`
 	ApplicantName    string                         `form:"applicantName" json:"applicantName" xml:"applicantName"`
-	DepartmentID     int64                          `form:"departmentId" json:"departmentId" xml:"departmentId"`
-	DepartmentName   string                         `form:"departmentName" json:"departmentName" xml:"departmentName"`
 	RequestedGrants  []*PermissionGrantResponseBody `form:"requestedGrants" json:"requestedGrants" xml:"requestedGrants"`
 	RequestedMinutes int                            `form:"requestedMinutes" json:"requestedMinutes" xml:"requestedMinutes"`
 	Reason           string                         `form:"reason" json:"reason" xml:"reason"`
@@ -82,8 +182,6 @@ type ReviewTemporaryAccessResponseBody struct {
 	ID               int64                          `form:"id" json:"id" xml:"id"`
 	ApplicantID      int64                          `form:"applicantId" json:"applicantId" xml:"applicantId"`
 	ApplicantName    string                         `form:"applicantName" json:"applicantName" xml:"applicantName"`
-	DepartmentID     int64                          `form:"departmentId" json:"departmentId" xml:"departmentId"`
-	DepartmentName   string                         `form:"departmentName" json:"departmentName" xml:"departmentName"`
 	RequestedGrants  []*PermissionGrantResponseBody `form:"requestedGrants" json:"requestedGrants" xml:"requestedGrants"`
 	RequestedMinutes int                            `form:"requestedMinutes" json:"requestedMinutes" xml:"requestedMinutes"`
 	Reason           string                         `form:"reason" json:"reason" xml:"reason"`
@@ -104,8 +202,6 @@ type CancelTemporaryAccessResponseBody struct {
 	ID               int64                          `form:"id" json:"id" xml:"id"`
 	ApplicantID      int64                          `form:"applicantId" json:"applicantId" xml:"applicantId"`
 	ApplicantName    string                         `form:"applicantName" json:"applicantName" xml:"applicantName"`
-	DepartmentID     int64                          `form:"departmentId" json:"departmentId" xml:"departmentId"`
-	DepartmentName   string                         `form:"departmentName" json:"departmentName" xml:"departmentName"`
 	RequestedGrants  []*PermissionGrantResponseBody `form:"requestedGrants" json:"requestedGrants" xml:"requestedGrants"`
 	RequestedMinutes int                            `form:"requestedMinutes" json:"requestedMinutes" xml:"requestedMinutes"`
 	Reason           string                         `form:"reason" json:"reason" xml:"reason"`
@@ -126,8 +222,6 @@ type RevokeTemporaryAccessResponseBody struct {
 	ID               int64                          `form:"id" json:"id" xml:"id"`
 	ApplicantID      int64                          `form:"applicantId" json:"applicantId" xml:"applicantId"`
 	ApplicantName    string                         `form:"applicantName" json:"applicantName" xml:"applicantName"`
-	DepartmentID     int64                          `form:"departmentId" json:"departmentId" xml:"departmentId"`
-	DepartmentName   string                         `form:"departmentName" json:"departmentName" xml:"departmentName"`
 	RequestedGrants  []*PermissionGrantResponseBody `form:"requestedGrants" json:"requestedGrants" xml:"requestedGrants"`
 	RequestedMinutes int                            `form:"requestedMinutes" json:"requestedMinutes" xml:"requestedMinutes"`
 	Reason           string                         `form:"reason" json:"reason" xml:"reason"`
@@ -142,16 +236,29 @@ type RevokeTemporaryAccessResponseBody struct {
 	ExpiresAt        string                         `form:"expiresAt" json:"expiresAt" xml:"expiresAt"`
 }
 
-// SwitchDepartmentResponseBody is the type of the "identity" service
-// "switch_department" endpoint HTTP response body.
-type SwitchDepartmentResponseBody struct {
+// ListSignInIdentitiesResponseBody is the type of the "identity" service
+// "list_sign_in_identities" endpoint HTTP response body.
+type ListSignInIdentitiesResponseBody []*SignInIdentityResponse
+
+// SelectSignInIdentityResponseBody is the type of the "identity" service
+// "select_sign_in_identity" endpoint HTTP response body.
+type SelectSignInIdentityResponseBody struct {
 	// Opaque non-secret authorization cache revision.
-	AuthorizationVersion *string                    `form:"authorizationVersion,omitempty" json:"authorizationVersion,omitempty" xml:"authorizationVersion,omitempty"`
-	Account              *AccountRecordResponseBody `form:"account" json:"account" xml:"account"`
-	CsrfToken            string                     `form:"csrfToken" json:"csrfToken" xml:"csrfToken"`
-	Permissions          []string                   `form:"permissions" json:"permissions" xml:"permissions"`
-	TenantID             string                     `form:"tenantId" json:"tenantId" xml:"tenantId"`
-	ActiveDepartmentID   int64                      `form:"activeDepartmentId" json:"activeDepartmentId" xml:"activeDepartmentId"`
+	AuthorizationVersion *string `form:"authorizationVersion,omitempty" json:"authorizationVersion,omitempty" xml:"authorizationVersion,omitempty"`
+	// Platform operator management is available in this session.
+	PlatformOperator *bool `form:"platformOperator,omitempty" json:"platformOperator,omitempty" xml:"platformOperator,omitempty"`
+	// Tenant account when a work context is active.
+	Account           *SessionAccountResponseBody `form:"account,omitempty" json:"account,omitempty" xml:"account,omitempty"`
+	CsrfToken         string                      `form:"csrfToken" json:"csrfToken" xml:"csrfToken"`
+	Permissions       []string                    `form:"permissions" json:"permissions" xml:"permissions"`
+	TenantID          string                      `form:"tenantId" json:"tenantId" xml:"tenantId"`
+	IdentityBindingID *string                     `form:"identityBindingId,omitempty" json:"identityBindingId,omitempty" xml:"identityBindingId,omitempty"`
+	// Organization verified for the active portal binding.
+	ActingOrganizationID *int64 `form:"actingOrganizationId,omitempty" json:"actingOrganizationId,omitempty" xml:"actingOrganizationId,omitempty"`
+	// Display name of the verified organization.
+	ActingOrganizationName *string `form:"actingOrganizationName,omitempty" json:"actingOrganizationName,omitempty" xml:"actingOrganizationName,omitempty"`
+	// Application portal verified for the active binding.
+	Portal *string `form:"portal,omitempty" json:"portal,omitempty" xml:"portal,omitempty"`
 }
 
 // LoginResponseBody is the type of the "identity" service "login" endpoint
@@ -164,12 +271,27 @@ type LoginResponseBody struct {
 // response body.
 type MeResponseBody struct {
 	// Opaque non-secret authorization cache revision.
-	AuthorizationVersion *string                    `form:"authorizationVersion,omitempty" json:"authorizationVersion,omitempty" xml:"authorizationVersion,omitempty"`
-	Account              *AccountRecordResponseBody `form:"account" json:"account" xml:"account"`
-	CsrfToken            string                     `form:"csrfToken" json:"csrfToken" xml:"csrfToken"`
-	Permissions          []string                   `form:"permissions" json:"permissions" xml:"permissions"`
-	TenantID             string                     `form:"tenantId" json:"tenantId" xml:"tenantId"`
-	ActiveDepartmentID   int64                      `form:"activeDepartmentId" json:"activeDepartmentId" xml:"activeDepartmentId"`
+	AuthorizationVersion *string `form:"authorizationVersion,omitempty" json:"authorizationVersion,omitempty" xml:"authorizationVersion,omitempty"`
+	// Platform operator management is available in this session.
+	PlatformOperator *bool `form:"platformOperator,omitempty" json:"platformOperator,omitempty" xml:"platformOperator,omitempty"`
+	// Tenant account when a work context is active.
+	Account           *SessionAccountResponseBody `form:"account,omitempty" json:"account,omitempty" xml:"account,omitempty"`
+	CsrfToken         string                      `form:"csrfToken" json:"csrfToken" xml:"csrfToken"`
+	Permissions       []string                    `form:"permissions" json:"permissions" xml:"permissions"`
+	TenantID          string                      `form:"tenantId" json:"tenantId" xml:"tenantId"`
+	IdentityBindingID *string                     `form:"identityBindingId,omitempty" json:"identityBindingId,omitempty" xml:"identityBindingId,omitempty"`
+	// Organization verified for the active portal binding.
+	ActingOrganizationID *int64 `form:"actingOrganizationId,omitempty" json:"actingOrganizationId,omitempty" xml:"actingOrganizationId,omitempty"`
+	// Display name of the verified organization.
+	ActingOrganizationName *string `form:"actingOrganizationName,omitempty" json:"actingOrganizationName,omitempty" xml:"actingOrganizationName,omitempty"`
+	// Application portal verified for the active binding.
+	Portal *string `form:"portal,omitempty" json:"portal,omitempty" xml:"portal,omitempty"`
+}
+
+// RefreshSessionResponseBody is the type of the "identity" service
+// "refresh_session" endpoint HTTP response body.
+type RefreshSessionResponseBody struct {
+	Profile *SessionProfileResponseBody `form:"profile" json:"profile" xml:"profile"`
 }
 
 // SnapshotResponseBody is the type of the "identity" service "snapshot"
@@ -181,6 +303,121 @@ type SnapshotResponseBody struct {
 	Roles         []*RoleRecordResponseBody           `form:"roles" json:"roles" xml:"roles"`
 	Permissions   []string                            `form:"permissions" json:"permissions" xml:"permissions"`
 	Catalog       []*PermissionDefinitionResponseBody `form:"catalog" json:"catalog" xml:"catalog"`
+}
+
+// SamlCallbackUnauthenticatedResponseBody is the type of the "identity"
+// service "saml_callback" endpoint HTTP response body for the
+// "unauthenticated" error.
+type SamlCallbackUnauthenticatedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// SamlCallbackRateLimitedResponseBody is the type of the "identity" service
+// "saml_callback" endpoint HTTP response body for the "rate_limited" error.
+type SamlCallbackRateLimitedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// SamlCallbackUnavailableResponseBody is the type of the "identity" service
+// "saml_callback" endpoint HTTP response body for the "unavailable" error.
+type SamlCallbackUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// SamlCallbackInternalResponseBody is the type of the "identity" service
+// "saml_callback" endpoint HTTP response body for the "internal" error.
+type SamlCallbackInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompleteSamlUnauthenticatedResponseBody is the type of the "identity"
+// service "complete_saml" endpoint HTTP response body for the
+// "unauthenticated" error.
+type CompleteSamlUnauthenticatedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompleteSamlRateLimitedResponseBody is the type of the "identity" service
+// "complete_saml" endpoint HTTP response body for the "rate_limited" error.
+type CompleteSamlRateLimitedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompleteSamlUnavailableResponseBody is the type of the "identity" service
+// "complete_saml" endpoint HTTP response body for the "unavailable" error.
+type CompleteSamlUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompleteSamlInternalResponseBody is the type of the "identity" service
+// "complete_saml" endpoint HTTP response body for the "internal" error.
+type CompleteSamlInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// FederationProvidersUnavailableResponseBody is the type of the "identity"
+// service "federation_providers" endpoint HTTP response body for the
+// "unavailable" error.
+type FederationProvidersUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// FederationProvidersInternalResponseBody is the type of the "identity"
+// service "federation_providers" endpoint HTTP response body for the
+// "internal" error.
+type FederationProvidersInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// StartFederationInvalidResponseBody is the type of the "identity" service
+// "start_federation" endpoint HTTP response body for the "invalid" error.
+type StartFederationInvalidResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// StartFederationRateLimitedResponseBody is the type of the "identity" service
+// "start_federation" endpoint HTTP response body for the "rate_limited" error.
+type StartFederationRateLimitedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// StartFederationUnavailableResponseBody is the type of the "identity" service
+// "start_federation" endpoint HTTP response body for the "unavailable" error.
+type StartFederationUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// StartFederationInternalResponseBody is the type of the "identity" service
+// "start_federation" endpoint HTTP response body for the "internal" error.
+type StartFederationInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompleteFederationUnauthenticatedResponseBody is the type of the "identity"
+// service "complete_federation" endpoint HTTP response body for the
+// "unauthenticated" error.
+type CompleteFederationUnauthenticatedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompleteFederationRateLimitedResponseBody is the type of the "identity"
+// service "complete_federation" endpoint HTTP response body for the
+// "rate_limited" error.
+type CompleteFederationRateLimitedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompleteFederationUnavailableResponseBody is the type of the "identity"
+// service "complete_federation" endpoint HTTP response body for the
+// "unavailable" error.
+type CompleteFederationUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompleteFederationInternalResponseBody is the type of the "identity" service
+// "complete_federation" endpoint HTTP response body for the "internal" error.
+type CompleteFederationInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
 }
 
 // TemporaryAccessUnauthenticatedResponseBody is the type of the "identity"
@@ -422,29 +659,80 @@ type RevokeTemporaryAccessInternalResponseBody struct {
 	Code string `form:"code" json:"code" xml:"code"`
 }
 
-// SwitchDepartmentUnauthenticatedResponseBody is the type of the "identity"
-// service "switch_department" endpoint HTTP response body for the
-// "unauthenticated" error.
-type SwitchDepartmentUnauthenticatedResponseBody struct {
+// ListSignInIdentitiesUnauthenticatedResponseBody is the type of the
+// "identity" service "list_sign_in_identities" endpoint HTTP response body for
+// the "unauthenticated" error.
+type ListSignInIdentitiesUnauthenticatedResponseBody struct {
 	Code string `form:"code" json:"code" xml:"code"`
 }
 
-// SwitchDepartmentForbiddenResponseBody is the type of the "identity" service
-// "switch_department" endpoint HTTP response body for the "forbidden" error.
-type SwitchDepartmentForbiddenResponseBody struct {
-	Code string `form:"code" json:"code" xml:"code"`
-}
-
-// SwitchDepartmentUnavailableResponseBody is the type of the "identity"
-// service "switch_department" endpoint HTTP response body for the
+// ListSignInIdentitiesUnavailableResponseBody is the type of the "identity"
+// service "list_sign_in_identities" endpoint HTTP response body for the
 // "unavailable" error.
-type SwitchDepartmentUnavailableResponseBody struct {
+type ListSignInIdentitiesUnavailableResponseBody struct {
 	Code string `form:"code" json:"code" xml:"code"`
 }
 
-// SwitchDepartmentInternalResponseBody is the type of the "identity" service
-// "switch_department" endpoint HTTP response body for the "internal" error.
-type SwitchDepartmentInternalResponseBody struct {
+// ListSignInIdentitiesInternalResponseBody is the type of the "identity"
+// service "list_sign_in_identities" endpoint HTTP response body for the
+// "internal" error.
+type ListSignInIdentitiesInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// SelectSignInIdentityUnauthenticatedResponseBody is the type of the
+// "identity" service "select_sign_in_identity" endpoint HTTP response body for
+// the "unauthenticated" error.
+type SelectSignInIdentityUnauthenticatedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// SelectSignInIdentityForbiddenResponseBody is the type of the "identity"
+// service "select_sign_in_identity" endpoint HTTP response body for the
+// "forbidden" error.
+type SelectSignInIdentityForbiddenResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// SelectSignInIdentityUnavailableResponseBody is the type of the "identity"
+// service "select_sign_in_identity" endpoint HTTP response body for the
+// "unavailable" error.
+type SelectSignInIdentityUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// SelectSignInIdentityInternalResponseBody is the type of the "identity"
+// service "select_sign_in_identity" endpoint HTTP response body for the
+// "internal" error.
+type SelectSignInIdentityInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RedeemSignInInvitationUnauthenticatedResponseBody is the type of the
+// "identity" service "redeem_sign_in_invitation" endpoint HTTP response body
+// for the "unauthenticated" error.
+type RedeemSignInInvitationUnauthenticatedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RedeemSignInInvitationForbiddenResponseBody is the type of the "identity"
+// service "redeem_sign_in_invitation" endpoint HTTP response body for the
+// "forbidden" error.
+type RedeemSignInInvitationForbiddenResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RedeemSignInInvitationUnavailableResponseBody is the type of the "identity"
+// service "redeem_sign_in_invitation" endpoint HTTP response body for the
+// "unavailable" error.
+type RedeemSignInInvitationUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RedeemSignInInvitationInternalResponseBody is the type of the "identity"
+// service "redeem_sign_in_invitation" endpoint HTTP response body for the
+// "internal" error.
+type RedeemSignInInvitationInternalResponseBody struct {
 	Code string `form:"code" json:"code" xml:"code"`
 }
 
@@ -475,6 +763,117 @@ type LoginUnavailableResponseBody struct {
 // LoginInternalResponseBody is the type of the "identity" service "login"
 // endpoint HTTP response body for the "internal" error.
 type LoginInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RequestRegistrationInvalidResponseBody is the type of the "identity" service
+// "request_registration" endpoint HTTP response body for the "invalid" error.
+type RequestRegistrationInvalidResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RequestRegistrationRateLimitedResponseBody is the type of the "identity"
+// service "request_registration" endpoint HTTP response body for the
+// "rate_limited" error.
+type RequestRegistrationRateLimitedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RequestRegistrationUnavailableResponseBody is the type of the "identity"
+// service "request_registration" endpoint HTTP response body for the
+// "unavailable" error.
+type RequestRegistrationUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RequestRegistrationInternalResponseBody is the type of the "identity"
+// service "request_registration" endpoint HTTP response body for the
+// "internal" error.
+type RequestRegistrationInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompleteRegistrationForbiddenResponseBody is the type of the "identity"
+// service "complete_registration" endpoint HTTP response body for the
+// "forbidden" error.
+type CompleteRegistrationForbiddenResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompleteRegistrationRateLimitedResponseBody is the type of the "identity"
+// service "complete_registration" endpoint HTTP response body for the
+// "rate_limited" error.
+type CompleteRegistrationRateLimitedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompleteRegistrationUnavailableResponseBody is the type of the "identity"
+// service "complete_registration" endpoint HTTP response body for the
+// "unavailable" error.
+type CompleteRegistrationUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompleteRegistrationInternalResponseBody is the type of the "identity"
+// service "complete_registration" endpoint HTTP response body for the
+// "internal" error.
+type CompleteRegistrationInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RequestPasswordResetRateLimitedResponseBody is the type of the "identity"
+// service "request_password_reset" endpoint HTTP response body for the
+// "rate_limited" error.
+type RequestPasswordResetRateLimitedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RequestPasswordResetUnavailableResponseBody is the type of the "identity"
+// service "request_password_reset" endpoint HTTP response body for the
+// "unavailable" error.
+type RequestPasswordResetUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RequestPasswordResetInternalResponseBody is the type of the "identity"
+// service "request_password_reset" endpoint HTTP response body for the
+// "internal" error.
+type RequestPasswordResetInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompletePasswordResetInvalidResponseBody is the type of the "identity"
+// service "complete_password_reset" endpoint HTTP response body for the
+// "invalid" error.
+type CompletePasswordResetInvalidResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompletePasswordResetForbiddenResponseBody is the type of the "identity"
+// service "complete_password_reset" endpoint HTTP response body for the
+// "forbidden" error.
+type CompletePasswordResetForbiddenResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompletePasswordResetRateLimitedResponseBody is the type of the "identity"
+// service "complete_password_reset" endpoint HTTP response body for the
+// "rate_limited" error.
+type CompletePasswordResetRateLimitedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompletePasswordResetUnavailableResponseBody is the type of the "identity"
+// service "complete_password_reset" endpoint HTTP response body for the
+// "unavailable" error.
+type CompletePasswordResetUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// CompletePasswordResetInternalResponseBody is the type of the "identity"
+// service "complete_password_reset" endpoint HTTP response body for the
+// "internal" error.
+type CompletePasswordResetInternalResponseBody struct {
 	Code string `form:"code" json:"code" xml:"code"`
 }
 
@@ -514,9 +913,46 @@ type LogoutInternalResponseBody struct {
 	Code string `form:"code" json:"code" xml:"code"`
 }
 
+// RefreshSessionInvalidResponseBody is the type of the "identity" service
+// "refresh_session" endpoint HTTP response body for the "invalid" error.
+type RefreshSessionInvalidResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RefreshSessionUnauthenticatedResponseBody is the type of the "identity"
+// service "refresh_session" endpoint HTTP response body for the
+// "unauthenticated" error.
+type RefreshSessionUnauthenticatedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RefreshSessionForbiddenResponseBody is the type of the "identity" service
+// "refresh_session" endpoint HTTP response body for the "forbidden" error.
+type RefreshSessionForbiddenResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RefreshSessionUnavailableResponseBody is the type of the "identity" service
+// "refresh_session" endpoint HTTP response body for the "unavailable" error.
+type RefreshSessionUnavailableResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// RefreshSessionInternalResponseBody is the type of the "identity" service
+// "refresh_session" endpoint HTTP response body for the "internal" error.
+type RefreshSessionInternalResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
 // SnapshotUnauthenticatedResponseBody is the type of the "identity" service
 // "snapshot" endpoint HTTP response body for the "unauthenticated" error.
 type SnapshotUnauthenticatedResponseBody struct {
+	Code string `form:"code" json:"code" xml:"code"`
+}
+
+// SnapshotForbiddenResponseBody is the type of the "identity" service
+// "snapshot" endpoint HTTP response body for the "forbidden" error.
+type SnapshotForbiddenResponseBody struct {
 	Code string `form:"code" json:"code" xml:"code"`
 }
 
@@ -532,14 +968,46 @@ type SnapshotInternalResponseBody struct {
 	Code string `form:"code" json:"code" xml:"code"`
 }
 
+// SessionProfileResponseBody is used to define fields on response body types.
+type SessionProfileResponseBody struct {
+	// Opaque non-secret authorization cache revision.
+	AuthorizationVersion *string `form:"authorizationVersion,omitempty" json:"authorizationVersion,omitempty" xml:"authorizationVersion,omitempty"`
+	// Platform operator management is available in this session.
+	PlatformOperator *bool `form:"platformOperator,omitempty" json:"platformOperator,omitempty" xml:"platformOperator,omitempty"`
+	// Tenant account when a work context is active.
+	Account           *SessionAccountResponseBody `form:"account,omitempty" json:"account,omitempty" xml:"account,omitempty"`
+	CsrfToken         string                      `form:"csrfToken" json:"csrfToken" xml:"csrfToken"`
+	Permissions       []string                    `form:"permissions" json:"permissions" xml:"permissions"`
+	TenantID          string                      `form:"tenantId" json:"tenantId" xml:"tenantId"`
+	IdentityBindingID *string                     `form:"identityBindingId,omitempty" json:"identityBindingId,omitempty" xml:"identityBindingId,omitempty"`
+	// Organization verified for the active portal binding.
+	ActingOrganizationID *int64 `form:"actingOrganizationId,omitempty" json:"actingOrganizationId,omitempty" xml:"actingOrganizationId,omitempty"`
+	// Display name of the verified organization.
+	ActingOrganizationName *string `form:"actingOrganizationName,omitempty" json:"actingOrganizationName,omitempty" xml:"actingOrganizationName,omitempty"`
+	// Application portal verified for the active binding.
+	Portal *string `form:"portal,omitempty" json:"portal,omitempty" xml:"portal,omitempty"`
+}
+
+// SessionAccountResponseBody is used to define fields on response body types.
+type SessionAccountResponseBody struct {
+	ID       int64  `form:"id" json:"id" xml:"id"`
+	Username string `form:"username" json:"username" xml:"username"`
+	Status   string `form:"status" json:"status" xml:"status"`
+	IsAdmin  bool   `form:"isAdmin" json:"isAdmin" xml:"isAdmin"`
+}
+
+// FederationProviderResponse is used to define fields on response body types.
+type FederationProviderResponse struct {
+	ID   string `form:"id" json:"id" xml:"id"`
+	Name string `form:"name" json:"name" xml:"name"`
+}
+
 // TemporaryAccessRecordResponseBody is used to define fields on response body
 // types.
 type TemporaryAccessRecordResponseBody struct {
 	ID               int64                          `form:"id" json:"id" xml:"id"`
 	ApplicantID      int64                          `form:"applicantId" json:"applicantId" xml:"applicantId"`
 	ApplicantName    string                         `form:"applicantName" json:"applicantName" xml:"applicantName"`
-	DepartmentID     int64                          `form:"departmentId" json:"departmentId" xml:"departmentId"`
-	DepartmentName   string                         `form:"departmentName" json:"departmentName" xml:"departmentName"`
 	RequestedGrants  []*PermissionGrantResponseBody `form:"requestedGrants" json:"requestedGrants" xml:"requestedGrants"`
 	RequestedMinutes int                            `form:"requestedMinutes" json:"requestedMinutes" xml:"requestedMinutes"`
 	Reason           string                         `form:"reason" json:"reason" xml:"reason"`
@@ -556,10 +1024,9 @@ type TemporaryAccessRecordResponseBody struct {
 
 // PermissionGrantResponseBody is used to define fields on response body types.
 type PermissionGrantResponseBody struct {
-	Permission    string  `form:"permission" json:"permission" xml:"permission"`
-	Effect        string  `form:"effect" json:"effect" xml:"effect"`
-	Scope         string  `form:"scope" json:"scope" xml:"scope"`
-	DepartmentIds []int64 `form:"departmentIds" json:"departmentIds" xml:"departmentIds"`
+	Permission string `form:"permission" json:"permission" xml:"permission"`
+	Effect     string `form:"effect" json:"effect" xml:"effect"`
+	Scope      string `form:"scope" json:"scope" xml:"scope"`
 }
 
 // PermissionDefinitionResponseBody is used to define fields on response body
@@ -573,13 +1040,11 @@ type PermissionDefinitionResponseBody struct {
 	ScopeConfigurable bool   `form:"scopeConfigurable" json:"scopeConfigurable" xml:"scopeConfigurable"`
 }
 
-// ScopeDepartmentChoiceResponseBody is used to define fields on response body
-// types.
-type ScopeDepartmentChoiceResponseBody struct {
-	ID               int64  `form:"id" json:"id" xml:"id"`
-	Name             string `form:"name" json:"name" xml:"name"`
-	OrganizationID   int64  `form:"organizationId" json:"organizationId" xml:"organizationId"`
-	OrganizationName string `form:"organizationName" json:"organizationName" xml:"organizationName"`
+// SignInIdentityResponse is used to define fields on response body types.
+type SignInIdentityResponse struct {
+	IdentityBindingID      *string `form:"identityBindingId,omitempty" json:"identityBindingId,omitempty" xml:"identityBindingId,omitempty"`
+	ActingOrganizationName *string `form:"actingOrganizationName,omitempty" json:"actingOrganizationName,omitempty" xml:"actingOrganizationName,omitempty"`
+	IdentityType           *string `form:"identityType,omitempty" json:"identityType,omitempty" xml:"identityType,omitempty"`
 }
 
 // AccountRecordResponseBody is used to define fields on response body types.
@@ -607,17 +1072,6 @@ type DepartmentMembershipResponseBody struct {
 	DepartmentName *string                        `form:"departmentName,omitempty" json:"departmentName,omitempty" xml:"departmentName,omitempty"`
 	RoleIds        []int64                        `form:"roleIds" json:"roleIds" xml:"roleIds"`
 	Overrides      []*PermissionGrantResponseBody `form:"overrides" json:"overrides" xml:"overrides"`
-}
-
-// SessionProfileResponseBody is used to define fields on response body types.
-type SessionProfileResponseBody struct {
-	// Opaque non-secret authorization cache revision.
-	AuthorizationVersion *string                    `form:"authorizationVersion,omitempty" json:"authorizationVersion,omitempty" xml:"authorizationVersion,omitempty"`
-	Account              *AccountRecordResponseBody `form:"account" json:"account" xml:"account"`
-	CsrfToken            string                     `form:"csrfToken" json:"csrfToken" xml:"csrfToken"`
-	Permissions          []string                   `form:"permissions" json:"permissions" xml:"permissions"`
-	TenantID             string                     `form:"tenantId" json:"tenantId" xml:"tenantId"`
-	ActiveDepartmentID   int64                      `form:"activeDepartmentId" json:"activeDepartmentId" xml:"activeDepartmentId"`
 }
 
 // OrganizationRecordResponseBody is used to define fields on response body
@@ -660,10 +1114,56 @@ type RoleRecordResponseBody struct {
 
 // PermissionGrantRequestBody is used to define fields on request body types.
 type PermissionGrantRequestBody struct {
-	Permission    *string `form:"permission,omitempty" json:"permission,omitempty" xml:"permission,omitempty"`
-	Effect        *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
-	Scope         *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	DepartmentIds []int64 `form:"departmentIds,omitempty" json:"departmentIds,omitempty" xml:"departmentIds,omitempty"`
+	Permission *string `form:"permission,omitempty" json:"permission,omitempty" xml:"permission,omitempty"`
+	Effect     *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
+	Scope      *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+}
+
+// NewCompleteSamlResponseBody builds the HTTP response body from the result of
+// the "complete_saml" endpoint of the "identity" service.
+func NewCompleteSamlResponseBody(res *identity.FederationCompleteResult) *CompleteSamlResponseBody {
+	body := &CompleteSamlResponseBody{
+		LinkProof: res.LinkProof,
+	}
+	if res.Profile != nil {
+		body.Profile = marshalIdentitySessionProfileToSessionProfileResponseBody(res.Profile)
+	}
+	return body
+}
+
+// NewFederationProvidersResponseBody builds the HTTP response body from the
+// result of the "federation_providers" endpoint of the "identity" service.
+func NewFederationProvidersResponseBody(res []*identity.FederationProvider) []*FederationProviderResponse {
+	body := make([]*FederationProviderResponse, len(res))
+	for i, val := range res {
+		if val == nil {
+			body[i] = nil
+			continue
+		}
+		body[i] = marshalIdentityFederationProviderToFederationProviderResponse(val)
+	}
+	return body
+}
+
+// NewStartFederationResponseBody builds the HTTP response body from the result
+// of the "start_federation" endpoint of the "identity" service.
+func NewStartFederationResponseBody(res *identity.FederationStartResult) *StartFederationResponseBody {
+	body := &StartFederationResponseBody{
+		AuthorizationURL: res.AuthorizationURL,
+	}
+	return body
+}
+
+// NewCompleteFederationResponseBody builds the HTTP response body from the
+// result of the "complete_federation" endpoint of the "identity" service.
+func NewCompleteFederationResponseBody(res *identity.FederationCompleteResult) *CompleteFederationResponseBody {
+	body := &CompleteFederationResponseBody{
+		LinkProof: res.LinkProof,
+	}
+	if res.Profile != nil {
+		body.Profile = marshalIdentitySessionProfileToSessionProfileResponseBody(res.Profile)
+	}
+	return body
 }
 
 // NewTemporaryAccessResponseBody builds the HTTP response body from the result
@@ -696,18 +1196,6 @@ func NewTemporaryAccessResponseBody(res *identity.TemporaryAccessWorkspace) *Tem
 	} else {
 		body.Catalog = []*PermissionDefinitionResponseBody{}
 	}
-	if res.Departments != nil {
-		body.Departments = make([]*ScopeDepartmentChoiceResponseBody, len(res.Departments))
-		for i, val := range res.Departments {
-			if val == nil {
-				body.Departments[i] = nil
-				continue
-			}
-			body.Departments[i] = marshalIdentityScopeDepartmentChoiceToScopeDepartmentChoiceResponseBody(val)
-		}
-	} else {
-		body.Departments = []*ScopeDepartmentChoiceResponseBody{}
-	}
 	if res.EffectiveGrants != nil {
 		body.EffectiveGrants = make([]*PermissionGrantResponseBody, len(res.EffectiveGrants))
 		for i, val := range res.EffectiveGrants {
@@ -730,8 +1218,6 @@ func NewRequestTemporaryAccessResponseBody(res *identity.TemporaryAccessRecord) 
 		ID:               res.ID,
 		ApplicantID:      res.ApplicantID,
 		ApplicantName:    res.ApplicantName,
-		DepartmentID:     res.DepartmentID,
-		DepartmentName:   res.DepartmentName,
 		RequestedMinutes: res.RequestedMinutes,
 		Reason:           res.Reason,
 		Status:           res.Status,
@@ -777,8 +1263,6 @@ func NewReviewTemporaryAccessResponseBody(res *identity.TemporaryAccessRecord) *
 		ID:               res.ID,
 		ApplicantID:      res.ApplicantID,
 		ApplicantName:    res.ApplicantName,
-		DepartmentID:     res.DepartmentID,
-		DepartmentName:   res.DepartmentName,
 		RequestedMinutes: res.RequestedMinutes,
 		Reason:           res.Reason,
 		Status:           res.Status,
@@ -824,8 +1308,6 @@ func NewCancelTemporaryAccessResponseBody(res *identity.TemporaryAccessRecord) *
 		ID:               res.ID,
 		ApplicantID:      res.ApplicantID,
 		ApplicantName:    res.ApplicantName,
-		DepartmentID:     res.DepartmentID,
-		DepartmentName:   res.DepartmentName,
 		RequestedMinutes: res.RequestedMinutes,
 		Reason:           res.Reason,
 		Status:           res.Status,
@@ -871,8 +1353,6 @@ func NewRevokeTemporaryAccessResponseBody(res *identity.TemporaryAccessRecord) *
 		ID:               res.ID,
 		ApplicantID:      res.ApplicantID,
 		ApplicantName:    res.ApplicantName,
-		DepartmentID:     res.DepartmentID,
-		DepartmentName:   res.DepartmentName,
 		RequestedMinutes: res.RequestedMinutes,
 		Reason:           res.Reason,
 		Status:           res.Status,
@@ -911,17 +1391,35 @@ func NewRevokeTemporaryAccessResponseBody(res *identity.TemporaryAccessRecord) *
 	return body
 }
 
-// NewSwitchDepartmentResponseBody builds the HTTP response body from the
-// result of the "switch_department" endpoint of the "identity" service.
-func NewSwitchDepartmentResponseBody(res *identity.SessionProfile) *SwitchDepartmentResponseBody {
-	body := &SwitchDepartmentResponseBody{
-		AuthorizationVersion: res.AuthorizationVersion,
-		CsrfToken:            res.CsrfToken,
-		TenantID:             res.TenantID,
-		ActiveDepartmentID:   res.ActiveDepartmentID,
+// NewListSignInIdentitiesResponseBody builds the HTTP response body from the
+// result of the "list_sign_in_identities" endpoint of the "identity" service.
+func NewListSignInIdentitiesResponseBody(res []*identity.SignInIdentity) []*SignInIdentityResponse {
+	body := make([]*SignInIdentityResponse, len(res))
+	for i, val := range res {
+		if val == nil {
+			body[i] = nil
+			continue
+		}
+		body[i] = marshalIdentitySignInIdentityToSignInIdentityResponse(val)
+	}
+	return body
+}
+
+// NewSelectSignInIdentityResponseBody builds the HTTP response body from the
+// result of the "select_sign_in_identity" endpoint of the "identity" service.
+func NewSelectSignInIdentityResponseBody(res *identity.SessionProfile) *SelectSignInIdentityResponseBody {
+	body := &SelectSignInIdentityResponseBody{
+		AuthorizationVersion:   res.AuthorizationVersion,
+		PlatformOperator:       res.PlatformOperator,
+		CsrfToken:              res.CsrfToken,
+		TenantID:               res.TenantID,
+		IdentityBindingID:      res.IdentityBindingID,
+		ActingOrganizationID:   res.ActingOrganizationID,
+		ActingOrganizationName: res.ActingOrganizationName,
+		Portal:                 res.Portal,
 	}
 	if res.Account != nil {
-		body.Account = marshalIdentityAccountRecordToAccountRecordResponseBody(res.Account)
+		body.Account = marshalIdentitySessionAccountToSessionAccountResponseBody(res.Account)
 	}
 	if res.Permissions != nil {
 		body.Permissions = make([]string, len(res.Permissions))
@@ -948,13 +1446,17 @@ func NewLoginResponseBody(res *identity.LoginResult) *LoginResponseBody {
 // endpoint of the "identity" service.
 func NewMeResponseBody(res *identity.SessionProfile) *MeResponseBody {
 	body := &MeResponseBody{
-		AuthorizationVersion: res.AuthorizationVersion,
-		CsrfToken:            res.CsrfToken,
-		TenantID:             res.TenantID,
-		ActiveDepartmentID:   res.ActiveDepartmentID,
+		AuthorizationVersion:   res.AuthorizationVersion,
+		PlatformOperator:       res.PlatformOperator,
+		CsrfToken:              res.CsrfToken,
+		TenantID:               res.TenantID,
+		IdentityBindingID:      res.IdentityBindingID,
+		ActingOrganizationID:   res.ActingOrganizationID,
+		ActingOrganizationName: res.ActingOrganizationName,
+		Portal:                 res.Portal,
 	}
 	if res.Account != nil {
-		body.Account = marshalIdentityAccountRecordToAccountRecordResponseBody(res.Account)
+		body.Account = marshalIdentitySessionAccountToSessionAccountResponseBody(res.Account)
 	}
 	if res.Permissions != nil {
 		body.Permissions = make([]string, len(res.Permissions))
@@ -963,6 +1465,16 @@ func NewMeResponseBody(res *identity.SessionProfile) *MeResponseBody {
 		}
 	} else {
 		body.Permissions = []string{}
+	}
+	return body
+}
+
+// NewRefreshSessionResponseBody builds the HTTP response body from the result
+// of the "refresh_session" endpoint of the "identity" service.
+func NewRefreshSessionResponseBody(res *identity.LoginResult) *RefreshSessionResponseBody {
+	body := &RefreshSessionResponseBody{}
+	if res.Profile != nil {
+		body.Profile = marshalIdentitySessionProfileToSessionProfileResponseBody(res.Profile)
 	}
 	return body
 }
@@ -1038,6 +1550,173 @@ func NewSnapshotResponseBody(res *identity.AdminSnapshot) *SnapshotResponseBody 
 		}
 	} else {
 		body.Catalog = []*PermissionDefinitionResponseBody{}
+	}
+	return body
+}
+
+// NewSamlCallbackUnauthenticatedResponseBody builds the HTTP response body
+// from the result of the "saml_callback" endpoint of the "identity" service.
+func NewSamlCallbackUnauthenticatedResponseBody(res *identity.IAMProblem) *SamlCallbackUnauthenticatedResponseBody {
+	body := &SamlCallbackUnauthenticatedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewSamlCallbackRateLimitedResponseBody builds the HTTP response body from
+// the result of the "saml_callback" endpoint of the "identity" service.
+func NewSamlCallbackRateLimitedResponseBody(res *identity.IAMProblem) *SamlCallbackRateLimitedResponseBody {
+	body := &SamlCallbackRateLimitedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewSamlCallbackUnavailableResponseBody builds the HTTP response body from
+// the result of the "saml_callback" endpoint of the "identity" service.
+func NewSamlCallbackUnavailableResponseBody(res *identity.IAMProblem) *SamlCallbackUnavailableResponseBody {
+	body := &SamlCallbackUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewSamlCallbackInternalResponseBody builds the HTTP response body from the
+// result of the "saml_callback" endpoint of the "identity" service.
+func NewSamlCallbackInternalResponseBody(res *identity.IAMProblem) *SamlCallbackInternalResponseBody {
+	body := &SamlCallbackInternalResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompleteSamlUnauthenticatedResponseBody builds the HTTP response body
+// from the result of the "complete_saml" endpoint of the "identity" service.
+func NewCompleteSamlUnauthenticatedResponseBody(res *identity.IAMProblem) *CompleteSamlUnauthenticatedResponseBody {
+	body := &CompleteSamlUnauthenticatedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompleteSamlRateLimitedResponseBody builds the HTTP response body from
+// the result of the "complete_saml" endpoint of the "identity" service.
+func NewCompleteSamlRateLimitedResponseBody(res *identity.IAMProblem) *CompleteSamlRateLimitedResponseBody {
+	body := &CompleteSamlRateLimitedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompleteSamlUnavailableResponseBody builds the HTTP response body from
+// the result of the "complete_saml" endpoint of the "identity" service.
+func NewCompleteSamlUnavailableResponseBody(res *identity.IAMProblem) *CompleteSamlUnavailableResponseBody {
+	body := &CompleteSamlUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompleteSamlInternalResponseBody builds the HTTP response body from the
+// result of the "complete_saml" endpoint of the "identity" service.
+func NewCompleteSamlInternalResponseBody(res *identity.IAMProblem) *CompleteSamlInternalResponseBody {
+	body := &CompleteSamlInternalResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewFederationProvidersUnavailableResponseBody builds the HTTP response body
+// from the result of the "federation_providers" endpoint of the "identity"
+// service.
+func NewFederationProvidersUnavailableResponseBody(res *identity.IAMProblem) *FederationProvidersUnavailableResponseBody {
+	body := &FederationProvidersUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewFederationProvidersInternalResponseBody builds the HTTP response body
+// from the result of the "federation_providers" endpoint of the "identity"
+// service.
+func NewFederationProvidersInternalResponseBody(res *identity.IAMProblem) *FederationProvidersInternalResponseBody {
+	body := &FederationProvidersInternalResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewStartFederationInvalidResponseBody builds the HTTP response body from the
+// result of the "start_federation" endpoint of the "identity" service.
+func NewStartFederationInvalidResponseBody(res *identity.IAMProblem) *StartFederationInvalidResponseBody {
+	body := &StartFederationInvalidResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewStartFederationRateLimitedResponseBody builds the HTTP response body from
+// the result of the "start_federation" endpoint of the "identity" service.
+func NewStartFederationRateLimitedResponseBody(res *identity.IAMProblem) *StartFederationRateLimitedResponseBody {
+	body := &StartFederationRateLimitedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewStartFederationUnavailableResponseBody builds the HTTP response body from
+// the result of the "start_federation" endpoint of the "identity" service.
+func NewStartFederationUnavailableResponseBody(res *identity.IAMProblem) *StartFederationUnavailableResponseBody {
+	body := &StartFederationUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewStartFederationInternalResponseBody builds the HTTP response body from
+// the result of the "start_federation" endpoint of the "identity" service.
+func NewStartFederationInternalResponseBody(res *identity.IAMProblem) *StartFederationInternalResponseBody {
+	body := &StartFederationInternalResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompleteFederationUnauthenticatedResponseBody builds the HTTP response
+// body from the result of the "complete_federation" endpoint of the "identity"
+// service.
+func NewCompleteFederationUnauthenticatedResponseBody(res *identity.IAMProblem) *CompleteFederationUnauthenticatedResponseBody {
+	body := &CompleteFederationUnauthenticatedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompleteFederationRateLimitedResponseBody builds the HTTP response body
+// from the result of the "complete_federation" endpoint of the "identity"
+// service.
+func NewCompleteFederationRateLimitedResponseBody(res *identity.IAMProblem) *CompleteFederationRateLimitedResponseBody {
+	body := &CompleteFederationRateLimitedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompleteFederationUnavailableResponseBody builds the HTTP response body
+// from the result of the "complete_federation" endpoint of the "identity"
+// service.
+func NewCompleteFederationUnavailableResponseBody(res *identity.IAMProblem) *CompleteFederationUnavailableResponseBody {
+	body := &CompleteFederationUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompleteFederationInternalResponseBody builds the HTTP response body from
+// the result of the "complete_federation" endpoint of the "identity" service.
+func NewCompleteFederationInternalResponseBody(res *identity.IAMProblem) *CompleteFederationInternalResponseBody {
+	body := &CompleteFederationInternalResponseBody{
+		Code: res.Code,
 	}
 	return body
 }
@@ -1385,39 +2064,111 @@ func NewRevokeTemporaryAccessInternalResponseBody(res *identity.IAMProblem) *Rev
 	return body
 }
 
-// NewSwitchDepartmentUnauthenticatedResponseBody builds the HTTP response body
-// from the result of the "switch_department" endpoint of the "identity"
+// NewListSignInIdentitiesUnauthenticatedResponseBody builds the HTTP response
+// body from the result of the "list_sign_in_identities" endpoint of the
+// "identity" service.
+func NewListSignInIdentitiesUnauthenticatedResponseBody(res *identity.IAMProblem) *ListSignInIdentitiesUnauthenticatedResponseBody {
+	body := &ListSignInIdentitiesUnauthenticatedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewListSignInIdentitiesUnavailableResponseBody builds the HTTP response body
+// from the result of the "list_sign_in_identities" endpoint of the "identity"
 // service.
-func NewSwitchDepartmentUnauthenticatedResponseBody(res *identity.IAMProblem) *SwitchDepartmentUnauthenticatedResponseBody {
-	body := &SwitchDepartmentUnauthenticatedResponseBody{
+func NewListSignInIdentitiesUnavailableResponseBody(res *identity.IAMProblem) *ListSignInIdentitiesUnavailableResponseBody {
+	body := &ListSignInIdentitiesUnavailableResponseBody{
 		Code: res.Code,
 	}
 	return body
 }
 
-// NewSwitchDepartmentForbiddenResponseBody builds the HTTP response body from
-// the result of the "switch_department" endpoint of the "identity" service.
-func NewSwitchDepartmentForbiddenResponseBody(res *identity.IAMProblem) *SwitchDepartmentForbiddenResponseBody {
-	body := &SwitchDepartmentForbiddenResponseBody{
-		Code: res.Code,
-	}
-	return body
-}
-
-// NewSwitchDepartmentUnavailableResponseBody builds the HTTP response body
-// from the result of the "switch_department" endpoint of the "identity"
+// NewListSignInIdentitiesInternalResponseBody builds the HTTP response body
+// from the result of the "list_sign_in_identities" endpoint of the "identity"
 // service.
-func NewSwitchDepartmentUnavailableResponseBody(res *identity.IAMProblem) *SwitchDepartmentUnavailableResponseBody {
-	body := &SwitchDepartmentUnavailableResponseBody{
+func NewListSignInIdentitiesInternalResponseBody(res *identity.IAMProblem) *ListSignInIdentitiesInternalResponseBody {
+	body := &ListSignInIdentitiesInternalResponseBody{
 		Code: res.Code,
 	}
 	return body
 }
 
-// NewSwitchDepartmentInternalResponseBody builds the HTTP response body from
-// the result of the "switch_department" endpoint of the "identity" service.
-func NewSwitchDepartmentInternalResponseBody(res *identity.IAMProblem) *SwitchDepartmentInternalResponseBody {
-	body := &SwitchDepartmentInternalResponseBody{
+// NewSelectSignInIdentityUnauthenticatedResponseBody builds the HTTP response
+// body from the result of the "select_sign_in_identity" endpoint of the
+// "identity" service.
+func NewSelectSignInIdentityUnauthenticatedResponseBody(res *identity.IAMProblem) *SelectSignInIdentityUnauthenticatedResponseBody {
+	body := &SelectSignInIdentityUnauthenticatedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewSelectSignInIdentityForbiddenResponseBody builds the HTTP response body
+// from the result of the "select_sign_in_identity" endpoint of the "identity"
+// service.
+func NewSelectSignInIdentityForbiddenResponseBody(res *identity.IAMProblem) *SelectSignInIdentityForbiddenResponseBody {
+	body := &SelectSignInIdentityForbiddenResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewSelectSignInIdentityUnavailableResponseBody builds the HTTP response body
+// from the result of the "select_sign_in_identity" endpoint of the "identity"
+// service.
+func NewSelectSignInIdentityUnavailableResponseBody(res *identity.IAMProblem) *SelectSignInIdentityUnavailableResponseBody {
+	body := &SelectSignInIdentityUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewSelectSignInIdentityInternalResponseBody builds the HTTP response body
+// from the result of the "select_sign_in_identity" endpoint of the "identity"
+// service.
+func NewSelectSignInIdentityInternalResponseBody(res *identity.IAMProblem) *SelectSignInIdentityInternalResponseBody {
+	body := &SelectSignInIdentityInternalResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRedeemSignInInvitationUnauthenticatedResponseBody builds the HTTP
+// response body from the result of the "redeem_sign_in_invitation" endpoint of
+// the "identity" service.
+func NewRedeemSignInInvitationUnauthenticatedResponseBody(res *identity.IAMProblem) *RedeemSignInInvitationUnauthenticatedResponseBody {
+	body := &RedeemSignInInvitationUnauthenticatedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRedeemSignInInvitationForbiddenResponseBody builds the HTTP response body
+// from the result of the "redeem_sign_in_invitation" endpoint of the
+// "identity" service.
+func NewRedeemSignInInvitationForbiddenResponseBody(res *identity.IAMProblem) *RedeemSignInInvitationForbiddenResponseBody {
+	body := &RedeemSignInInvitationForbiddenResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRedeemSignInInvitationUnavailableResponseBody builds the HTTP response
+// body from the result of the "redeem_sign_in_invitation" endpoint of the
+// "identity" service.
+func NewRedeemSignInInvitationUnavailableResponseBody(res *identity.IAMProblem) *RedeemSignInInvitationUnavailableResponseBody {
+	body := &RedeemSignInInvitationUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRedeemSignInInvitationInternalResponseBody builds the HTTP response body
+// from the result of the "redeem_sign_in_invitation" endpoint of the
+// "identity" service.
+func NewRedeemSignInInvitationInternalResponseBody(res *identity.IAMProblem) *RedeemSignInInvitationInternalResponseBody {
+	body := &RedeemSignInInvitationInternalResponseBody{
 		Code: res.Code,
 	}
 	return body
@@ -1463,6 +2214,165 @@ func NewLoginUnavailableResponseBody(res *identity.IAMProblem) *LoginUnavailable
 // of the "login" endpoint of the "identity" service.
 func NewLoginInternalResponseBody(res *identity.IAMProblem) *LoginInternalResponseBody {
 	body := &LoginInternalResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRequestRegistrationInvalidResponseBody builds the HTTP response body from
+// the result of the "request_registration" endpoint of the "identity" service.
+func NewRequestRegistrationInvalidResponseBody(res *identity.IAMProblem) *RequestRegistrationInvalidResponseBody {
+	body := &RequestRegistrationInvalidResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRequestRegistrationRateLimitedResponseBody builds the HTTP response body
+// from the result of the "request_registration" endpoint of the "identity"
+// service.
+func NewRequestRegistrationRateLimitedResponseBody(res *identity.IAMProblem) *RequestRegistrationRateLimitedResponseBody {
+	body := &RequestRegistrationRateLimitedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRequestRegistrationUnavailableResponseBody builds the HTTP response body
+// from the result of the "request_registration" endpoint of the "identity"
+// service.
+func NewRequestRegistrationUnavailableResponseBody(res *identity.IAMProblem) *RequestRegistrationUnavailableResponseBody {
+	body := &RequestRegistrationUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRequestRegistrationInternalResponseBody builds the HTTP response body
+// from the result of the "request_registration" endpoint of the "identity"
+// service.
+func NewRequestRegistrationInternalResponseBody(res *identity.IAMProblem) *RequestRegistrationInternalResponseBody {
+	body := &RequestRegistrationInternalResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompleteRegistrationForbiddenResponseBody builds the HTTP response body
+// from the result of the "complete_registration" endpoint of the "identity"
+// service.
+func NewCompleteRegistrationForbiddenResponseBody(res *identity.IAMProblem) *CompleteRegistrationForbiddenResponseBody {
+	body := &CompleteRegistrationForbiddenResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompleteRegistrationRateLimitedResponseBody builds the HTTP response body
+// from the result of the "complete_registration" endpoint of the "identity"
+// service.
+func NewCompleteRegistrationRateLimitedResponseBody(res *identity.IAMProblem) *CompleteRegistrationRateLimitedResponseBody {
+	body := &CompleteRegistrationRateLimitedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompleteRegistrationUnavailableResponseBody builds the HTTP response body
+// from the result of the "complete_registration" endpoint of the "identity"
+// service.
+func NewCompleteRegistrationUnavailableResponseBody(res *identity.IAMProblem) *CompleteRegistrationUnavailableResponseBody {
+	body := &CompleteRegistrationUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompleteRegistrationInternalResponseBody builds the HTTP response body
+// from the result of the "complete_registration" endpoint of the "identity"
+// service.
+func NewCompleteRegistrationInternalResponseBody(res *identity.IAMProblem) *CompleteRegistrationInternalResponseBody {
+	body := &CompleteRegistrationInternalResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRequestPasswordResetRateLimitedResponseBody builds the HTTP response body
+// from the result of the "request_password_reset" endpoint of the "identity"
+// service.
+func NewRequestPasswordResetRateLimitedResponseBody(res *identity.IAMProblem) *RequestPasswordResetRateLimitedResponseBody {
+	body := &RequestPasswordResetRateLimitedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRequestPasswordResetUnavailableResponseBody builds the HTTP response body
+// from the result of the "request_password_reset" endpoint of the "identity"
+// service.
+func NewRequestPasswordResetUnavailableResponseBody(res *identity.IAMProblem) *RequestPasswordResetUnavailableResponseBody {
+	body := &RequestPasswordResetUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRequestPasswordResetInternalResponseBody builds the HTTP response body
+// from the result of the "request_password_reset" endpoint of the "identity"
+// service.
+func NewRequestPasswordResetInternalResponseBody(res *identity.IAMProblem) *RequestPasswordResetInternalResponseBody {
+	body := &RequestPasswordResetInternalResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompletePasswordResetInvalidResponseBody builds the HTTP response body
+// from the result of the "complete_password_reset" endpoint of the "identity"
+// service.
+func NewCompletePasswordResetInvalidResponseBody(res *identity.IAMProblem) *CompletePasswordResetInvalidResponseBody {
+	body := &CompletePasswordResetInvalidResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompletePasswordResetForbiddenResponseBody builds the HTTP response body
+// from the result of the "complete_password_reset" endpoint of the "identity"
+// service.
+func NewCompletePasswordResetForbiddenResponseBody(res *identity.IAMProblem) *CompletePasswordResetForbiddenResponseBody {
+	body := &CompletePasswordResetForbiddenResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompletePasswordResetRateLimitedResponseBody builds the HTTP response
+// body from the result of the "complete_password_reset" endpoint of the
+// "identity" service.
+func NewCompletePasswordResetRateLimitedResponseBody(res *identity.IAMProblem) *CompletePasswordResetRateLimitedResponseBody {
+	body := &CompletePasswordResetRateLimitedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompletePasswordResetUnavailableResponseBody builds the HTTP response
+// body from the result of the "complete_password_reset" endpoint of the
+// "identity" service.
+func NewCompletePasswordResetUnavailableResponseBody(res *identity.IAMProblem) *CompletePasswordResetUnavailableResponseBody {
+	body := &CompletePasswordResetUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewCompletePasswordResetInternalResponseBody builds the HTTP response body
+// from the result of the "complete_password_reset" endpoint of the "identity"
+// service.
+func NewCompletePasswordResetInternalResponseBody(res *identity.IAMProblem) *CompletePasswordResetInternalResponseBody {
+	body := &CompletePasswordResetInternalResponseBody{
 		Code: res.Code,
 	}
 	return body
@@ -1522,10 +2432,64 @@ func NewLogoutInternalResponseBody(res *identity.IAMProblem) *LogoutInternalResp
 	return body
 }
 
+// NewRefreshSessionInvalidResponseBody builds the HTTP response body from the
+// result of the "refresh_session" endpoint of the "identity" service.
+func NewRefreshSessionInvalidResponseBody(res *identity.IAMProblem) *RefreshSessionInvalidResponseBody {
+	body := &RefreshSessionInvalidResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRefreshSessionUnauthenticatedResponseBody builds the HTTP response body
+// from the result of the "refresh_session" endpoint of the "identity" service.
+func NewRefreshSessionUnauthenticatedResponseBody(res *identity.IAMProblem) *RefreshSessionUnauthenticatedResponseBody {
+	body := &RefreshSessionUnauthenticatedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRefreshSessionForbiddenResponseBody builds the HTTP response body from
+// the result of the "refresh_session" endpoint of the "identity" service.
+func NewRefreshSessionForbiddenResponseBody(res *identity.IAMProblem) *RefreshSessionForbiddenResponseBody {
+	body := &RefreshSessionForbiddenResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRefreshSessionUnavailableResponseBody builds the HTTP response body from
+// the result of the "refresh_session" endpoint of the "identity" service.
+func NewRefreshSessionUnavailableResponseBody(res *identity.IAMProblem) *RefreshSessionUnavailableResponseBody {
+	body := &RefreshSessionUnavailableResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewRefreshSessionInternalResponseBody builds the HTTP response body from the
+// result of the "refresh_session" endpoint of the "identity" service.
+func NewRefreshSessionInternalResponseBody(res *identity.IAMProblem) *RefreshSessionInternalResponseBody {
+	body := &RefreshSessionInternalResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
 // NewSnapshotUnauthenticatedResponseBody builds the HTTP response body from
 // the result of the "snapshot" endpoint of the "identity" service.
 func NewSnapshotUnauthenticatedResponseBody(res *identity.IAMProblem) *SnapshotUnauthenticatedResponseBody {
 	body := &SnapshotUnauthenticatedResponseBody{
+		Code: res.Code,
+	}
+	return body
+}
+
+// NewSnapshotForbiddenResponseBody builds the HTTP response body from the
+// result of the "snapshot" endpoint of the "identity" service.
+func NewSnapshotForbiddenResponseBody(res *identity.IAMProblem) *SnapshotForbiddenResponseBody {
+	body := &SnapshotForbiddenResponseBody{
 		Code: res.Code,
 	}
 	return body
@@ -1547,6 +2511,56 @@ func NewSnapshotInternalResponseBody(res *identity.IAMProblem) *SnapshotInternal
 		Code: res.Code,
 	}
 	return body
+}
+
+// NewSamlCallbackPayload builds a identity service saml_callback endpoint
+// payload.
+func NewSamlCallbackPayload(body *SamlCallbackRequestBody, providerID string, cookie string) *identity.SamlCallbackPayload {
+	v := &identity.SamlCallbackPayload{
+		SAMLResponse: *body.SAMLResponse,
+		RelayState:   *body.RelayState,
+	}
+	v.ProviderID = providerID
+	v.Cookie = cookie
+
+	return v
+}
+
+// NewCompleteSamlPayload builds a identity service complete_saml endpoint
+// payload.
+func NewCompleteSamlPayload(body *CompleteSamlRequestBody, cookie string) *identity.CompleteSamlPayload {
+	v := &identity.CompleteSamlPayload{
+		MfaCode:      body.MfaCode,
+		RecoveryCode: body.RecoveryCode,
+	}
+	v.Cookie = cookie
+
+	return v
+}
+
+// NewStartFederationPayload builds a identity service start_federation
+// endpoint payload.
+func NewStartFederationPayload(body *StartFederationRequestBody) *identity.StartFederationPayload {
+	v := &identity.StartFederationPayload{
+		ProviderID: *body.ProviderID,
+		Purpose:    *body.Purpose,
+	}
+
+	return v
+}
+
+// NewCompleteFederationPayload builds a identity service complete_federation
+// endpoint payload.
+func NewCompleteFederationPayload(body *CompleteFederationRequestBody, cookie string) *identity.CompleteFederationPayload {
+	v := &identity.CompleteFederationPayload{
+		State:        *body.State,
+		Code:         *body.Code,
+		MfaCode:      body.MfaCode,
+		RecoveryCode: body.RecoveryCode,
+	}
+	v.Cookie = cookie
+
+	return v
 }
 
 // NewTemporaryAccessPayload builds a identity service temporary_access
@@ -1620,11 +2634,33 @@ func NewRevokeTemporaryAccessPayload(id int64, cookie string) *identity.RevokeTe
 	return v
 }
 
-// NewSwitchDepartmentPayload builds a identity service switch_department
-// endpoint payload.
-func NewSwitchDepartmentPayload(body *SwitchDepartmentRequestBody, cookie string) *identity.SwitchDepartmentPayload {
-	v := &identity.SwitchDepartmentPayload{
-		DepartmentID: *body.DepartmentID,
+// NewListSignInIdentitiesPayload builds a identity service
+// list_sign_in_identities endpoint payload.
+func NewListSignInIdentitiesPayload(cookie string) *identity.ListSignInIdentitiesPayload {
+	v := &identity.ListSignInIdentitiesPayload{}
+	v.Cookie = cookie
+
+	return v
+}
+
+// NewSelectSignInIdentityPayload builds a identity service
+// select_sign_in_identity endpoint payload.
+func NewSelectSignInIdentityPayload(body *SelectSignInIdentityRequestBody, cookie string) *identity.SelectSignInIdentityPayload {
+	v := &identity.SelectSignInIdentityPayload{
+		IdentityBindingID:    body.IdentityBindingID,
+		ActingOrganizationID: body.ActingOrganizationID,
+		Portal:               body.Portal,
+	}
+	v.Cookie = cookie
+
+	return v
+}
+
+// NewRedeemSignInInvitationPayload builds a identity service
+// redeem_sign_in_invitation endpoint payload.
+func NewRedeemSignInInvitationPayload(body *RedeemSignInInvitationRequestBody, cookie string) *identity.RedeemSignInInvitationPayload {
+	v := &identity.RedeemSignInInvitationPayload{
+		Code: *body.Code,
 	}
 	v.Cookie = cookie
 
@@ -1634,8 +2670,58 @@ func NewSwitchDepartmentPayload(body *SwitchDepartmentRequestBody, cookie string
 // NewLoginPayload builds a identity service login endpoint payload.
 func NewLoginPayload(body *LoginRequestBody) *identity.LoginPayload {
 	v := &identity.LoginPayload{
-		Username: *body.Username,
+		Username:     *body.Username,
+		Password:     *body.Password,
+		MfaCode:      body.MfaCode,
+		RecoveryCode: body.RecoveryCode,
+	}
+
+	return v
+}
+
+// NewRequestRegistrationPayload builds a identity service request_registration
+// endpoint payload.
+func NewRequestRegistrationPayload(body *RequestRegistrationRequestBody) *identity.RequestRegistrationPayload {
+	v := &identity.RequestRegistrationPayload{
+		Username:    *body.Username,
+		DisplayName: *body.DisplayName,
+		Password:    *body.Password,
+		Destination: *body.Destination,
+	}
+
+	return v
+}
+
+// NewCompleteRegistrationPayload builds a identity service
+// complete_registration endpoint payload.
+func NewCompleteRegistrationPayload(body *CompleteRegistrationRequestBody) *identity.CompleteRegistrationPayload {
+	v := &identity.CompleteRegistrationPayload{
+		Token:    *body.Token,
 		Password: *body.Password,
+	}
+
+	return v
+}
+
+// NewRequestPasswordResetPayload builds a identity service
+// request_password_reset endpoint payload.
+func NewRequestPasswordResetPayload(body *RequestPasswordResetRequestBody) *identity.RequestPasswordResetPayload {
+	v := &identity.RequestPasswordResetPayload{
+		Username: *body.Username,
+		Channel:  *body.Channel,
+	}
+
+	return v
+}
+
+// NewCompletePasswordResetPayload builds a identity service
+// complete_password_reset endpoint payload.
+func NewCompletePasswordResetPayload(body *CompletePasswordResetRequestBody) *identity.CompletePasswordResetPayload {
+	v := &identity.CompletePasswordResetPayload{
+		Token:        *body.Token,
+		NewPassword:  *body.NewPassword,
+		MfaCode:      body.MfaCode,
+		RecoveryCode: body.RecoveryCode,
 	}
 
 	return v
@@ -1657,12 +2743,108 @@ func NewLogoutPayload(cookie string) *identity.LogoutPayload {
 	return v
 }
 
+// NewRefreshSessionPayload builds a identity service refresh_session endpoint
+// payload.
+func NewRefreshSessionPayload(body *RefreshSessionRequestBody, cookie string) *identity.RefreshSessionPayload {
+	v := &identity.RefreshSessionPayload{
+		Password: *body.Password,
+		Factor:   body.Factor,
+	}
+	v.Cookie = cookie
+
+	return v
+}
+
 // NewSnapshotPayload builds a identity service snapshot endpoint payload.
 func NewSnapshotPayload(cookie string) *identity.SnapshotPayload {
 	v := &identity.SnapshotPayload{}
 	v.Cookie = cookie
 
 	return v
+}
+
+// ValidateSamlCallbackRequestBody runs the validations defined on
+// SamlCallbackRequestBody
+func ValidateSamlCallbackRequestBody(body *SamlCallbackRequestBody) (err error) {
+	if body.SAMLResponse == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("SAMLResponse", "body"))
+	}
+	if body.RelayState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("RelayState", "body"))
+	}
+	if body.SAMLResponse != nil {
+		if utf8.RuneCountInString(*body.SAMLResponse) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.SAMLResponse", *body.SAMLResponse, utf8.RuneCountInString(*body.SAMLResponse), 1, true))
+		}
+		if utf8.RuneCountInString(*body.SAMLResponse) > 262144 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.SAMLResponse", *body.SAMLResponse, utf8.RuneCountInString(*body.SAMLResponse), 262144, false))
+		}
+	}
+	if body.RelayState != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.RelayState", *body.RelayState, "^[a-f0-9]{64}$"))
+	}
+	return
+}
+
+// ValidateCompleteSamlRequestBody runs the validations defined on
+// CompleteSamlRequestBody
+func ValidateCompleteSamlRequestBody(body *CompleteSamlRequestBody) (err error) {
+	if body.MfaCode != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mfaCode", *body.MfaCode, "^[0-9]{6}$"))
+	}
+	if body.RecoveryCode != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.recoveryCode", *body.RecoveryCode, "^[a-f0-9]{32}$"))
+	}
+	return
+}
+
+// ValidateStartFederationRequestBody runs the validations defined on
+// StartFederationRequestBody
+func ValidateStartFederationRequestBody(body *StartFederationRequestBody) (err error) {
+	if body.ProviderID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("providerId", "body"))
+	}
+	if body.Purpose == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("purpose", "body"))
+	}
+	if body.ProviderID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.providerId", *body.ProviderID, "^[a-zA-Z][a-zA-Z0-9_-]{0,39}$"))
+	}
+	if body.Purpose != nil {
+		if !(*body.Purpose == "login" || *body.Purpose == "link") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.purpose", *body.Purpose, []any{"login", "link"}))
+		}
+	}
+	return
+}
+
+// ValidateCompleteFederationRequestBody runs the validations defined on
+// CompleteFederationRequestBody
+func ValidateCompleteFederationRequestBody(body *CompleteFederationRequestBody) (err error) {
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	if body.State != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.state", *body.State, "^[a-f0-9]{64}$"))
+	}
+	if body.Code != nil {
+		if utf8.RuneCountInString(*body.Code) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.code", *body.Code, utf8.RuneCountInString(*body.Code), 1, true))
+		}
+		if utf8.RuneCountInString(*body.Code) > 4096 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.code", *body.Code, utf8.RuneCountInString(*body.Code), 4096, false))
+		}
+	}
+	if body.MfaCode != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mfaCode", *body.MfaCode, "^[0-9]{6}$"))
+	}
+	if body.RecoveryCode != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.recoveryCode", *body.RecoveryCode, "^[a-f0-9]{32}$"))
+	}
+	return
 }
 
 // ValidateRequestTemporaryAccessRequestBody runs the validations defined on
@@ -1746,16 +2928,36 @@ func ValidateReviewTemporaryAccessRequestBody(body *ReviewTemporaryAccessRequest
 	return
 }
 
-// ValidateSwitchDepartmentRequestBody runs the validations defined on
-// SwitchDepartmentRequestBody
-func ValidateSwitchDepartmentRequestBody(body *SwitchDepartmentRequestBody) (err error) {
-	if body.DepartmentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentId", "body"))
+// ValidateSelectSignInIdentityRequestBody runs the validations defined on
+// SelectSignInIdentityRequestBody
+func ValidateSelectSignInIdentityRequestBody(body *SelectSignInIdentityRequestBody) (err error) {
+	if body.IdentityBindingID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identityBindingId", *body.IdentityBindingID, goa.FormatUUID))
 	}
-	if body.DepartmentID != nil {
-		if *body.DepartmentID < 1 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.departmentId", *body.DepartmentID, 1, true))
+	if body.ActingOrganizationID != nil {
+		if *body.ActingOrganizationID < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.actingOrganizationId", *body.ActingOrganizationID, 1, true))
 		}
+	}
+	if body.Portal != nil {
+		if utf8.RuneCountInString(*body.Portal) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.portal", *body.Portal, utf8.RuneCountInString(*body.Portal), 1, true))
+		}
+		if utf8.RuneCountInString(*body.Portal) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.portal", *body.Portal, utf8.RuneCountInString(*body.Portal), 100, false))
+		}
+	}
+	return
+}
+
+// ValidateRedeemSignInInvitationRequestBody runs the validations defined on
+// RedeemSignInInvitationRequestBody
+func ValidateRedeemSignInInvitationRequestBody(body *RedeemSignInInvitationRequestBody) (err error) {
+	if body.Code == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code", "body"))
+	}
+	if body.Code != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.code", *body.Code, "^[a-f0-9]{64}$"))
 	}
 	return
 }
@@ -1784,6 +2986,179 @@ func ValidateLoginRequestBody(body *LoginRequestBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", *body.Password, utf8.RuneCountInString(*body.Password), 128, false))
 		}
 	}
+	if body.MfaCode != nil {
+		if utf8.RuneCountInString(*body.MfaCode) < 6 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mfaCode", *body.MfaCode, utf8.RuneCountInString(*body.MfaCode), 6, true))
+		}
+		if utf8.RuneCountInString(*body.MfaCode) > 6 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mfaCode", *body.MfaCode, utf8.RuneCountInString(*body.MfaCode), 6, false))
+		}
+	}
+	if body.RecoveryCode != nil {
+		if utf8.RuneCountInString(*body.RecoveryCode) < 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.recoveryCode", *body.RecoveryCode, utf8.RuneCountInString(*body.RecoveryCode), 32, true))
+		}
+		if utf8.RuneCountInString(*body.RecoveryCode) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.recoveryCode", *body.RecoveryCode, utf8.RuneCountInString(*body.RecoveryCode), 32, false))
+		}
+	}
+	return
+}
+
+// ValidateRequestRegistrationRequestBody runs the validations defined on
+// RequestRegistrationRequestBody
+func ValidateRequestRegistrationRequestBody(body *RequestRegistrationRequestBody) (err error) {
+	if body.Username == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("username", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("displayName", "body"))
+	}
+	if body.Password == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("password", "body"))
+	}
+	if body.Destination == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("destination", "body"))
+	}
+	if body.Username != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.username", *body.Username, "^[a-zA-Z0-9_.@-]{3,80}$"))
+	}
+	if body.DisplayName != nil {
+		if utf8.RuneCountInString(*body.DisplayName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.displayName", *body.DisplayName, utf8.RuneCountInString(*body.DisplayName), 1, true))
+		}
+		if utf8.RuneCountInString(*body.DisplayName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.displayName", *body.DisplayName, utf8.RuneCountInString(*body.DisplayName), 100, false))
+		}
+	}
+	if body.Password != nil {
+		if utf8.RuneCountInString(*body.Password) < 12 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", *body.Password, utf8.RuneCountInString(*body.Password), 12, true))
+		}
+		if utf8.RuneCountInString(*body.Password) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", *body.Password, utf8.RuneCountInString(*body.Password), 128, false))
+		}
+	}
+	if body.Destination != nil {
+		if utf8.RuneCountInString(*body.Destination) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.destination", *body.Destination, utf8.RuneCountInString(*body.Destination), 3, true))
+		}
+		if utf8.RuneCountInString(*body.Destination) > 254 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.destination", *body.Destination, utf8.RuneCountInString(*body.Destination), 254, false))
+		}
+	}
+	return
+}
+
+// ValidateCompleteRegistrationRequestBody runs the validations defined on
+// CompleteRegistrationRequestBody
+func ValidateCompleteRegistrationRequestBody(body *CompleteRegistrationRequestBody) (err error) {
+	if body.Token == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("token", "body"))
+	}
+	if body.Password == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("password", "body"))
+	}
+	if body.Token != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.token", *body.Token, "^[a-f0-9]{64}$"))
+	}
+	if body.Password != nil {
+		if utf8.RuneCountInString(*body.Password) < 12 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", *body.Password, utf8.RuneCountInString(*body.Password), 12, true))
+		}
+		if utf8.RuneCountInString(*body.Password) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", *body.Password, utf8.RuneCountInString(*body.Password), 128, false))
+		}
+	}
+	return
+}
+
+// ValidateRequestPasswordResetRequestBody runs the validations defined on
+// RequestPasswordResetRequestBody
+func ValidateRequestPasswordResetRequestBody(body *RequestPasswordResetRequestBody) (err error) {
+	if body.Username == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("username", "body"))
+	}
+	if body.Channel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("channel", "body"))
+	}
+	if body.Username != nil {
+		if utf8.RuneCountInString(*body.Username) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.username", *body.Username, utf8.RuneCountInString(*body.Username), 3, true))
+		}
+		if utf8.RuneCountInString(*body.Username) > 80 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.username", *body.Username, utf8.RuneCountInString(*body.Username), 80, false))
+		}
+	}
+	if body.Channel != nil {
+		if !(*body.Channel == "email" || *body.Channel == "sms") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.channel", *body.Channel, []any{"email", "sms"}))
+		}
+	}
+	return
+}
+
+// ValidateCompletePasswordResetRequestBody runs the validations defined on
+// CompletePasswordResetRequestBody
+func ValidateCompletePasswordResetRequestBody(body *CompletePasswordResetRequestBody) (err error) {
+	if body.Token == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("token", "body"))
+	}
+	if body.NewPassword == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("newPassword", "body"))
+	}
+	if body.Token != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.token", *body.Token, "^[a-f0-9]{64}$"))
+	}
+	if body.NewPassword != nil {
+		if utf8.RuneCountInString(*body.NewPassword) < 12 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.newPassword", *body.NewPassword, utf8.RuneCountInString(*body.NewPassword), 12, true))
+		}
+		if utf8.RuneCountInString(*body.NewPassword) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.newPassword", *body.NewPassword, utf8.RuneCountInString(*body.NewPassword), 128, false))
+		}
+	}
+	if body.MfaCode != nil {
+		if utf8.RuneCountInString(*body.MfaCode) < 6 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mfaCode", *body.MfaCode, utf8.RuneCountInString(*body.MfaCode), 6, true))
+		}
+		if utf8.RuneCountInString(*body.MfaCode) > 6 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mfaCode", *body.MfaCode, utf8.RuneCountInString(*body.MfaCode), 6, false))
+		}
+	}
+	if body.RecoveryCode != nil {
+		if utf8.RuneCountInString(*body.RecoveryCode) < 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.recoveryCode", *body.RecoveryCode, utf8.RuneCountInString(*body.RecoveryCode), 32, true))
+		}
+		if utf8.RuneCountInString(*body.RecoveryCode) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.recoveryCode", *body.RecoveryCode, utf8.RuneCountInString(*body.RecoveryCode), 32, false))
+		}
+	}
+	return
+}
+
+// ValidateRefreshSessionRequestBody runs the validations defined on
+// RefreshSessionRequestBody
+func ValidateRefreshSessionRequestBody(body *RefreshSessionRequestBody) (err error) {
+	if body.Password == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("password", "body"))
+	}
+	if body.Password != nil {
+		if utf8.RuneCountInString(*body.Password) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", *body.Password, utf8.RuneCountInString(*body.Password), 1, true))
+		}
+		if utf8.RuneCountInString(*body.Password) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", *body.Password, utf8.RuneCountInString(*body.Password), 128, false))
+		}
+	}
+	if body.Factor != nil {
+		if utf8.RuneCountInString(*body.Factor) < 6 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.factor", *body.Factor, utf8.RuneCountInString(*body.Factor), 6, true))
+		}
+		if utf8.RuneCountInString(*body.Factor) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.factor", *body.Factor, utf8.RuneCountInString(*body.Factor), 32, false))
+		}
+	}
 	return
 }
 
@@ -1799,9 +3174,6 @@ func ValidatePermissionGrantRequestBody(body *PermissionGrantRequestBody) (err e
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
-	if body.DepartmentIds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentIds", "body"))
-	}
 	if body.Permission != nil {
 		if utf8.RuneCountInString(*body.Permission) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.permission", *body.Permission, utf8.RuneCountInString(*body.Permission), 1, true))
@@ -1816,12 +3188,9 @@ func ValidatePermissionGrantRequestBody(body *PermissionGrantRequestBody) (err e
 		}
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "ALL" || *body.Scope == "ORGANIZATION" || *body.Scope == "DEPARTMENT" || *body.Scope == "DEPARTMENT_TREE" || *body.Scope == "OWN" || *body.Scope == "CUSTOM") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"ALL", "ORGANIZATION", "DEPARTMENT", "DEPARTMENT_TREE", "OWN", "CUSTOM"}))
+		if !(*body.Scope == "ALL" || *body.Scope == "OWN") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"ALL", "OWN"}))
 		}
-	}
-	if len(body.DepartmentIds) > 200 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.departmentIds", body.DepartmentIds, len(body.DepartmentIds), 200, false))
 	}
 	return
 }
@@ -1838,9 +3207,6 @@ func validatePermissionGrantRequestBody(body *PermissionGrantRequestBody, path s
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", path))
 	}
-	if body.DepartmentIds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("departmentIds", path))
-	}
 	if body.Permission != nil {
 		if utf8.RuneCountInString(*body.Permission) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".permission", *body.Permission, utf8.RuneCountInString(*body.Permission), 1, true))
@@ -1855,12 +3221,9 @@ func validatePermissionGrantRequestBody(body *PermissionGrantRequestBody, path s
 		}
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "ALL" || *body.Scope == "ORGANIZATION" || *body.Scope == "DEPARTMENT" || *body.Scope == "DEPARTMENT_TREE" || *body.Scope == "OWN" || *body.Scope == "CUSTOM") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".scope", *body.Scope, []any{"ALL", "ORGANIZATION", "DEPARTMENT", "DEPARTMENT_TREE", "OWN", "CUSTOM"}))
+		if !(*body.Scope == "ALL" || *body.Scope == "OWN") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".scope", *body.Scope, []any{"ALL", "OWN"}))
 		}
-	}
-	if len(body.DepartmentIds) > 200 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".departmentIds", body.DepartmentIds, len(body.DepartmentIds), 200, false))
 	}
 	return
 }

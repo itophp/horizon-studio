@@ -3,12 +3,13 @@ import { DynamicApplicationRoute } from "@/features/application-runtime/route";
 import { frontendExtensions } from "@/app/plugins/builtins";
 import { InstallationsPage } from "@/features/application-runtime/installations";
 
-import { DrivePage } from "@/features/drive/page";
-import { DriveDetailPage } from "@/features/drive/detail";
-import { DriveMembersPage } from "@/features/drive/members";
-import { DriveTrashPage } from "@/features/drive/trash";
 import { AiPage } from "@/features/ai/page";
+import {
+  AutomationView,
+  LegacyAutomationRedirect,
+} from "@/features/ai/automation-view";
 import { KnowledgePage } from "@/features/knowledge/page";
+import { KnowledgeDetailPage } from "@/features/knowledge/detail";
 import "@/features/capabilities/capability.css";
 import { FilesPage, FileDownloadPage } from "@/features/governance/files";
 import {
@@ -16,18 +17,20 @@ import {
   NotificationDetailPage,
 } from "@/features/governance/notifications";
 import { NotificationComposePage } from "@/features/governance/notification-compose";
-import { TemporaryAccessPage } from "@/features/administration/temporary-access";
+import { TemporaryAccessPage } from "@/features/identity/temporary-access";
 import {
   AuthBoundary,
   RequireSession,
   AdminLayout,
-} from "@/features/administration/layout";
-import { LoginPage } from "@/features/administration/login";
-import { useSession } from "@/features/administration/auth";
-import { createBrowserRouter, Navigate } from "react-router";
+} from "@/features/identity/layout";
+import { LoginPage } from "@/features/identity/login";
+import { FederationCallbackPage } from "@/features/identity/federation-callback";
+import { useSession } from "@/features/identity/auth";
+import { sessionLandingPath } from "@/features/identity/session-navigation";
+import { createBrowserRouter, Navigate, useSearchParams } from "react-router";
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { Loading } from "@/features/administration/shared";
+import { Loading } from "@/features/identity/shared";
 import { Shell } from "../layouts/shell";
 import { studioProjectsPath } from "@/features/studio/routes";
 import { Overview } from "@/features/example/overview";
@@ -73,18 +76,56 @@ function NotFound() {
 }
 // The AI workbench is the default surface after sign in. An account without the
 // agent grant lands on statistics instead of a workbench it may not open.
-export function defaultWorkspacePath(permissions: readonly string[]) {
+export function defaultLandingPath(permissions: readonly string[]) {
   return permissions.includes("assistant:use") ? "/ai" : "/analytics";
 }
-function DefaultWorkspace() {
+function DefaultLanding() {
   const session = useSession();
-  return <Navigate to={defaultWorkspacePath(session.permissions)} replace />;
+  return (
+    <Navigate
+      to={sessionLandingPath(
+        session.portal,
+        defaultLandingPath(session.permissions),
+      )}
+      replace
+    />
+  );
 }
+function LegacyDesignRedirect() {
+  const [params] = useSearchParams();
+  const application = params.get("application");
+  return (
+    <Navigate
+      to={
+        application
+          ? `/applications/design/${encodeURIComponent(application)}`
+          : "/applications"
+      }
+      replace
+    />
+  );
+}
+
+function WorkbenchRoute() {
+  const [params] = useSearchParams();
+  return params.get("tab") === "automation" ? (
+    <LegacyAutomationRedirect />
+  ) : (
+    <AiPage />
+  );
+}
+
 export const router = createBrowserRouter([
   {
     element: <AuthBoundary />,
     children: [
       { path: "/login", element: <LoginPage /> },
+      { path: "/sign-in/:application", element: <LoginPage /> },
+      { path: "/login/oidc", element: <FederationCallbackPage /> },
+      {
+        path: "/login/saml",
+        element: <FederationCallbackPage protocol="saml" />,
+      },
       {
         element: <RequireSession />,
         children: [
@@ -99,7 +140,7 @@ export const router = createBrowserRouter([
           {
             element: <AdminLayout />,
             children: [
-              { path: "/", element: <DefaultWorkspace /> },
+              { path: "/", element: <DefaultLanding /> },
               { path: "/applications", element: <InstallationsPage /> },
               {
                 path: `${studioProjectsPath}/:projectId?`,
@@ -111,6 +152,10 @@ export const router = createBrowserRouter([
               },
               {
                 path: "/applications/design",
+                element: <LegacyDesignRedirect />,
+              },
+              {
+                path: "/applications/design/:applicationId",
                 element: <ApplicationDesignPage />,
               },
               { path: "*", element: <DynamicApplicationRoute /> },
@@ -132,13 +177,25 @@ export const router = createBrowserRouter([
                   </Suspense>
                 ),
               },
-              { path: "/ai", element: <AiPage /> },
+              { path: "/ai", element: <WorkbenchRoute /> },
+              { path: "/ai/automation", element: <AutomationView /> },
+              { path: "/ai/automation/:id", element: <AutomationView /> },
+              {
+                path: "/ai/automation/runs/:runId",
+                element: <AutomationView />,
+              },
+              { path: "/automation", element: <LegacyAutomationRedirect /> },
+              {
+                path: "/automation/:id",
+                element: <LegacyAutomationRedirect />,
+              },
+              {
+                path: "/automation/runs/:runId",
+                element: <LegacyAutomationRedirect />,
+              },
               ...frontendExtensions.routes,
-              { path: "/drive", element: <DrivePage /> },
-              { path: "/drive/:id", element: <DriveDetailPage /> },
-              { path: "/drive/:id/members", element: <DriveMembersPage /> },
-              { path: "/drive/:id/trash", element: <DriveTrashPage /> },
               { path: "/knowledge", element: <KnowledgePage /> },
+              { path: "/knowledge/:id", element: <KnowledgeDetailPage /> },
               {
                 path: "/departments",
                 element: (

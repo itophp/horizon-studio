@@ -10,7 +10,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import { studio } from "./api";
 
 type ParentOption = { id: number; title: string };
@@ -40,7 +40,7 @@ export function RequirementParentPicker({
   const scope = [
     profile.tenantId,
     profile.account.id,
-    profile.activeDepartmentId,
+    profile.identityBindingId,
   ];
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");

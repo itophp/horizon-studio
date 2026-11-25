@@ -1,9 +1,13 @@
 package config
 
 import (
+	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"horizon/foundation/system/governance"
+	"horizon/foundation/system/identity"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -15,8 +19,14 @@ import (
 type Config struct {
 	Address, DatabaseURL string
 	SecureCookies        bool
-	SessionCookieSuffix  string
 	Governance           governance.Options
+	OIDCProviders        []identity.OIDCProviderConfig
+	SAMLProviders        []identity.SAMLProviderConfig
+	PlatformOperatorIDs  []string
+	AuditPreviousKeys    []ed25519.PublicKey
+	AuditOnlineDays      int
+	AuditRetentionDays   int
+	SMSURL, SMSToken     string
 }
 
 func Load() (Config, error) {
@@ -31,22 +41,13 @@ func Load() (Config, error) {
 		}
 		c.SecureCookies = parsed
 	}
-	host, port, err := net.SplitHostPort(c.Address)
+	host, _, err := net.SplitHostPort(c.Address)
 	if err != nil {
 		return c, err
 	}
 	ip := net.ParseIP(host)
 	if (ip == nil || !ip.IsLoopback()) && !c.SecureCookies {
 		return c, errors.New("non-loopback deployments require COOKIE_SECURE=true and HTTPS")
-	}
-	if !c.SecureCookies {
-		value, err := strconv.ParseUint(port, 10, 16)
-		if err != nil {
-			return c, errors.New("loopback API_ADDR requires a numeric port")
-		}
-		// Browsers share cookies across ports on the same host. Use the trusted
-		// development backend port to separate independent local installations.
-		c.SessionCookieSuffix = "_" + strconv.FormatUint(value, 10)
 	}
 
 	c.Governance.StorageRoot = os.Getenv("FILE_STORAGE_ROOT")
@@ -87,9 +88,91 @@ func Load() (Config, error) {
 	} else if ip == nil || !ip.IsLoopback() {
 		return c, errors.New("SETTINGS_ENCRYPTION_KEY required")
 	}
+	if raw := os.Getenv("IAM_AUDIT_SIGNING_SEED"); raw != "" {
+		seed, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil || len(seed) != ed25519.SeedSize {
+			return c, errors.New("IAM_AUDIT_SIGNING_SEED must be a base64 encoded Ed25519 seed")
+		}
+		c.Governance.AuditSigningSeed = seed
+	}
+	if raw := os.Getenv("IAM_AUDIT_PREVIOUS_PUBLIC_KEYS"); raw != "" {
+		values := strings.Split(raw, ",")
+		if len(values) > 32 {
+			return c, errors.New("IAM_AUDIT_PREVIOUS_PUBLIC_KEYS supports at most 32 keys")
+		}
+		for _, key := range values {
+			decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(key))
+			if err != nil || len(decoded) != ed25519.PublicKeySize {
+				return c, errors.New("IAM_AUDIT_PREVIOUS_PUBLIC_KEYS must contain base64 encoded Ed25519 public keys")
+			}
+			c.AuditPreviousKeys = append(c.AuditPreviousKeys, ed25519.PublicKey(decoded))
+		}
+	}
+	if raw := os.Getenv("IAM_AUDIT_ONLINE_DAYS"); raw != "" {
+		days, err := strconv.Atoi(raw)
+		if err != nil || days < 0 || days > 3650 || (days > 0 && len(c.Governance.AuditSigningSeed) == 0) {
+			return c, errors.New("IAM_AUDIT_ONLINE_DAYS must be 0 to 3650 and archiving requires IAM_AUDIT_SIGNING_SEED")
+		}
+		c.AuditOnlineDays = days
+	}
+	if raw := os.Getenv("IAM_AUDIT_RETENTION_DAYS"); raw != "" {
+		days, err := strconv.Atoi(raw)
+		if err != nil || days < 0 || days > 36500 || (days > 0 && (c.AuditOnlineDays == 0 || days < c.AuditOnlineDays)) {
+			return c, errors.New("IAM_AUDIT_RETENTION_DAYS must be 0 to 36500 and expiry requires a positive IAM_AUDIT_ONLINE_DAYS at or below retention")
+		}
+		c.AuditRetentionDays = days
+	}
 	c.Governance.KnowledgeRedisURL = os.Getenv("REDIS_URL")
-	c.Governance.PublicWorkspace = os.Getenv("PUBLIC_WORKSPACE_ID")
+	c.Governance.PublicWorkspace = os.Getenv("PUBLIC_TENANT_ID")
+	if c.Governance.PublicWorkspace == "" {
+		c.Governance.PublicWorkspace = os.Getenv("PUBLIC_WORKSPACE_ID")
+	}
 	c.Governance.PublicURL = os.Getenv("PUBLIC_APP_URL")
+	c.SMSURL, c.SMSToken = os.Getenv("IAM_SMS_URL"), os.Getenv("IAM_SMS_TOKEN")
+	if c.SMSURL != "" || c.SMSToken != "" {
+		endpoint, parseErr := url.Parse(c.SMSURL)
+		if parseErr != nil || endpoint.Scheme != "https" || endpoint.Hostname() == "" || endpoint.User != nil ||
+			endpoint.RawQuery != "" || endpoint.Fragment != "" || strings.TrimSpace(c.SMSToken) == "" || strings.ContainsAny(c.SMSToken, "\r\n") {
+			return c, errors.New("IAM_SMS_URL requires an HTTPS endpoint and IAM_SMS_TOKEN")
+		}
+	}
+	c.PlatformOperatorIDs, err = identity.ParsePlatformOperators(os.Getenv("IAM_PLATFORM_OPERATOR_IDS"))
+	if err != nil {
+		return c, err
+	}
+	if raw := os.Getenv("IAM_OIDC_PROVIDERS_JSON"); raw != "" {
+		decoder := json.NewDecoder(strings.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if len(raw) > 65536 || decoder.Decode(&c.OIDCProviders) != nil || c.OIDCProviders == nil || decoder.Decode(new(any)) != io.EOF {
+			return c, errors.New("IAM_OIDC_PROVIDERS_JSON must be a valid provider array")
+		}
+		if err := identity.ValidateOIDCProviders(c.OIDCProviders, c.Governance.PublicURL, c.SecureCookies); err != nil {
+			return c, err
+		}
+		if len(c.OIDCProviders) > 0 && len(c.Governance.EncryptionKey) != 32 {
+			return c, errors.New("OIDC requires SETTINGS_ENCRYPTION_KEY")
+		}
+	}
+	if raw := os.Getenv("IAM_SAML_PROVIDERS_JSON"); raw != "" {
+		decoder := json.NewDecoder(strings.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if len(raw) > 262144 || decoder.Decode(&c.SAMLProviders) != nil || c.SAMLProviders == nil || decoder.Decode(new(any)) != io.EOF {
+			return c, errors.New("IAM_SAML_PROVIDERS_JSON must be a valid provider array")
+		}
+		if err := identity.ValidateSAMLProviders(c.SAMLProviders, c.Governance.PublicURL, c.SecureCookies); err != nil {
+			return c, err
+		}
+		for _, saml := range c.SAMLProviders {
+			for _, oidc := range c.OIDCProviders {
+				if saml.ID == oidc.ID {
+					return c, errors.New("external identity provider IDs must be unique across protocols")
+				}
+			}
+		}
+		if len(c.SAMLProviders) > 0 && len(c.Governance.EncryptionKey) != 32 {
+			return c, errors.New("SAML requires SETTINGS_ENCRYPTION_KEY")
+		}
+	}
 	if c.SecureCookies {
 		origin, e := url.Parse(c.Governance.PublicURL)
 		if e != nil || origin.Scheme != "https" || origin.Hostname() == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || (origin.Path != "" && origin.Path != "/") {
@@ -101,5 +184,7 @@ func Load() (Config, error) {
 			c.Governance.SMTPHosts = append(c.Governance.SMTPHosts, h)
 		}
 	}
+	// MAIL_* business limits are mail plugin options resolved by the
+	// deployment; the platform config no longer carries them.
 	return c, nil
 }

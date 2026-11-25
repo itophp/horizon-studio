@@ -8,7 +8,7 @@ ON CONFLICT DO NOTHING;
 -- name: MemoryClaimEvent :one
 SELECT i.source_event_id, i.tenant_id, i.event_id, i.attempts,
        e.event_type, e.aggregate_type, e.aggregate_id, e.invocation_id,
-       e.account_id, e.department_id, e.correlation_id, e.causation_id,
+       e.account_id, e.correlation_id, e.causation_id,
        e.trigger_depth, e.created_at
 FROM memory_event_inbox i JOIN cap_events e ON e.id = i.source_event_id AND e.tenant_id = i.tenant_id AND e.event_id = i.event_id
 WHERE i.completed_at IS NULL AND i.dead_at IS NULL AND i.available_at <= now()
@@ -40,11 +40,11 @@ RETURNING id,version;
 -- These locks keep resource deletion or reparenting from racing a multi-row
 -- memory write and its source/correction/relation cleanup.
 -- name: MemoryLockGroupDepartment :one
-SELECT d.id FROM iam_departments d WHERE d.tenant_id=sqlc.arg(tenant_id) AND d.id::text=sqlc.arg(scope_id)::text
+SELECT d.id FROM identity_departments d WHERE d.tenant_id=sqlc.arg(tenant_id) AND d.id::text=sqlc.arg(scope_id)::text
  AND memory_group_authorized(d.tenant_id,'department',d.id::text,sqlc.arg(read_all)::boolean,sqlc.arg(read_orgs)::bigint[],sqlc.arg(read_depts)::bigint[],sqlc.arg(write_all)::boolean,sqlc.arg(write_orgs)::bigint[],sqlc.arg(write_depts)::bigint[],sqlc.arg(actor_id)::bigint) FOR SHARE OF d;
 
 -- name: MemoryLockGroupOrganization :one
-SELECT o.id FROM iam_organizations o WHERE o.tenant_id=sqlc.arg(tenant_id) AND o.id::text=sqlc.arg(scope_id)::text
+SELECT o.id FROM identity_organizations o WHERE o.tenant_id=sqlc.arg(tenant_id) AND o.id::text=sqlc.arg(scope_id)::text
  AND memory_group_authorized(o.tenant_id,'organization',o.id::text,sqlc.arg(read_all)::boolean,sqlc.arg(read_orgs)::bigint[],sqlc.arg(read_depts)::bigint[],sqlc.arg(write_all)::boolean,sqlc.arg(write_orgs)::bigint[],sqlc.arg(write_depts)::bigint[],sqlc.arg(actor_id)::bigint) FOR SHARE OF o;
 
 -- name: MemoryLockGroupEntity :one
@@ -182,7 +182,11 @@ WHERE m.tenant_id=sqlc.arg(tenant_id) AND m.scope_type='project' AND m.scope_id=
 INSERT INTO memory_sources (tenant_id, memory_id, event_id)
 SELECT m.tenant_id, m.id, e.event_id FROM memory_items m JOIN memory_events e ON e.tenant_id=m.tenant_id AND e.event_id=sqlc.arg(event_id)
 WHERE m.tenant_id=sqlc.arg(tenant_id) AND m.id=sqlc.arg(memory_id) AND m.scope_type='project' AND m.scope_id=sqlc.arg(scope_id)
- AND e.resource_type='project' AND e.resource_id=m.scope_id AND EXISTS
+ AND ((e.resource_type='project' AND e.resource_id=m.scope_id) OR (e.source_type='domain_event' AND e.resource_type='project_task'
+       AND e.event_type IN ('project.task.created','project.task.updated','project.task.status.changed','project.task.assigned')
+       AND EXISTS (SELECT 1 FROM project_tasks t WHERE t.tenant_id=e.tenant_id
+                   AND t.project_id::text=m.scope_id AND t.id::text=e.resource_id)))
+ AND EXISTS
  (SELECT 1 FROM project_members p WHERE p.tenant_id=m.tenant_id AND p.project_id::text=m.scope_id AND p.account_id=sqlc.arg(account_id))
 ON CONFLICT DO NOTHING;
 
@@ -192,9 +196,31 @@ FROM memory_sources s JOIN memory_items m ON m.tenant_id=s.tenant_id AND m.id=s.
 JOIN memory_events e ON e.tenant_id=s.tenant_id AND e.event_id=s.event_id
 WHERE m.tenant_id=sqlc.arg(tenant_id) AND m.id=sqlc.arg(memory_id) AND m.scope_type='project' AND m.scope_id=sqlc.arg(scope_id)
  AND m.status='active' AND m.valid_from<=now() AND (m.valid_to IS NULL OR m.valid_to>now())
- AND e.resource_type='project' AND e.resource_id=m.scope_id AND EXISTS
+ AND ((e.resource_type='project' AND e.resource_id=m.scope_id) OR (e.source_type='domain_event' AND e.resource_type='project_task'
+       AND e.event_type IN ('project.task.created','project.task.updated','project.task.status.changed','project.task.assigned')
+       AND EXISTS (SELECT 1 FROM project_tasks t WHERE t.tenant_id=e.tenant_id
+                   AND t.project_id::text=m.scope_id AND t.id::text=e.resource_id)))
+ AND EXISTS
  (SELECT 1 FROM project_members p WHERE p.tenant_id=m.tenant_id AND p.project_id::text=m.scope_id AND p.account_id=sqlc.arg(account_id))
 ORDER BY e.id DESC LIMIT 100;
+
+-- List only explicit business event types. Task events must resolve to a task
+-- in the same project; aggregate events can use IDs with a different meaning.
+-- name: MemoryListProjectEvents :many
+SELECT e.id, e.event_id, e.event_type, e.occurred_at, e.correlation_id, e.resource_type, e.resource_id
+FROM memory_events e
+WHERE e.tenant_id=sqlc.arg(tenant_id) AND e.source_type='domain_event'
+ AND EXISTS (SELECT 1 FROM project_members p WHERE p.tenant_id=e.tenant_id
+             AND p.project_id=sqlc.arg(project_id) AND p.account_id=sqlc.arg(account_id))
+ AND ((e.resource_type='project' AND e.resource_id=sqlc.arg(project_id)::bigint::text
+       AND e.event_type IN ('project.created','project.status.changed'))
+      OR (e.source_type='domain_event' AND e.resource_type='project_task'
+       AND e.event_type IN ('project.task.created','project.task.updated','project.task.status.changed','project.task.assigned')
+       AND EXISTS (SELECT 1 FROM project_tasks t WHERE t.tenant_id=e.tenant_id
+                   AND t.project_id::text=sqlc.arg(project_id)::bigint::text AND t.id::text=e.resource_id)))
+ AND (sqlc.arg(event_type)::text='' OR e.event_type=sqlc.arg(event_type))
+ AND (sqlc.arg(before_id)::bigint=0 OR e.id<sqlc.arg(before_id))
+ORDER BY e.id DESC LIMIT sqlc.arg(max_rows)::int;
 
 -- name: MemoryGetPersonal :one
 SELECT id, partition, memory_type, title, summary, status, verification_status, version, sensitivity, valid_from, valid_to, created_at, updated_at
@@ -360,7 +386,7 @@ RETURNING i.source_event_id;
 INSERT INTO memory_events (tenant_id, event_id, event_type, event_version, occurred_at, actor_id, actor_type,
  department_id, source_type, source_id, invocation_id, trace_id, correlation_id, causation_id, trigger_depth, candidate_partitions, payload)
 SELECT i.tenant_id, 'inv:' || i.invocation_id || ':started', 'capability.invocation.started', '1.0', i.created_at,
- CASE WHEN i.account_id > 0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id > 0 THEN 'user' ELSE 'unknown' END, i.department_id, 'capability', i.capability, i.invocation_id, i.trace_id,
+ CASE WHEN i.account_id > 0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id > 0 THEN 'user' ELSE 'unknown' END, 0, 'capability', i.capability, i.invocation_id, i.trace_id,
  i.correlation_id, i.causation_id, i.trigger_depth, ARRAY['activity','execution']::text[], jsonb_build_object('origin',i.origin,'capabilityVersion',i.capability_version)
 FROM cap_invocations i WHERE NOT EXISTS (SELECT 1 FROM memory_events m WHERE m.tenant_id=i.tenant_id AND m.event_id='inv:' || i.invocation_id || ':started')
 ORDER BY i.id LIMIT sqlc.arg(batch_size)::int ON CONFLICT (tenant_id, event_id) DO NOTHING;
@@ -370,7 +396,7 @@ INSERT INTO memory_events (tenant_id, event_id, event_type, event_version, occur
  department_id, source_type, source_id, result, invocation_id, trace_id, correlation_id, causation_id, trigger_depth, candidate_partitions, payload)
 SELECT i.tenant_id, 'inv:' || i.invocation_id || ':' || i.status,
  CASE WHEN i.status='succeeded' THEN 'capability.invocation.completed' WHEN i.status='cancelled' THEN 'capability.invocation.cancelled' ELSE 'capability.invocation.failed' END,
- '1.0', i.finished_at, CASE WHEN i.account_id > 0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id > 0 THEN 'user' ELSE 'unknown' END, i.department_id, 'capability', i.capability, i.status,
+ '1.0', i.finished_at, CASE WHEN i.account_id > 0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id > 0 THEN 'user' ELSE 'unknown' END, 0, 'capability', i.capability, i.status,
  i.invocation_id, i.trace_id, i.correlation_id, i.causation_id, i.trigger_depth, ARRAY['activity','execution']::text[], jsonb_build_object('origin',i.origin,'capabilityVersion',i.capability_version)
 FROM cap_invocations i WHERE i.finished_at IS NOT NULL AND i.status IN ('succeeded','failed','cancelled')
  AND NOT EXISTS (SELECT 1 FROM memory_events m WHERE m.tenant_id=i.tenant_id AND m.event_id='inv:' || i.invocation_id || ':' || i.status)
@@ -391,7 +417,7 @@ ORDER BY r.id LIMIT sqlc.arg(batch_size)::int ON CONFLICT (tenant_id, event_id) 
 INSERT INTO memory_events (tenant_id,event_id,event_type,event_version,occurred_at,actor_id,actor_type,department_id,source_type,source_id,invocation_id,trace_id,correlation_id,causation_id,trigger_depth,candidate_partitions,payload)
 SELECT i.tenant_id,'agent-tool:'||i.invocation_id||':started','agent.tool.started','1.0',i.created_at,
  CASE WHEN i.account_id>0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id>0 THEN 'user' ELSE 'unknown' END,
- i.department_id,'agent',i.capability,i.invocation_id,i.trace_id,i.correlation_id,i.causation_id,i.trigger_depth,ARRAY['execution']::text[],jsonb_build_object('capabilityVersion',i.capability_version)
+ 0,'agent',i.capability,i.invocation_id,i.trace_id,i.correlation_id,i.causation_id,i.trigger_depth,ARRAY['execution']::text[],jsonb_build_object('capabilityVersion',i.capability_version)
 FROM cap_invocations i WHERE i.origin='agent' AND NOT EXISTS
  (SELECT 1 FROM memory_events m WHERE m.tenant_id=i.tenant_id AND m.event_id='agent-tool:'||i.invocation_id||':started')
 ORDER BY i.id LIMIT sqlc.arg(batch_size)::int ON CONFLICT (tenant_id,event_id) DO NOTHING;
@@ -401,7 +427,7 @@ INSERT INTO memory_events (tenant_id,event_id,event_type,event_version,occurred_
 SELECT i.tenant_id,'agent-tool:'||i.invocation_id||':'||i.status,
  CASE WHEN i.status='succeeded' THEN 'agent.tool.completed' WHEN i.status='cancelled' THEN 'agent.tool.cancelled' ELSE 'agent.tool.failed' END,
  '1.0',i.finished_at,CASE WHEN i.account_id>0 THEN i.account_id::text ELSE 'unknown' END,CASE WHEN i.account_id>0 THEN 'user' ELSE 'unknown' END,
- i.department_id,'agent',i.capability,i.status,i.invocation_id,i.trace_id,i.correlation_id,i.causation_id,i.trigger_depth,ARRAY['execution']::text[],jsonb_build_object('capabilityVersion',i.capability_version)
+ 0,'agent',i.capability,i.status,i.invocation_id,i.trace_id,i.correlation_id,i.causation_id,i.trigger_depth,ARRAY['execution']::text[],jsonb_build_object('capabilityVersion',i.capability_version)
 FROM cap_invocations i WHERE i.origin='agent' AND i.finished_at IS NOT NULL AND i.status IN ('succeeded','failed','cancelled') AND NOT EXISTS
  (SELECT 1 FROM memory_events m WHERE m.tenant_id=i.tenant_id AND m.event_id='agent-tool:'||i.invocation_id||':'||i.status)
 ORDER BY i.id LIMIT sqlc.arg(batch_size)::int ON CONFLICT (tenant_id,event_id) DO NOTHING;

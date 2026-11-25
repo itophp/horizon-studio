@@ -28,7 +28,10 @@ func platformPageVersion(id, route, title, subtitle, version string, providers [
 
 func platformTabs(id string, props viewProps, children ...ar.Node) ar.Node {
 	tabs := componentNode(id, "layout-tabs", "", props)
-	componentOf(tabs).Content = layoutNode(id+"-content", ar.LayoutProps{Gap: "16px"}, children...).Layout
+	// Tab panels are mutually exclusive; a grid gap here would still reserve
+	// row gaps for the inactive (empty) panel wrappers and shift the active
+	// panel down by one gap per preceding tab.
+	componentOf(tabs).Content = layoutNode(id+"-content", ar.LayoutProps{}, children...).Layout
 	return tabs
 }
 
@@ -43,7 +46,7 @@ func platformColumn(name, label, display string) viewProps {
 }
 
 func agentCollaborationApplication() ar.ApplicationV2 {
-	return agentCollaborationVersion("1.0.2")
+	return agentCollaborationVersion("1.0.3")
 }
 
 func legacyAgentCollaborationApplication() ar.ApplicationV2 {
@@ -81,7 +84,7 @@ func agentCollaborationVersion(version string) ar.ApplicationV2 {
 	remoteContent := []ar.Node{tokensPanel, auditPanel}
 	pageContent := []ar.Node{componentNode("webmcp", "webmcp-panel", "", nil)}
 	if version != "1.0.0" {
-		remoteContent = append([]ar.Node{mcpCredentialPanelVersion(tokens, &remoteActive, version == "1.0.1")}, remoteMcpClientContent()...)
+		remoteContent = append([]ar.Node{mcpCredentialPanelVersion(tokens, &remoteActive, version == "1.0.1", version == "1.0.3")}, remoteMcpClientContent(version == "1.0.3")...)
 		remoteContent = append(remoteContent, auditPanel)
 		pageContent = webMcpContent(version == "1.0.1")
 	}
@@ -171,7 +174,7 @@ func legacySystemSettingsApplication() ar.ApplicationV2 {
 		}}, tabs)
 }
 
-func systemSettingsApplication() ar.ApplicationV2 {
+func systemSettingsApplication(version string) ar.ApplicationV2 {
 	configPermission := permits("settings:read")
 	fieldsPermission := permits("dictionaries:read")
 	fieldsSelected := same("query.tab", "fields")
@@ -180,7 +183,11 @@ func systemSettingsApplication() ar.ApplicationV2 {
 	tabs := platformTabs("settings-tabs", viewProps{"param": "tab", "hideSingleTab": true, "tabs": []viewProps{
 		{"id": "config", "labelKey": "governance:generalTab", "icon": "sliders", "permission": "settings:read"},
 		{"id": "fields", "labelKey": "governance:fieldsTab", "icon": "tree", "permission": "dictionaries:read"},
-	}}, platformTab("config", workspaceSettingsContent(configActive)), platformTab("fields", workspaceDictionaryContent(fieldsActive)))
-	return platformPageVersion("system-settings", "/settings", "governance:settings", "governance:settingsHint", "1.0.1",
+	}}, platformTab("config", workspaceSettingsContent(configActive, version)), platformTab("fields", workspaceDictionaryContent(fieldsActive)))
+	application := platformPageVersion("system-settings", "/settings", "governance:settings", "governance:settingsHint", version,
 		append(workspaceSettingsProviders(), workspaceDictionaryProviders()...), tabs)
+	if version == "1.0.3" {
+		application.Protocol.Pages = append(application.Protocol.Pages, aiSettingsPage("system-settings.ai", false))
+	}
+	return application
 }

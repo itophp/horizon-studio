@@ -8,6 +8,8 @@ import type { CapabilityContract } from "@/api/generated/models";
 import {
   CapabilityRuntimeFixture,
   capabilityDefinition,
+  ExampleRuntimeFixture,
+  exampleDefinition,
 } from "./runtime-fixture.test-helper";
 
 const api = vi.hoisted(() => ({
@@ -36,10 +38,10 @@ vi.mock("@/api/generated/baseline", async (original) => ({
   capabilityDecide: api.decide,
 }));
 
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant-a",
-    activeDepartmentId: 1,
+
     permissions: api.permissions,
     account: { id: 4, fullName: "Ada", memberships: [] },
   }),
@@ -99,14 +101,14 @@ const records = {
   replayed: false,
 };
 
-function show() {
+function show(Fixture = CapabilityRuntimeFixture) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <I18nextProvider i18n={i18n}>
       <QueryClientProvider client={client}>
-        <CapabilityRuntimeFixture />
+        <Fixture />
       </QueryClientProvider>
     </I18nextProvider>,
   );
@@ -115,7 +117,9 @@ function show() {
 beforeEach(async () => {
   await changeLanguage("en", false);
   api.permissions = ["example:read", "example:create", "example:archive"];
-  api.application.mockResolvedValue(capabilityDefinition);
+  api.application.mockImplementation(async (id: string) =>
+    id === "example-playground" ? exampleDefinition : capabilityDefinition,
+  );
   api.definitions.mockResolvedValue({ status: 200, data: contracts });
   api.events.mockResolvedValue({
     status: 200,
@@ -195,10 +199,9 @@ beforeEach(async () => {
   });
 });
 
-it("renders records, events with AI status and the catalog", async () => {
+it("renders events with AI status and the catalog", async () => {
   show();
-  expect(await screen.findByText("Line 3 changeover")).toBeTruthy();
-  expect(screen.getByText("example.record.created")).toBeTruthy();
+  expect(await screen.findByText("example.record.created")).toBeTruthy();
   expect(screen.getByText("AI reviewed")).toBeTruthy();
   expect(screen.getByText("Archive example record")).toBeTruthy();
   expect(screen.getByText("example.record.archive@1.0.0")).toBeTruthy();
@@ -243,7 +246,8 @@ it("displays capability metadata when optional translations are absent", async (
 });
 
 it("creates a record through the capability gateway", async () => {
-  show();
+  show(ExampleRuntimeFixture);
+  expect(await screen.findByText("Line 3 changeover")).toBeTruthy();
   const input = await screen.findByLabelText("Record title");
   await userEvent.type(input, "New record");
   await userEvent.click(screen.getByRole("button", { name: /Create record/ }));
@@ -260,7 +264,7 @@ it("creates a record through the capability gateway", async () => {
 });
 
 it("archives with a stable idempotency key", async () => {
-  show();
+  show(ExampleRuntimeFixture);
   const buttons = await screen.findAllByRole("button", { name: /Archive/ });
   await userEvent.click(buttons[0]);
   await waitFor(() =>
@@ -276,9 +280,9 @@ it("archives with a stable idempotency key", async () => {
 
 it("hides write actions and explains the missing grant", async () => {
   api.permissions = [];
-  show();
+  show(ExampleRuntimeFixture);
   expect(
-    await screen.findByText(/cannot use the capability console/i),
+    await screen.findByText(/you do not have access to this page/i),
   ).toBeTruthy();
   expect(screen.queryByLabelText("Record title")).toBeNull();
 });

@@ -1,6 +1,6 @@
 # ADR 011：账号级远程业务 MCP
 
-> **现行行为（2026-11-05）**：远程 MCP 与 AI 助手使用同一自动化能力目录，按凭证绑定部门的当前正式权限动态发现，不再固定 Token 工具集合；旧 Token 同样适用。人工专用和内部专用能力不在自动化目录中，业务调用仍由 Gateway 检查权限、来源、范围、幂等和审批。`tools` 是兼容旧客户端的忽略字段。旧工具名称已更换为能力工具名称；使用 `mcp_context_get` 检查配对身份，使用标准 `tools/list` 发现能力。需要安全重试写入时，在 MCP 请求 `_meta.idempotencyKey` 提供稳定键；未提供时每次调用生成新键，不能保证跨请求重试去重。以下历史阶段描述如有冲突，以本段为准。
+> **现行行为**：远程 MCP 凭据绑定租户、账号和可选身份绑定。每次请求以当前正式权限动态发现工具，业务调用经 Gateway 执行范围、来源、幂等和审批校验。配对使用 `mcp_context_get` 核对完整身份上下文，使用标准 `tools/list` 发现能力。写入重试使用 MCP 请求 `_meta.idempotencyKey`。
 
 
 日期：2026-10-30。状态：已实现首阶段代码与自动化验收，WorkBuddy 桌面调用由用户稍后手动验收；OAuth 与写工具不在首阶段。
@@ -33,6 +33,6 @@ IP 限制只使用 RemoteAddr，不信任客户端转发头；进程内有界限
 
 ## 验证与扩展
 
-`make test-mcp` 覆盖本机助手、协议与真实 PostgreSQL；`make test-mcp-e2e` 覆盖浏览器、代理、诊断、WorkBuddy 配置及已安装 stdio 的独立调用；`make test-mcp-native` 和 test-mcp-native-e2e 显式启用真实 Codex app-server 与 WorkBuddy CLI 验收。桌面实际调用由用户接回手动验收，不能用 CLI health 代替。代码生成检查与浏览器串行；阶段 ci-fast，权限 test-security，原 WebMCP 回归继续保留。
+`./horizon-cli test-mcp` 覆盖本机助手、协议与真实 PostgreSQL；`./horizon-cli test-mcp-e2e` 覆盖浏览器、代理、诊断、WorkBuddy 配置及已安装 stdio 的独立调用；`./horizon-cli test-mcp-native` 和 test-mcp-native-e2e 显式启用真实 Codex app-server 与 WorkBuddy CLI 验收。桌面实际调用由用户接回手动验收，不能用 CLI health 代替。代码生成检查与浏览器串行；阶段 ci-fast，权限 test-security，原 WebMCP 回归继续保留。
 
 功能新增和变动遵循能力契约与 Gateway，维护工具发现、输入输出、权限/范围、风险/幂等和测试。独立业务 MCP 工具不要触发修改全局凭证、安装客户端或新增基础服务。客户端运行时指南位于 webskills/baseline-business。

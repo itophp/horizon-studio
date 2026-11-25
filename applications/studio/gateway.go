@@ -13,7 +13,7 @@ import (
 
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/system/identity"
-	"horizon/internal/repository/dbgen"
+	"horizon/internal/repository/dbgen/studiodb"
 )
 
 // projectGateway talks to a managed project's Capability Gateway on behalf of
@@ -244,7 +244,7 @@ func (m *Module) gatewayInvoke(ctx context.Context, in contracts.Input) (contrac
 		"status": result["status"], "invocationId": result["invocationId"],
 		"approvalId": result["approvalId"], "runId": runID(result),
 	}
-	if _, err := dbgen.New(m.pool).StudioRunUpsert(ctx, dbgen.StudioRunUpsertParams{
+	if _, err := studiodb.New(m.pool).StudioRunUpsert(ctx, studiodb.StudioRunUpsertParams{
 		TenantID: p.TenantID, ID: project.ID, Mode: mode, Capability: capability, Version: version,
 		RequestKey: key, Status: textOr(result["status"]), InvocationID: textOr(result["invocationId"]),
 		ApprovalID: intOr(result["approvalId"]), RunID: intOr(result["runId"]),
@@ -298,7 +298,7 @@ func (m *Module) runList(ctx context.Context, in contracts.Input) (contracts.Out
 	if !p.Can(ReadPermission) {
 		return contracts.Output{}, contracts.Problem("forbidden")
 	}
-	rows, err := dbgen.New(m.pool).StudioRunList(ctx, dbgen.StudioRunListParams{
+	rows, err := studiodb.New(m.pool).StudioRunList(ctx, studiodb.StudioRunListParams{
 		TenantID: p.TenantID, ProjectID: project.ID, CreatedBy: p.Account.ID,
 	})
 	if err != nil {

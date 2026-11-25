@@ -15,7 +15,7 @@ const collaboration = (
   JSON.parse(
     readFileSync("../../docs/generated/runtime/applications.json", "utf8"),
   ) as RuntimeApplicationV2[]
-).find((app) => app.id === "agent-collaboration" && app.version === "1.0.2")!;
+).find((app) => app.id === "agent-collaboration" && app.version === "1.0.3")!;
 
 const api = vi.hoisted(() => ({
   create: vi.fn(),
@@ -56,19 +56,12 @@ vi.mock("@/lib/capabilities", async (original) => ({
   },
 }));
 
-vi.mock("@/features/administration/auth", () => {
+vi.mock("@/features/identity/auth", () => {
   const useSession = () => ({
     tenantId: "t",
-    activeDepartmentId: 1,
     csrfToken: "csrf",
     permissions: api.permissions,
-    account: {
-      id: 1,
-      memberships: [
-        { departmentId: 1, departmentName: "Administration" },
-        { departmentId: 2, departmentName: "Engineering" },
-      ],
-    },
+    account: { id: 1, memberships: [] },
   });
   return { useSession, useAuth: () => ({ profile: useSession() }) };
 });
@@ -81,13 +74,11 @@ const token: MCPToken = {
   id: 7,
   name: "CI reader",
   prefix: "bmcp_7ab",
-  departmentId: 1,
   expiresAt: "2026-12-01T00:00:00Z",
   createdAt: "2026-10-01T00:00:00Z",
   lastUsedAt: "",
   revokedAt: "",
   revokedBy: 0,
-  tools: ["context_get"],
 };
 
 function show() {
@@ -156,7 +147,7 @@ it("keeps the password when the server rejects the request", async () => {
   await user.click(screen.getByRole("button", { name: "Create token" }));
 
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "The password is wrong, or this department may not issue tokens.",
+    "The password is wrong, or the current identity cannot issue tokens.",
   );
   expect(screen.getByLabelText("Current password")).toHaveValue(
     "correct-horse",
@@ -164,7 +155,6 @@ it("keeps the password when the server rejects the request", async () => {
   expect(api.create).toHaveBeenCalledWith({
     name: "CI reader",
     days: 30,
-    departmentId: 1,
     password: "correct-horse",
   });
 });

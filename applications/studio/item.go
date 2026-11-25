@@ -10,7 +10,7 @@ import (
 
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/system/identity"
-	"horizon/internal/repository/dbgen"
+	"horizon/internal/repository/dbgen/studiodb"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -81,7 +81,7 @@ func (m *Module) itemCreate(ctx context.Context, tx pgx.Tx, in contracts.Input) 
 		}
 		subject = pgtype.Int8{Int64: int64(raw), Valid: true}
 	}
-	row, err := dbgen.New(tx).StudioItemCreate(ctx, dbgen.StudioItemCreateParams{
+	row, err := studiodb.New(tx).StudioItemCreate(ctx, studiodb.StudioItemCreateParams{
 		TenantID: p.TenantID, ID: projectID, RequirementID: requirementID, Kind: kind,
 		Title: title, Checks: stringField(in, "checks"), CreatedBy: p.Account.ID, CatalogTarget: target, SubjectItemID: subject,
 	})
@@ -132,7 +132,7 @@ func (m *Module) itemBind(ctx context.Context, tx pgx.Tx, in contracts.Input) (c
 	if !ok || id < 1 || !fixedReference(reference) {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
-	current, err := dbgen.New(tx).StudioItemGet(ctx, dbgen.StudioItemGetParams{TenantID: p.TenantID, ID: int64(id), CreatedBy: p.Account.ID})
+	current, err := studiodb.New(tx).StudioItemGet(ctx, studiodb.StudioItemGetParams{TenantID: p.TenantID, ID: int64(id), CreatedBy: p.Account.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return contracts.Output{}, contracts.Problem("not_found")
 	}
@@ -168,7 +168,7 @@ func (m *Module) itemBind(ctx context.Context, tx pgx.Tx, in contracts.Input) (c
 	if entry.ID != name || entry.Version != version {
 		return contracts.Output{}, contracts.Problem("CLI 未返回所选版本的定义")
 	}
-	row, err := dbgen.New(tx).StudioItemBind(ctx, dbgen.StudioItemBindParams{
+	row, err := studiodb.New(tx).StudioItemBind(ctx, studiodb.StudioItemBindParams{
 		TenantID: p.TenantID, ID: int64(id), Reference: reference, ReferenceKind: kind, CreatedBy: p.Account.ID,
 	})
 	if err != nil {
@@ -213,7 +213,7 @@ func (m *Module) itemTransition(ctx context.Context, tx pgx.Tx, in contracts.Inp
 	if !ok || id < 1 {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
-	current, err := dbgen.New(tx).StudioItemGet(ctx, dbgen.StudioItemGetParams{TenantID: p.TenantID, ID: int64(id), CreatedBy: p.Account.ID})
+	current, err := studiodb.New(tx).StudioItemGet(ctx, studiodb.StudioItemGetParams{TenantID: p.TenantID, ID: int64(id), CreatedBy: p.Account.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return contracts.Output{}, contracts.Problem("not_found")
 	}
@@ -245,7 +245,7 @@ func (m *Module) itemTransition(ctx context.Context, tx pgx.Tx, in contracts.Inp
 		}
 		evidence, _ = json.Marshal(map[string]any{"revision": revision, "modified": modified, "notes": notes})
 	}
-	row, err := dbgen.New(tx).StudioItemTransition(ctx, dbgen.StudioItemTransitionParams{
+	row, err := studiodb.New(tx).StudioItemTransition(ctx, studiodb.StudioItemTransitionParams{
 		TenantID: p.TenantID, ID: int64(id), Stage: stage, CreatedBy: p.Account.ID, Evidence: evidence,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -281,7 +281,7 @@ func (m *Module) itemList(ctx context.Context, in contracts.Input) (contracts.Ou
 	if !p.Can(ReadPermission) {
 		return contracts.Output{}, contracts.Problem("forbidden")
 	}
-	rows, err := dbgen.New(m.pool).StudioItemList(ctx, dbgen.StudioItemListParams{
+	rows, err := studiodb.New(m.pool).StudioItemList(ctx, studiodb.StudioItemListParams{
 		TenantID: p.TenantID, ProjectID: project.ID, CreatedBy: p.Account.ID,
 	})
 	if err != nil {

@@ -17,6 +17,192 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildSamlCallbackPayload builds the payload for the identity saml_callback
+// endpoint from CLI flags.
+func BuildSamlCallbackPayload(identitySamlCallbackBody *string, identitySamlCallbackProviderID *string, identitySamlCallbackCookie *string) (*identity.SamlCallbackPayload, error) {
+	var err error
+	var body SamlCallbackRequestBody
+	{
+		if identitySamlCallbackBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*identitySamlCallbackBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"RelayState\": \"b51debcb08092299ba36699b523d155d8d886d2abb052eea28879a32408f45ac\",\n      \"SAMLResponse\": \"6g\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.SAMLResponse) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.SAMLResponse", body.SAMLResponse, utf8.RuneCountInString(body.SAMLResponse), 1, true))
+		}
+		if utf8.RuneCountInString(body.SAMLResponse) > 262144 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.SAMLResponse", body.SAMLResponse, utf8.RuneCountInString(body.SAMLResponse), 262144, false))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.RelayState", body.RelayState, "^[a-f0-9]{64}$"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var providerID string
+	{
+		if identitySamlCallbackProviderID == nil {
+			return nil, fmt.Errorf("missing required flag --provider-id")
+		}
+		providerID = *identitySamlCallbackProviderID
+		err = goa.MergeErrors(err, goa.ValidatePattern("providerId", providerID, "^[a-zA-Z][a-zA-Z0-9_-]{0,39}$"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cookie string
+	{
+		if identitySamlCallbackCookie == nil {
+			return nil, fmt.Errorf("missing required flag --cookie")
+		}
+		cookie = *identitySamlCallbackCookie
+		if utf8.RuneCountInString(cookie) > 16384 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("cookie", cookie, utf8.RuneCountInString(cookie), 16384, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &identity.SamlCallbackPayload{
+		SAMLResponse: body.SAMLResponse,
+		RelayState:   body.RelayState,
+	}
+	v.ProviderID = providerID
+	v.Cookie = cookie
+
+	return v, nil
+}
+
+// BuildCompleteSamlPayload builds the payload for the identity complete_saml
+// endpoint from CLI flags.
+func BuildCompleteSamlPayload(identityCompleteSamlBody *string, identityCompleteSamlCookie *string) (*identity.CompleteSamlPayload, error) {
+	var err error
+	var body CompleteSamlRequestBody
+	{
+		if identityCompleteSamlBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*identityCompleteSamlBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mfaCode\": \"160151\",\n      \"recoveryCode\": \"c09304709c904d85cb22b8785efce610\"\n   }'")
+		}
+		if body.MfaCode != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.mfaCode", *body.MfaCode, "^[0-9]{6}$"))
+		}
+		if body.RecoveryCode != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.recoveryCode", *body.RecoveryCode, "^[a-f0-9]{32}$"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cookie string
+	{
+		if identityCompleteSamlCookie == nil {
+			return nil, fmt.Errorf("missing required flag --cookie")
+		}
+		cookie = *identityCompleteSamlCookie
+		if utf8.RuneCountInString(cookie) > 16384 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("cookie", cookie, utf8.RuneCountInString(cookie), 16384, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &identity.CompleteSamlPayload{
+		MfaCode:      body.MfaCode,
+		RecoveryCode: body.RecoveryCode,
+	}
+	v.Cookie = cookie
+
+	return v, nil
+}
+
+// BuildStartFederationPayload builds the payload for the identity
+// start_federation endpoint from CLI flags.
+func BuildStartFederationPayload(identityStartFederationBody *string) (*identity.StartFederationPayload, error) {
+	var err error
+	var body StartFederationRequestBody
+	{
+		if identityStartFederationBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*identityStartFederationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"providerId\": \"O\",\n      \"purpose\": \"link\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.providerId", body.ProviderID, "^[a-zA-Z][a-zA-Z0-9_-]{0,39}$"))
+		if !(body.Purpose == "login" || body.Purpose == "link") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.purpose", body.Purpose, []any{"login", "link"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &identity.StartFederationPayload{
+		ProviderID: body.ProviderID,
+		Purpose:    body.Purpose,
+	}
+
+	return v, nil
+}
+
+// BuildCompleteFederationPayload builds the payload for the identity
+// complete_federation endpoint from CLI flags.
+func BuildCompleteFederationPayload(identityCompleteFederationBody *string, identityCompleteFederationCookie *string) (*identity.CompleteFederationPayload, error) {
+	var err error
+	var body CompleteFederationRequestBody
+	{
+		if identityCompleteFederationBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*identityCompleteFederationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"code\": \"ik\",\n      \"mfaCode\": \"330363\",\n      \"recoveryCode\": \"399a8616639682f848fb83d5c1fa0491\",\n      \"state\": \"f4d1cc33abad120dccba47ebcf14136e9ed7c915fd8579d6ddaa5ace4780786e\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.state", body.State, "^[a-f0-9]{64}$"))
+		if utf8.RuneCountInString(body.Code) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.code", body.Code, utf8.RuneCountInString(body.Code), 1, true))
+		}
+		if utf8.RuneCountInString(body.Code) > 4096 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.code", body.Code, utf8.RuneCountInString(body.Code), 4096, false))
+		}
+		if body.MfaCode != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.mfaCode", *body.MfaCode, "^[0-9]{6}$"))
+		}
+		if body.RecoveryCode != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.recoveryCode", *body.RecoveryCode, "^[a-f0-9]{32}$"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cookie string
+	{
+		if identityCompleteFederationCookie == nil {
+			return nil, fmt.Errorf("missing required flag --cookie")
+		}
+		cookie = *identityCompleteFederationCookie
+		if utf8.RuneCountInString(cookie) > 16384 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("cookie", cookie, utf8.RuneCountInString(cookie), 16384, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &identity.CompleteFederationPayload{
+		State:        body.State,
+		Code:         body.Code,
+		MfaCode:      body.MfaCode,
+		RecoveryCode: body.RecoveryCode,
+	}
+	v.Cookie = cookie
+
+	return v, nil
+}
+
 // BuildTemporaryAccessPayload builds the payload for the identity
 // temporary_access endpoint from CLI flags.
 func BuildTemporaryAccessPayload(identityTemporaryAccessCookie *string) (*identity.TemporaryAccessPayload, error) {
@@ -44,7 +230,7 @@ func BuildRequestTemporaryAccessPayload(identityRequestTemporaryAccessBody *stri
 		}
 		err = json.Unmarshal([]byte(*identityRequestTemporaryAccessBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"grants\": [\n         {\n            \"departmentIds\": [\n               639469963930456437,\n               1095004963388317522,\n               478438477003430476\n            ],\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"ORGANIZATION\"\n         },\n         {\n            \"departmentIds\": [\n               639469963930456437,\n               1095004963388317522,\n               478438477003430476\n            ],\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"ORGANIZATION\"\n         },\n         {\n            \"departmentIds\": [\n               639469963930456437,\n               1095004963388317522,\n               478438477003430476\n            ],\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"ORGANIZATION\"\n         }\n      ],\n      \"minutes\": 30,\n      \"reason\": \"v6q\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"grants\": [\n         {\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"OWN\"\n         },\n         {\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"OWN\"\n         },\n         {\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"OWN\"\n         }\n      ],\n      \"minutes\": 30,\n      \"reason\": \"v6q\"\n   }'")
 		}
 		if body.Grants == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
@@ -111,7 +297,7 @@ func BuildReviewTemporaryAccessPayload(identityReviewTemporaryAccessBody *string
 		}
 		err = json.Unmarshal([]byte(*identityReviewTemporaryAccessBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"approve\",\n      \"grants\": [\n         {\n            \"departmentIds\": [\n               639469963930456437,\n               1095004963388317522,\n               478438477003430476\n            ],\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"ORGANIZATION\"\n         },\n         {\n            \"departmentIds\": [\n               639469963930456437,\n               1095004963388317522,\n               478438477003430476\n            ],\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"ORGANIZATION\"\n         },\n         {\n            \"departmentIds\": [\n               639469963930456437,\n               1095004963388317522,\n               478438477003430476\n            ],\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"ORGANIZATION\"\n         }\n      ],\n      \"minutes\": 30,\n      \"note\": \"1cj\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"approve\",\n      \"grants\": [\n         {\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"OWN\"\n         },\n         {\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"OWN\"\n         },\n         {\n            \"effect\": \"allow\",\n            \"permission\": \"2k\",\n            \"scope\": \"OWN\"\n         }\n      ],\n      \"minutes\": 30,\n      \"note\": \"1cj\"\n   }'")
 		}
 		if body.Grants == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
@@ -253,21 +439,50 @@ func BuildRevokeTemporaryAccessPayload(identityRevokeTemporaryAccessID *string, 
 	return v, nil
 }
 
-// BuildSwitchDepartmentPayload builds the payload for the identity
-// switch_department endpoint from CLI flags.
-func BuildSwitchDepartmentPayload(identitySwitchDepartmentBody *string, identitySwitchDepartmentCookie *string) (*identity.SwitchDepartmentPayload, error) {
-	var err error
-	var body SwitchDepartmentRequestBody
+// BuildListSignInIdentitiesPayload builds the payload for the identity
+// list_sign_in_identities endpoint from CLI flags.
+func BuildListSignInIdentitiesPayload(identityListSignInIdentitiesCookie *string) (*identity.ListSignInIdentitiesPayload, error) {
+	var cookie string
 	{
-		if identitySwitchDepartmentBody == nil {
+		if identityListSignInIdentitiesCookie == nil {
+			return nil, fmt.Errorf("missing required flag --cookie")
+		}
+		cookie = *identityListSignInIdentitiesCookie
+	}
+	v := &identity.ListSignInIdentitiesPayload{}
+	v.Cookie = cookie
+
+	return v, nil
+}
+
+// BuildSelectSignInIdentityPayload builds the payload for the identity
+// select_sign_in_identity endpoint from CLI flags.
+func BuildSelectSignInIdentityPayload(identitySelectSignInIdentityBody *string, identitySelectSignInIdentityCookie *string) (*identity.SelectSignInIdentityPayload, error) {
+	var err error
+	var body SelectSignInIdentityRequestBody
+	{
+		if identitySelectSignInIdentityBody == nil {
 			return nil, fmt.Errorf("missing required flag --body")
 		}
-		err = json.Unmarshal([]byte(*identitySwitchDepartmentBody), &body)
+		err = json.Unmarshal([]byte(*identitySelectSignInIdentityBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"departmentId\": 4478646292217405233\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"actingOrganizationId\": 2308679677763197001,\n      \"identityBindingId\": \"bc1e5b83-5cf9-42dd-9499-edd0aac9f514\",\n      \"portal\": \"gc\"\n   }'")
 		}
-		if body.DepartmentID < 1 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.departmentId", body.DepartmentID, 1, true))
+		if body.IdentityBindingID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.identityBindingId", *body.IdentityBindingID, goa.FormatUUID))
+		}
+		if body.ActingOrganizationID != nil {
+			if *body.ActingOrganizationID < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.actingOrganizationId", *body.ActingOrganizationID, 1, true))
+			}
+		}
+		if body.Portal != nil {
+			if utf8.RuneCountInString(*body.Portal) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.portal", *body.Portal, utf8.RuneCountInString(*body.Portal), 1, true))
+			}
+			if utf8.RuneCountInString(*body.Portal) > 100 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.portal", *body.Portal, utf8.RuneCountInString(*body.Portal), 100, false))
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -275,13 +490,48 @@ func BuildSwitchDepartmentPayload(identitySwitchDepartmentBody *string, identity
 	}
 	var cookie string
 	{
-		if identitySwitchDepartmentCookie == nil {
+		if identitySelectSignInIdentityCookie == nil {
 			return nil, fmt.Errorf("missing required flag --cookie")
 		}
-		cookie = *identitySwitchDepartmentCookie
+		cookie = *identitySelectSignInIdentityCookie
 	}
-	v := &identity.SwitchDepartmentPayload{
-		DepartmentID: body.DepartmentID,
+	v := &identity.SelectSignInIdentityPayload{
+		IdentityBindingID:    body.IdentityBindingID,
+		ActingOrganizationID: body.ActingOrganizationID,
+		Portal:               body.Portal,
+	}
+	v.Cookie = cookie
+
+	return v, nil
+}
+
+// BuildRedeemSignInInvitationPayload builds the payload for the identity
+// redeem_sign_in_invitation endpoint from CLI flags.
+func BuildRedeemSignInInvitationPayload(identityRedeemSignInInvitationBody *string, identityRedeemSignInInvitationCookie *string) (*identity.RedeemSignInInvitationPayload, error) {
+	var err error
+	var body RedeemSignInInvitationRequestBody
+	{
+		if identityRedeemSignInInvitationBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*identityRedeemSignInInvitationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"code\": \"6bf722f3677dcc7bd2c0ce2d5fc9e1c3f97bebd0612a3390ecf98e5b852623fb\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.code", body.Code, "^[a-f0-9]{64}$"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cookie string
+	{
+		if identityRedeemSignInInvitationCookie == nil {
+			return nil, fmt.Errorf("missing required flag --cookie")
+		}
+		cookie = *identityRedeemSignInInvitationCookie
+	}
+	v := &identity.RedeemSignInInvitationPayload{
+		Code: body.Code,
 	}
 	v.Cookie = cookie
 
@@ -299,7 +549,7 @@ func BuildLoginPayload(identityLoginBody *string) (*identity.LoginPayload, error
 		}
 		err = json.Unmarshal([]byte(*identityLoginBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"password\": \"i6\",\n      \"username\": \"gh9\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mfaCode\": \"n11\",\n      \"password\": \"i6\",\n      \"recoveryCode\": \"96s\",\n      \"username\": \"gh9\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Username) < 3 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.username", body.Username, utf8.RuneCountInString(body.Username), 3, true))
@@ -313,13 +563,193 @@ func BuildLoginPayload(identityLoginBody *string) (*identity.LoginPayload, error
 		if utf8.RuneCountInString(body.Password) > 128 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", body.Password, utf8.RuneCountInString(body.Password), 128, false))
 		}
+		if body.MfaCode != nil {
+			if utf8.RuneCountInString(*body.MfaCode) < 6 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.mfaCode", *body.MfaCode, utf8.RuneCountInString(*body.MfaCode), 6, true))
+			}
+			if utf8.RuneCountInString(*body.MfaCode) > 6 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.mfaCode", *body.MfaCode, utf8.RuneCountInString(*body.MfaCode), 6, false))
+			}
+		}
+		if body.RecoveryCode != nil {
+			if utf8.RuneCountInString(*body.RecoveryCode) < 32 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.recoveryCode", *body.RecoveryCode, utf8.RuneCountInString(*body.RecoveryCode), 32, true))
+			}
+			if utf8.RuneCountInString(*body.RecoveryCode) > 32 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.recoveryCode", *body.RecoveryCode, utf8.RuneCountInString(*body.RecoveryCode), 32, false))
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
 	}
 	v := &identity.LoginPayload{
-		Username: body.Username,
+		Username:     body.Username,
+		Password:     body.Password,
+		MfaCode:      body.MfaCode,
+		RecoveryCode: body.RecoveryCode,
+	}
+
+	return v, nil
+}
+
+// BuildRequestRegistrationPayload builds the payload for the identity
+// request_registration endpoint from CLI flags.
+func BuildRequestRegistrationPayload(identityRequestRegistrationBody *string) (*identity.RequestRegistrationPayload, error) {
+	var err error
+	var body RequestRegistrationRequestBody
+	{
+		if identityRequestRegistrationBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*identityRequestRegistrationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"destination\": \"eqa\",\n      \"displayName\": \"b\",\n      \"password\": \"l11\",\n      \"username\": \"yRS7\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.username", body.Username, "^[a-zA-Z0-9_.@-]{3,80}$"))
+		if utf8.RuneCountInString(body.DisplayName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.displayName", body.DisplayName, utf8.RuneCountInString(body.DisplayName), 1, true))
+		}
+		if utf8.RuneCountInString(body.DisplayName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.displayName", body.DisplayName, utf8.RuneCountInString(body.DisplayName), 100, false))
+		}
+		if utf8.RuneCountInString(body.Password) < 12 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", body.Password, utf8.RuneCountInString(body.Password), 12, true))
+		}
+		if utf8.RuneCountInString(body.Password) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", body.Password, utf8.RuneCountInString(body.Password), 128, false))
+		}
+		if utf8.RuneCountInString(body.Destination) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.destination", body.Destination, utf8.RuneCountInString(body.Destination), 3, true))
+		}
+		if utf8.RuneCountInString(body.Destination) > 254 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.destination", body.Destination, utf8.RuneCountInString(body.Destination), 254, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &identity.RequestRegistrationPayload{
+		Username:    body.Username,
+		DisplayName: body.DisplayName,
+		Password:    body.Password,
+		Destination: body.Destination,
+	}
+
+	return v, nil
+}
+
+// BuildCompleteRegistrationPayload builds the payload for the identity
+// complete_registration endpoint from CLI flags.
+func BuildCompleteRegistrationPayload(identityCompleteRegistrationBody *string) (*identity.CompleteRegistrationPayload, error) {
+	var err error
+	var body CompleteRegistrationRequestBody
+	{
+		if identityCompleteRegistrationBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*identityCompleteRegistrationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"password\": \"ced\",\n      \"token\": \"b8b2d1d778ee682537a049abc1f72d2b9d471b12d56f75e9646e6053fd7927e7\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.token", body.Token, "^[a-f0-9]{64}$"))
+		if utf8.RuneCountInString(body.Password) < 12 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", body.Password, utf8.RuneCountInString(body.Password), 12, true))
+		}
+		if utf8.RuneCountInString(body.Password) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", body.Password, utf8.RuneCountInString(body.Password), 128, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &identity.CompleteRegistrationPayload{
+		Token:    body.Token,
 		Password: body.Password,
+	}
+
+	return v, nil
+}
+
+// BuildRequestPasswordResetPayload builds the payload for the identity
+// request_password_reset endpoint from CLI flags.
+func BuildRequestPasswordResetPayload(identityRequestPasswordResetBody *string) (*identity.RequestPasswordResetPayload, error) {
+	var err error
+	var body RequestPasswordResetRequestBody
+	{
+		if identityRequestPasswordResetBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*identityRequestPasswordResetBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"channel\": \"email\",\n      \"username\": \"yzh\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Username) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.username", body.Username, utf8.RuneCountInString(body.Username), 3, true))
+		}
+		if utf8.RuneCountInString(body.Username) > 80 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.username", body.Username, utf8.RuneCountInString(body.Username), 80, false))
+		}
+		if !(body.Channel == "email" || body.Channel == "sms") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.channel", body.Channel, []any{"email", "sms"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &identity.RequestPasswordResetPayload{
+		Username: body.Username,
+		Channel:  body.Channel,
+	}
+
+	return v, nil
+}
+
+// BuildCompletePasswordResetPayload builds the payload for the identity
+// complete_password_reset endpoint from CLI flags.
+func BuildCompletePasswordResetPayload(identityCompletePasswordResetBody *string) (*identity.CompletePasswordResetPayload, error) {
+	var err error
+	var body CompletePasswordResetRequestBody
+	{
+		if identityCompletePasswordResetBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*identityCompletePasswordResetBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mfaCode\": \"0co\",\n      \"newPassword\": \"3ir\",\n      \"recoveryCode\": \"rjz\",\n      \"token\": \"72d4723d6fa59b10c82c6c31c2a8f1f4509f9086bf4669e03a339ec691610bb3\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.token", body.Token, "^[a-f0-9]{64}$"))
+		if utf8.RuneCountInString(body.NewPassword) < 12 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.newPassword", body.NewPassword, utf8.RuneCountInString(body.NewPassword), 12, true))
+		}
+		if utf8.RuneCountInString(body.NewPassword) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.newPassword", body.NewPassword, utf8.RuneCountInString(body.NewPassword), 128, false))
+		}
+		if body.MfaCode != nil {
+			if utf8.RuneCountInString(*body.MfaCode) < 6 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.mfaCode", *body.MfaCode, utf8.RuneCountInString(*body.MfaCode), 6, true))
+			}
+			if utf8.RuneCountInString(*body.MfaCode) > 6 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.mfaCode", *body.MfaCode, utf8.RuneCountInString(*body.MfaCode), 6, false))
+			}
+		}
+		if body.RecoveryCode != nil {
+			if utf8.RuneCountInString(*body.RecoveryCode) < 32 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.recoveryCode", *body.RecoveryCode, utf8.RuneCountInString(*body.RecoveryCode), 32, true))
+			}
+			if utf8.RuneCountInString(*body.RecoveryCode) > 32 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.recoveryCode", *body.RecoveryCode, utf8.RuneCountInString(*body.RecoveryCode), 32, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &identity.CompletePasswordResetPayload{
+		Token:        body.Token,
+		NewPassword:  body.NewPassword,
+		MfaCode:      body.MfaCode,
+		RecoveryCode: body.RecoveryCode,
 	}
 
 	return v, nil
@@ -352,6 +782,53 @@ func BuildLogoutPayload(identityLogoutCookie *string) (*identity.LogoutPayload, 
 		cookie = *identityLogoutCookie
 	}
 	v := &identity.LogoutPayload{}
+	v.Cookie = cookie
+
+	return v, nil
+}
+
+// BuildRefreshSessionPayload builds the payload for the identity
+// refresh_session endpoint from CLI flags.
+func BuildRefreshSessionPayload(identityRefreshSessionBody *string, identityRefreshSessionCookie *string) (*identity.RefreshSessionPayload, error) {
+	var err error
+	var body RefreshSessionRequestBody
+	{
+		if identityRefreshSessionBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*identityRefreshSessionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"factor\": \"kqz\",\n      \"password\": \"ge\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Password) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", body.Password, utf8.RuneCountInString(body.Password), 1, true))
+		}
+		if utf8.RuneCountInString(body.Password) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", body.Password, utf8.RuneCountInString(body.Password), 128, false))
+		}
+		if body.Factor != nil {
+			if utf8.RuneCountInString(*body.Factor) < 6 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.factor", *body.Factor, utf8.RuneCountInString(*body.Factor), 6, true))
+			}
+			if utf8.RuneCountInString(*body.Factor) > 32 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.factor", *body.Factor, utf8.RuneCountInString(*body.Factor), 32, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cookie string
+	{
+		if identityRefreshSessionCookie == nil {
+			return nil, fmt.Errorf("missing required flag --cookie")
+		}
+		cookie = *identityRefreshSessionCookie
+	}
+	v := &identity.RefreshSessionPayload{
+		Password: body.Password,
+		Factor:   body.Factor,
+	}
 	v.Cookie = cookie
 
 	return v, nil

@@ -148,7 +148,11 @@ const memoryAttachProjectEvent = `-- name: MemoryAttachProjectEvent :execrows
 INSERT INTO memory_sources (tenant_id, memory_id, event_id)
 SELECT m.tenant_id, m.id, e.event_id FROM memory_items m JOIN memory_events e ON e.tenant_id=m.tenant_id AND e.event_id=$1
 WHERE m.tenant_id=$2 AND m.id=$3 AND m.scope_type='project' AND m.scope_id=$4
- AND e.resource_type='project' AND e.resource_id=m.scope_id AND EXISTS
+ AND ((e.resource_type='project' AND e.resource_id=m.scope_id) OR (e.source_type='domain_event' AND e.resource_type='project_task'
+       AND e.event_type IN ('project.task.created','project.task.updated','project.task.status.changed','project.task.assigned')
+       AND EXISTS (SELECT 1 FROM project_tasks t WHERE t.tenant_id=e.tenant_id
+                   AND t.project_id::text=m.scope_id AND t.id::text=e.resource_id)))
+ AND EXISTS
  (SELECT 1 FROM project_members p WHERE p.tenant_id=m.tenant_id AND p.project_id::text=m.scope_id AND p.account_id=$5)
 ON CONFLICT DO NOTHING
 `
@@ -178,7 +182,7 @@ func (q *Queries) MemoryAttachProjectEvent(ctx context.Context, arg MemoryAttach
 const memoryClaimEvent = `-- name: MemoryClaimEvent :one
 SELECT i.source_event_id, i.tenant_id, i.event_id, i.attempts,
        e.event_type, e.aggregate_type, e.aggregate_id, e.invocation_id,
-       e.account_id, e.department_id, e.correlation_id, e.causation_id,
+       e.account_id, e.correlation_id, e.causation_id,
        e.trigger_depth, e.created_at
 FROM memory_event_inbox i JOIN cap_events e ON e.id = i.source_event_id AND e.tenant_id = i.tenant_id AND e.event_id = i.event_id
 WHERE i.completed_at IS NULL AND i.dead_at IS NULL AND i.available_at <= now()
@@ -195,7 +199,6 @@ type MemoryClaimEventRow struct {
 	AggregateID   string
 	InvocationID  string
 	AccountID     int64
-	DepartmentID  int64
 	CorrelationID string
 	CausationID   string
 	TriggerDepth  int32
@@ -215,7 +218,6 @@ func (q *Queries) MemoryClaimEvent(ctx context.Context) (MemoryClaimEventRow, er
 		&i.AggregateID,
 		&i.InvocationID,
 		&i.AccountID,
-		&i.DepartmentID,
 		&i.CorrelationID,
 		&i.CausationID,
 		&i.TriggerDepth,
@@ -1737,13 +1739,90 @@ func (q *Queries) MemoryListProject(ctx context.Context, arg MemoryListProjectPa
 	return items, nil
 }
 
+const memoryListProjectEvents = `-- name: MemoryListProjectEvents :many
+SELECT e.id, e.event_id, e.event_type, e.occurred_at, e.correlation_id, e.resource_type, e.resource_id
+FROM memory_events e
+WHERE e.tenant_id=$1 AND e.source_type='domain_event'
+ AND EXISTS (SELECT 1 FROM project_members p WHERE p.tenant_id=e.tenant_id
+             AND p.project_id=$2 AND p.account_id=$3)
+ AND ((e.resource_type='project' AND e.resource_id=$2::bigint::text
+       AND e.event_type IN ('project.created','project.status.changed'))
+      OR (e.source_type='domain_event' AND e.resource_type='project_task'
+       AND e.event_type IN ('project.task.created','project.task.updated','project.task.status.changed','project.task.assigned')
+       AND EXISTS (SELECT 1 FROM project_tasks t WHERE t.tenant_id=e.tenant_id
+                   AND t.project_id::text=$2::bigint::text AND t.id::text=e.resource_id)))
+ AND ($4::text='' OR e.event_type=$4)
+ AND ($5::bigint=0 OR e.id<$5)
+ORDER BY e.id DESC LIMIT $6::int
+`
+
+type MemoryListProjectEventsParams struct {
+	TenantID  string
+	ProjectID int64
+	AccountID int64
+	EventType string
+	BeforeID  int64
+	MaxRows   int32
+}
+
+type MemoryListProjectEventsRow struct {
+	ID            int64
+	EventID       string
+	EventType     string
+	OccurredAt    pgtype.Timestamptz
+	CorrelationID string
+	ResourceType  string
+	ResourceID    string
+}
+
+// List only explicit business event types. Task events must resolve to a task
+// in the same project; aggregate events can use IDs with a different meaning.
+func (q *Queries) MemoryListProjectEvents(ctx context.Context, arg MemoryListProjectEventsParams) ([]MemoryListProjectEventsRow, error) {
+	rows, err := q.db.Query(ctx, memoryListProjectEvents,
+		arg.TenantID,
+		arg.ProjectID,
+		arg.AccountID,
+		arg.EventType,
+		arg.BeforeID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MemoryListProjectEventsRow{}
+	for rows.Next() {
+		var i MemoryListProjectEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventID,
+			&i.EventType,
+			&i.OccurredAt,
+			&i.CorrelationID,
+			&i.ResourceType,
+			&i.ResourceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const memoryListProjectSources = `-- name: MemoryListProjectSources :many
 SELECT e.event_id, e.event_type, e.occurred_at, e.correlation_id
 FROM memory_sources s JOIN memory_items m ON m.tenant_id=s.tenant_id AND m.id=s.memory_id
 JOIN memory_events e ON e.tenant_id=s.tenant_id AND e.event_id=s.event_id
 WHERE m.tenant_id=$1 AND m.id=$2 AND m.scope_type='project' AND m.scope_id=$3
  AND m.status='active' AND m.valid_from<=now() AND (m.valid_to IS NULL OR m.valid_to>now())
- AND e.resource_type='project' AND e.resource_id=m.scope_id AND EXISTS
+ AND ((e.resource_type='project' AND e.resource_id=m.scope_id) OR (e.source_type='domain_event' AND e.resource_type='project_task'
+       AND e.event_type IN ('project.task.created','project.task.updated','project.task.status.changed','project.task.assigned')
+       AND EXISTS (SELECT 1 FROM project_tasks t WHERE t.tenant_id=e.tenant_id
+                   AND t.project_id::text=m.scope_id AND t.id::text=e.resource_id)))
+ AND EXISTS
  (SELECT 1 FROM project_members p WHERE p.tenant_id=m.tenant_id AND p.project_id::text=m.scope_id AND p.account_id=$4)
 ORDER BY e.id DESC LIMIT 100
 `
@@ -1837,7 +1916,7 @@ func (q *Queries) MemoryLockGroup(ctx context.Context, arg MemoryLockGroupParams
 }
 
 const memoryLockGroupDepartment = `-- name: MemoryLockGroupDepartment :one
-SELECT d.id FROM iam_departments d WHERE d.tenant_id=$1 AND d.id::text=$2::text
+SELECT d.id FROM identity_departments d WHERE d.tenant_id=$1 AND d.id::text=$2::text
  AND memory_group_authorized(d.tenant_id,'department',d.id::text,$3::boolean,$4::bigint[],$5::bigint[],$6::boolean,$7::bigint[],$8::bigint[],$9::bigint) FOR SHARE OF d
 `
 
@@ -1907,7 +1986,7 @@ func (q *Queries) MemoryLockGroupEntity(ctx context.Context, arg MemoryLockGroup
 }
 
 const memoryLockGroupOrganization = `-- name: MemoryLockGroupOrganization :one
-SELECT o.id FROM iam_organizations o WHERE o.tenant_id=$1 AND o.id::text=$2::text
+SELECT o.id FROM identity_organizations o WHERE o.tenant_id=$1 AND o.id::text=$2::text
  AND memory_group_authorized(o.tenant_id,'organization',o.id::text,$3::boolean,$4::bigint[],$5::bigint[],$6::boolean,$7::bigint[],$8::bigint[],$9::bigint) FOR SHARE OF o
 `
 
@@ -2044,7 +2123,7 @@ INSERT INTO memory_events (tenant_id,event_id,event_type,event_version,occurred_
 SELECT i.tenant_id,'agent-tool:'||i.invocation_id||':'||i.status,
  CASE WHEN i.status='succeeded' THEN 'agent.tool.completed' WHEN i.status='cancelled' THEN 'agent.tool.cancelled' ELSE 'agent.tool.failed' END,
  '1.0',i.finished_at,CASE WHEN i.account_id>0 THEN i.account_id::text ELSE 'unknown' END,CASE WHEN i.account_id>0 THEN 'user' ELSE 'unknown' END,
- i.department_id,'agent',i.capability,i.status,i.invocation_id,i.trace_id,i.correlation_id,i.causation_id,i.trigger_depth,ARRAY['execution']::text[],jsonb_build_object('capabilityVersion',i.capability_version)
+ 0,'agent',i.capability,i.status,i.invocation_id,i.trace_id,i.correlation_id,i.causation_id,i.trigger_depth,ARRAY['execution']::text[],jsonb_build_object('capabilityVersion',i.capability_version)
 FROM cap_invocations i WHERE i.origin='agent' AND i.finished_at IS NOT NULL AND i.status IN ('succeeded','failed','cancelled') AND NOT EXISTS
  (SELECT 1 FROM memory_events m WHERE m.tenant_id=i.tenant_id AND m.event_id='agent-tool:'||i.invocation_id||':'||i.status)
 ORDER BY i.id LIMIT $1::int ON CONFLICT (tenant_id,event_id) DO NOTHING
@@ -2062,7 +2141,7 @@ const memoryProjectAgentToolStarts = `-- name: MemoryProjectAgentToolStarts :exe
 INSERT INTO memory_events (tenant_id,event_id,event_type,event_version,occurred_at,actor_id,actor_type,department_id,source_type,source_id,invocation_id,trace_id,correlation_id,causation_id,trigger_depth,candidate_partitions,payload)
 SELECT i.tenant_id,'agent-tool:'||i.invocation_id||':started','agent.tool.started','1.0',i.created_at,
  CASE WHEN i.account_id>0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id>0 THEN 'user' ELSE 'unknown' END,
- i.department_id,'agent',i.capability,i.invocation_id,i.trace_id,i.correlation_id,i.causation_id,i.trigger_depth,ARRAY['execution']::text[],jsonb_build_object('capabilityVersion',i.capability_version)
+ 0,'agent',i.capability,i.invocation_id,i.trace_id,i.correlation_id,i.causation_id,i.trigger_depth,ARRAY['execution']::text[],jsonb_build_object('capabilityVersion',i.capability_version)
 FROM cap_invocations i WHERE i.origin='agent' AND NOT EXISTS
  (SELECT 1 FROM memory_events m WHERE m.tenant_id=i.tenant_id AND m.event_id='agent-tool:'||i.invocation_id||':started')
 ORDER BY i.id LIMIT $1::int ON CONFLICT (tenant_id,event_id) DO NOTHING
@@ -2081,7 +2160,7 @@ INSERT INTO memory_events (tenant_id, event_id, event_type, event_version, occur
  department_id, source_type, source_id, result, invocation_id, trace_id, correlation_id, causation_id, trigger_depth, candidate_partitions, payload)
 SELECT i.tenant_id, 'inv:' || i.invocation_id || ':' || i.status,
  CASE WHEN i.status='succeeded' THEN 'capability.invocation.completed' WHEN i.status='cancelled' THEN 'capability.invocation.cancelled' ELSE 'capability.invocation.failed' END,
- '1.0', i.finished_at, CASE WHEN i.account_id > 0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id > 0 THEN 'user' ELSE 'unknown' END, i.department_id, 'capability', i.capability, i.status,
+ '1.0', i.finished_at, CASE WHEN i.account_id > 0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id > 0 THEN 'user' ELSE 'unknown' END, 0, 'capability', i.capability, i.status,
  i.invocation_id, i.trace_id, i.correlation_id, i.causation_id, i.trigger_depth, ARRAY['activity','execution']::text[], jsonb_build_object('origin',i.origin,'capabilityVersion',i.capability_version)
 FROM cap_invocations i WHERE i.finished_at IS NOT NULL AND i.status IN ('succeeded','failed','cancelled')
  AND NOT EXISTS (SELECT 1 FROM memory_events m WHERE m.tenant_id=i.tenant_id AND m.event_id='inv:' || i.invocation_id || ':' || i.status)
@@ -2100,7 +2179,7 @@ const memoryProjectInvocationStarts = `-- name: MemoryProjectInvocationStarts :e
 INSERT INTO memory_events (tenant_id, event_id, event_type, event_version, occurred_at, actor_id, actor_type,
  department_id, source_type, source_id, invocation_id, trace_id, correlation_id, causation_id, trigger_depth, candidate_partitions, payload)
 SELECT i.tenant_id, 'inv:' || i.invocation_id || ':started', 'capability.invocation.started', '1.0', i.created_at,
- CASE WHEN i.account_id > 0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id > 0 THEN 'user' ELSE 'unknown' END, i.department_id, 'capability', i.capability, i.invocation_id, i.trace_id,
+ CASE WHEN i.account_id > 0 THEN i.account_id::text ELSE 'unknown' END, CASE WHEN i.account_id > 0 THEN 'user' ELSE 'unknown' END, 0, 'capability', i.capability, i.invocation_id, i.trace_id,
  i.correlation_id, i.causation_id, i.trigger_depth, ARRAY['activity','execution']::text[], jsonb_build_object('origin',i.origin,'capabilityVersion',i.capability_version)
 FROM cap_invocations i WHERE NOT EXISTS (SELECT 1 FROM memory_events m WHERE m.tenant_id=i.tenant_id AND m.event_id='inv:' || i.invocation_id || ':started')
 ORDER BY i.id LIMIT $1::int ON CONFLICT (tenant_id, event_id) DO NOTHING

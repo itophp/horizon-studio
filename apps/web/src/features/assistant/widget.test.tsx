@@ -11,7 +11,9 @@ const mocks = vi.hoisted(() => ({
   status: vi.fn(),
   chat: vi.fn(),
   agent: vi.fn(),
+  runs: vi.fn(),
   invoke: vi.fn(),
+  departmentId: 1,
   permissions: ["assistant:use"] as string[],
   toolsAvailable: true,
 }));
@@ -20,10 +22,17 @@ vi.mock("@/api/generated/baseline", () => ({
   assistantStatus: mocks.status,
   assistantChat: mocks.chat,
   assistantAgent: mocks.agent,
+  aiRuns: mocks.runs,
 }));
 
-vi.mock("@/features/administration/auth", () => ({
-  useSession: () => ({ permissions: mocks.permissions }),
+vi.mock("@/features/identity/auth", () => ({
+  useSession: () => ({
+    tenantId: "test",
+    account: { id: 1 },
+    identityBindingId: String(mocks.departmentId),
+    authorizationVersion: "test-version",
+    permissions: mocks.permissions,
+  }),
 }));
 
 vi.mock("@/features/webmcp/provider", () => ({
@@ -52,6 +61,8 @@ vi.mock("@/features/webmcp/provider", () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  window.sessionStorage.clear();
+  mocks.departmentId = 1;
   mocks.permissions = ["assistant:use"];
   mocks.toolsAvailable = true;
 });
@@ -101,7 +112,7 @@ it("does not execute a page tool that disappeared while the agent was planning",
   const user = userEvent.setup();
   await user.click(await screen.findByRole("button", { name: "Open agent" }));
   await user.type(
-    screen.getByRole("textbox", { name: "Ask the workspace agent…" }),
+    screen.getByRole("textbox", { name: "Ask the assistant…" }),
     "Read this page",
   );
   await user.click(screen.getByRole("button", { name: "Send" }));
@@ -129,6 +140,68 @@ function renderAssistant() {
   );
 }
 
+it("restores server history after a reload and starts a fresh session after clearing", async () => {
+  await changeLanguage("en");
+  mocks.status.mockResolvedValue({
+    status: 200,
+    data: { enabled: true, configured: true, agentEnabled: true },
+  });
+  mocks.agent.mockResolvedValue({
+    status: 200,
+    data: { content: "First reply", tools: [] },
+  });
+  mocks.runs.mockResolvedValue({
+    status: 200,
+    data: [{ id: 7, question: "First question", answer: "First reply" }],
+  });
+
+  const user = userEvent.setup();
+  async function open() {
+    await user.click(await screen.findByRole("button", { name: "Open agent" }));
+  }
+  async function send(text: string) {
+    await user.type(
+      screen.getByRole("textbox", { name: "Ask the assistant…" }),
+      text,
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+  }
+
+  const first = renderAssistant();
+  await open();
+  await send("First question");
+  await screen.findByText("First reply");
+  const { sessionId } = mocks.agent.mock.calls[0][0];
+  first.unmount();
+
+  const restored = renderAssistant();
+  await open();
+  await screen.findByText("First reply");
+  expect(screen.getByText("First question")).toBeInTheDocument();
+  expect(mocks.runs).toHaveBeenCalledWith(
+    { sessionId, limit: 100 },
+    expect.anything(),
+  );
+  await send("Follow-up");
+  expect(mocks.agent.mock.calls[1][0].sessionId).toBe(sessionId);
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", { name: "Stop" }),
+    ).not.toBeInTheDocument(),
+  );
+  await user.click(screen.getByRole("button", { name: /clear/i }));
+  expect(screen.queryByText("First question")).not.toBeInTheDocument();
+  await send("New question");
+  expect(mocks.agent.mock.calls[2][0].sessionId).not.toBe(sessionId);
+  restored.unmount();
+
+  mocks.departmentId = 2;
+  renderAssistant();
+  await open();
+  expect(mocks.runs).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText("First question")).not.toBeInTheDocument();
+});
+
 it("stays hidden for accounts without the assistant grant", async () => {
   await changeLanguage("en");
   mocks.permissions = [];
@@ -149,7 +222,7 @@ it("stays hidden for accounts without the assistant grant", async () => {
   ).not.toBeInTheDocument();
 });
 
-it("stays hidden while the workspace switch is off", async () => {
+it("stays hidden while the assistant is disabled", async () => {
   await changeLanguage("en");
   mocks.status.mockResolvedValue({
     status: 200,
@@ -179,9 +252,7 @@ it("opens the floating panel and returns to the icon only when closed", async ()
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
   await user.click(trigger);
-  expect(
-    screen.getByRole("dialog", { name: "Workspace agent" }),
-  ).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Assistant" })).toBeInTheDocument();
   expect(screen.getByText("glm-5.3-flash")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Close agent" }));
@@ -211,7 +282,7 @@ it("closes the panel with Escape", async () => {
 });
 
 it.each([false, true])(
-  "returns the WebMCP tool result to the workspace agent (isError=%s)",
+  "returns the WebMCP tool result to the assistant (isError=%s)",
   async (isError) => {
     await changeLanguage("en");
     mocks.status.mockResolvedValue({
@@ -260,7 +331,7 @@ it.each([false, true])(
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Open agent" }));
     await user.type(
-      screen.getByRole("textbox", { name: "Ask the workspace agent…" }),
+      screen.getByRole("textbox", { name: "Ask the assistant…" }),
       "Where am I?",
     );
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -298,7 +369,7 @@ it.each([false, true])(
   },
 );
 
-it("uses the workspace agent directly without a page mode switch", async () => {
+it("uses the assistant directly without a page mode switch", async () => {
   await changeLanguage("en");
   mocks.status.mockResolvedValue({
     status: 200,
@@ -325,7 +396,7 @@ it("uses the workspace agent directly without a page mode switch", async () => {
     screen.queryByRole("group", { name: "Answer mode" }),
   ).not.toBeInTheDocument();
   await user.type(
-    screen.getByRole("textbox", { name: "Ask the workspace agent…" }),
+    screen.getByRole("textbox", { name: "Ask the assistant…" }),
     "密码要求是什么",
   );
   await user.click(screen.getByRole("button", { name: "Send" }));

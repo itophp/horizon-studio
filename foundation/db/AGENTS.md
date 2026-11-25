@@ -6,14 +6,14 @@
 
 查询必须考虑 list/detail/update/delete/aggregate/export/batch/joins 的同等隔离与字段投影；不要 SELECT * 暴露后续敏感新增列。多步操作用同一事务 Queries。
 
-变更运行 make generate、make check-generated、make check-entities 和真实 PostgreSQL test-integration，覆盖迁移、约束、越权及实际受影响的事务/并发行为。
+变更运行 ./horizon-cli generate、./horizon-cli check-generated、./horizon-cli check-entities 和真实 PostgreSQL test-integration，覆盖迁移、约束、越权及实际受影响的事务/并发行为。
 
-加表或加列必须同步实体声明：新表写 `entity_<name>.go`，新列在对应实体加 `Attribute`（`Kind` 区分可写/系统注入/状态/引用），改枚举同步 `Attribute.Enum`，改外键同步 `Relation`。`make check-entities` 会拦住漏声明的 NOT NULL 列和与 `CHECK` 不一致的枚举；不要为了让检查通过而删声明或放宽规则。实体语义与新 i18n label 见 [baseline-entity-model](../../.agents/skills/baseline-entity-model/SKILL.md)。
+加表或加列必须同步实体声明：新表写 `entity_<name>.go`，新列在对应实体加 `Attribute`（`Kind` 区分可写/系统注入/状态/引用），改枚举同步 `Attribute.Enum`，改外键同步 `Relation`。`./horizon-cli check-entities` 会拦住漏声明的 NOT NULL 列和与 `CHECK` 不一致的枚举；不要为了让检查通过而删声明或放宽规则。实体语义与新 i18n label 见 [baseline-entity-model](../../.agents/skills/baseline-entity-model/SKILL.md)。
 
 测试环境不可用时明确失败，不跳过或替换内存实现。RLS 仅在实际角色/连接池上下文验证后按需启用。
 
 
-多部门模型见 [ADR 004](../../docs/decisions/004-department-memberships.md)。账号记录范围必须考虑主/附加归属；角色成员去重，账号与所有部门角色写入共用事务。复合外键保持租户与公司部门一致性，临时授权按部门绑定且移除归属立即失效。
+IAM 核心授权数据按租户和主体约束。临时访问用租户和账号定位，范围由审批确定。会话再认证证明绑定当前会话上下文。应用拥有部门及归属资料。
 
 治理表 gov_* 使用拥有 scope_key 和资源 revision；草稿发布/回退/审计同事务，稳定字典项不物理删除，引用用复合租户外键。文件历史绑定不可变存储 profile；临时状态与 gov_events 同事务，队列恢复用租约/唯一键。见 [ADR 005](../../docs/decisions/005-system-governance.md)，不要把后台清理和投递任务当作可忽略租户/权限的入口。
 
@@ -23,7 +23,7 @@
 
 定时发布 gov_settings_schedules 使用 pending 部分唯一索引、SKIP LOCKED 行锁与 savepoint；配置/版本/审计/任务完成在同一外层事务，崩溃后 pending 可恢复。取消与领取通过同一行锁串行化，版本冲突终止而不自动重新基线。见 ADR 010。
 
-账号远程 MCP 按 [ADR 011](../../docs/decisions/011-remote-mcp.md)：工具复用原授权用例，凭证绑定本人/部门和固化集合；敏感管理操作重新认证，身份变更撤销与延迟归属检查、客户端配对/备份及协议专项测试同步维护。禁止将安装状态当连接成功。
+账号远程 MCP 按 [ADR 011](../../docs/decisions/011-remote-mcp.md)：工具复用原授权用例，凭证绑定当前租户、本人账号和可选身份绑定；敏感管理操作重新认证，身份变更撤销与延迟归属检查、客户端配对/备份及协议专项测试同步维护。禁止将安装状态当连接成功。
 
 ## 能力、事件与触发
 

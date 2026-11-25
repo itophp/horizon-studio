@@ -5,8 +5,8 @@ import { useTranslation } from "react-i18next";
 import { ApiError } from "@/api/client/request";
 import { Button } from "@/components/ui/button";
 import { z } from "zod";
-import { useSession } from "@/features/administration/auth";
-import { ErrorBanner, Loading } from "@/features/administration/shared";
+import { useSession } from "@/features/identity/auth";
+import { ErrorBanner, Loading } from "@/features/identity/shared";
 import { studio, type CatalogEntry, type CatalogKind, type Item } from "./api";
 import {
   DetailField,
@@ -65,7 +65,7 @@ export function CatalogLibrary({
   const scope = [
     profile.tenantId,
     profile.account.id,
-    profile.activeDepartmentId,
+    profile.identityBindingId,
     profile.authorizationVersion,
   ];
   const listing = useQuery({

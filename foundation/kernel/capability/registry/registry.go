@@ -45,14 +45,11 @@ func New(entries []Entry) *Registry {
 			r.err = contracts.Problem("invalid")
 			return r
 		}
-		if entry.Handler.Execute == nil && entry.Handler.ExecuteTx == nil {
+		if !entry.Handler.Matches(definition) {
 			r.err = contracts.Problem("invalid")
 			return r
 		}
-		if entry.Handler.Execute != nil && entry.Handler.ExecuteTx != nil {
-			r.err = contracts.Problem("invalid")
-			return r
-		}
+		entry.Definition.RowFilterAttributes = slices.Clone(definition.RowFilterAttributes)
 		if _, exists := r.byKey[definition.Key()]; exists {
 			r.err = contracts.Problem("invalid")
 			return r

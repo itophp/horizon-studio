@@ -12,27 +12,37 @@ func PermissionCatalog() []*genidentity.PermissionDefinition {
 	out := []*genidentity.PermissionDefinition{}
 	for _, resource := range []string{"accounts", "organizations", "departments", "roles"} {
 		for _, action := range []string{"read", "create", "update", "delete"} {
+			if resource == "organizations" && (action == "create" || action == "delete") {
+				continue
+			}
 			out = append(out, &genidentity.PermissionDefinition{Code: resource + ":" + action, Module: "identity", Function: resource, Action: action, TemporaryEligible: resource != "roles" || action == "read", ScopeConfigurable: resource != "roles"})
 		}
 	}
 	out = append(out,
 		&genidentity.PermissionDefinition{Code: "access:manage", Module: "access", Function: "policies", Action: "manage"},
-		&genidentity.PermissionDefinition{Code: "temporary:approve", Module: "access", Function: "temporary", Action: "approve"},
+		&genidentity.PermissionDefinition{Code: "temporary:approve", Module: "access", Function: "temporary", Action: "approve"})
+	standardCount := len(out)
+	out = append(out,
 		&genidentity.PermissionDefinition{Code: "capability:approve", Module: "system", Function: "capability", Action: "approve", ScopeConfigurable: false, TemporaryEligible: false},
 		&genidentity.PermissionDefinition{Code: "mcp:revoke", Module: "system", Function: "mcp", Action: "revoke", ScopeConfigurable: false, TemporaryEligible: false})
-	out = append(out,
-		&genidentity.PermissionDefinition{Code: "example:read", Module: "business", Function: "example", Action: "read", ScopeConfigurable: false, TemporaryEligible: false},
-		&genidentity.PermissionDefinition{Code: "example:create", Module: "business", Function: "example", Action: "create", ScopeConfigurable: false, TemporaryEligible: false},
-		&genidentity.PermissionDefinition{Code: "example:archive", Module: "business", Function: "example", Action: "archive", ScopeConfigurable: false, TemporaryEligible: false})
-	for resource, actions := range map[string][]string{"memory": {"read", "write", "collect", "replay", "manage"}, "applications": {"read", "design", "manage"}, "drive": {"use", "create"}, "articles": {"read", "write", "review"}, "projects": {"read", "write", "admin"}, "studio": {"read", "write", "control", "invoke"}, "orchestration": {"read", "run", "cancel"}, "settings": {"read", "update", "publish", "history", "rollback", "export"}, "dictionaries": {"read", "create", "update", "delete", "publish", "import", "export", "history", "rollback", "use"}, "files": {"read", "create", "delete"}, "notifications": {"read", "retry", "test", "send"}, "assistant": {"use"}, "knowledge": {"read", "create", "delete"}} {
+	out = append(out, &genidentity.PermissionDefinition{Code: "accounts:security", Module: "identity", Function: "accounts", Action: "security"})
+	// Business application permissions are declarative plugin catalog data
+	// (applications/*/plugin.yaml); this central directory only names the
+	// permissions the foundation itself owns.
+	for resource, actions := range map[string][]string{"memory": {"read", "write", "collect", "replay", "manage"}, "applications": {"read", "design", "manage"}, "orchestration": {"read", "run", "cancel"}, "settings": {"read", "update", "publish", "history", "rollback", "export"}, "dictionaries": {"read", "create", "update", "delete", "publish", "import", "export", "history", "rollback", "use"}, "files": {"read", "create", "delete"}, "notifications": {"read", "retry", "test", "send"}, "assistant": {"use"}, "knowledge": {"read", "create", "delete"}, "automation": {"read", "write"}} {
 		for _, action := range actions {
-			out = append(out, &genidentity.PermissionDefinition{Code: resource + ":" + action, Module: "system", Function: resource, Action: action, ScopeConfigurable: resource != "memory" && resource != "applications" && resource != "drive" && resource != "articles" && resource != "orchestration" && resource != "settings" && (resource != "dictionaries" || action == "use"), TemporaryEligible: resource == "files" && action == "read" || resource == "dictionaries" && action == "use"})
+			out = append(out, &genidentity.PermissionDefinition{Code: resource + ":" + action, Module: "system", Function: resource, Action: action, ScopeConfigurable: resource != "memory" && resource != "applications" && resource != "automation" && resource != "orchestration" && resource != "settings" && (resource != "dictionaries" || action == "use"), TemporaryEligible: resource == "files" && action == "read" || resource == "dictionaries" && action == "use"})
 		}
 	}
+	for _, action := range []string{"read", "update"} {
+		out = append(out, &genidentity.PermissionDefinition{Code: "aiConfig:" + action, Module: "system", Function: "aiConfig", Action: action})
+	}
+	out = append(out, &genidentity.PermissionDefinition{Code: "knowledge:update", Module: "system", Function: "knowledge", Action: "update"})
 	for _, action := range []string{"read", "edit", "validate", "publish", "bind", "rollback", "records"} {
 		out = append(out, &genidentity.PermissionDefinition{Code: "executionPlans:" + action, Module: "system", Function: "executionPlans", Action: action, ScopeConfigurable: false, TemporaryEligible: false})
 	}
-	sort.SliceStable(out[18:], func(i, j int) bool { return out[18+i].Code < out[18+j].Code })
+	extensions := out[standardCount:]
+	sort.SliceStable(extensions, func(i, j int) bool { return extensions[i].Code < extensions[j].Code })
 	return out
 }
 func permissionDefinition(code string) *genidentity.PermissionDefinition {
@@ -44,7 +54,17 @@ func permissionDefinition(code string) *genidentity.PermissionDefinition {
 	return nil
 }
 func (p *Principal) permanent() (*Principal, error) {
-	return newPrincipal(p.Account, p.TenantID, p.PermanentGrants, p.permissionCodes)
+	base, err := newPrincipal(p.Account, p.TenantID, p.SubjectID, p.PermanentGrants, p.permissionCodes)
+	if err == nil {
+		base.delegableGrants = p.delegableGrants
+		base.ActingOrganization = p.ActingOrganization
+		base.IdentityBindingID = p.IdentityBindingID
+	}
+	return base, err
+}
+
+func (p *Principal) delegable() (*Principal, error) {
+	return newPrincipal(p.Account, p.TenantID, p.SubjectID, p.delegableGrants, p.permissionCodes)
 }
 
 // ConfigurePluginPermissions builds an instance-local catalog before serving requests.

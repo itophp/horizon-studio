@@ -2,11 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import {
-  EditorDialog,
-  ErrorBanner,
-  Loading,
-} from "@/features/administration/shared";
+import { EditorDialog, ErrorBanner, Loading } from "@/features/identity/shared";
 import { driveFolderPath, driveFolders } from "@/lib/capabilities";
 
 export function MoveDialog({

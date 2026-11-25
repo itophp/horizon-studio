@@ -9,7 +9,7 @@ SELECT c.payload FROM orch_checkpoints c JOIN ai_runs r ON r.tenant_id = c.tenan
 WHERE c.tenant_id = $1 AND r.account_id = $2 AND c.run_id = $3 AND c.checkpoint_key = $4;
 
 -- name: OrchCandidates :many
-SELECT r.tenant_id, r.account_id, r.department_id, r.id
+SELECT r.tenant_id, r.account_id, r.id, COALESCE(r.identity_binding_id::text, '')::text AS identity_binding_id
 FROM ai_runs r JOIN orch_checkpoints c ON c.tenant_id = r.tenant_id AND c.run_id = r.id AND c.checkpoint_key = 'manifest'
 WHERE r.agent = 'orchestration' AND r.status IN ('running', 'awaiting_approval') AND c.lease_until < now()
 ORDER BY c.lease_until, r.id LIMIT 16;
@@ -32,7 +32,14 @@ AND status IN ('running','awaiting_approval');
 
 -- name: OrchFindStart :one
 SELECT c.run_id FROM orch_checkpoints c JOIN ai_runs r ON r.tenant_id = c.tenant_id AND r.id = c.run_id
-WHERE c.tenant_id = $1 AND r.account_id = $2 AND c.checkpoint_key = $3;
+WHERE c.tenant_id = $1 AND r.account_id = $2 AND c.checkpoint_key = $3
+AND r.identity_binding_id IS NOT DISTINCT FROM NULLIF(sqlc.arg(identity_binding_id)::text, '')::uuid;
+
+-- name: OrchCancelRun :execrows
+UPDATE ai_runs SET status = 'cancelled', finished_at = now()
+WHERE tenant_id = $1 AND account_id = $2 AND id = $3 AND agent = 'orchestration'
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF(sqlc.arg(identity_binding_id)::text, '')::uuid
+AND status IN ('running','awaiting_approval');
 
 -- name: OrchStartLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(lock_key)::text, 0));

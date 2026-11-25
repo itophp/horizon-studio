@@ -3,22 +3,21 @@ package applicationruntime
 import (
 	"testing"
 
-	"horizon/applications/projects"
 	ar "horizon/foundation/kernel/applicationruntime"
 )
 
-func TestPublishedProjectImportReceivesDeploymentTemplate(t *testing.T) {
-	baseline := projects.RuntimeApplication()
+func TestPublishedImportReceivesDeploymentTemplate(t *testing.T) {
+	baseline := widgetApplication()
 	module := &Module{Versions: []ar.ApplicationV2{baseline}}
 	published := ar.Canonical(baseline)
 	var component *ar.ComponentSpec
 	for _, page := range published.Protocol.Pages {
-		if page.ID == "project.import" {
-			component, _ = ar.FindAIComponent(page.Root, "project-batch-import")
+		if page.ID == "widget.import" {
+			component, _ = ar.FindAIComponent(page.Root, "widget-batch-import")
 		}
 	}
 	if component == nil {
-		t.Fatal("project import component not found")
+		t.Fatal("widget import component not found")
 	}
 	delete(component.Props, "templatePath")
 	published.PluginVersion = "0.0.0"
@@ -28,7 +27,7 @@ func TestPublishedProjectImportReceivesDeploymentTemplate(t *testing.T) {
 	}
 	published.PluginVersion = baseline.PluginVersion
 	module.supplyPublishedImportTemplates(&published)
-	if got := component.Props["templatePath"]; got != "/templates/projects-import.xlsx" {
+	if got := component.Props["templatePath"]; got != "/templates/widgets-import.xlsx" {
 		t.Fatalf("legacy snapshot template: %v", got)
 	}
 	if err := ar.ValidateProtocol(*published.Protocol); err != nil {

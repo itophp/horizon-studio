@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { errorText } from "@/features/administration/shared";
+import { errorText } from "@/features/identity/shared";
 import {
   studio,
   type Item,

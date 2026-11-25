@@ -4,7 +4,7 @@ import { Activity, Pause, Play, Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ErrorBanner, Loading } from "@/features/administration/shared";
+import { ErrorBanner, Loading } from "@/features/identity/shared";
 import { studio, type ProjectService } from "./api";
 import { Library, RecordHeader } from "./library";
 import {

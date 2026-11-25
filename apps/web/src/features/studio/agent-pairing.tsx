@@ -26,7 +26,8 @@ import {
 export function AgentPairing(props: {
   sessionScope: string;
   accountId: number;
-  departmentId: number;
+  tenantId: string;
+  identityBindingId: string;
 }) {
   const { t } = useTranslation("studio");
   const [open, setOpen] = useState(false);
@@ -52,12 +53,14 @@ export function AgentPairing(props: {
 function PairingForm({
   sessionScope,
   accountId,
-  departmentId,
+  tenantId,
+  identityBindingId,
   onBusyChange,
 }: {
   sessionScope: string;
   accountId: number;
-  departmentId: number;
+  tenantId: string;
+  identityBindingId: string;
   onBusyChange: (busy: boolean) => void;
 }) {
   const { t } = useTranslation("studio");
@@ -104,14 +107,13 @@ function PairingForm({
     try {
       if (!secret.current) {
         secret.current = await issueStudioMcpCredential(
-          departmentId,
           password,
           request.signal,
         );
       }
       await saveStudioMcpCredential(
         frame,
-        { token: secret.current, accountId, departmentId },
+        { token: secret.current, accountId, tenantId, identityBindingId },
         request.signal,
       );
       secret.current = undefined;

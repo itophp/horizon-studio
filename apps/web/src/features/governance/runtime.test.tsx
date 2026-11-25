@@ -9,9 +9,13 @@ const fixture = vi.hoisted(() => ({
   personal: false,
   preferences: vi.fn(async () => ({ status: 200 })),
 }));
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useAuth: () => ({
-    profile: { tenantId: "runtime", account: { id: 1 }, activeDepartmentId: 2 },
+    profile: {
+      tenantId: "runtime",
+      account: { id: 1 },
+      identityBindingId: "binding-2",
+    },
   }),
 }));
 vi.mock("@/lib/capabilities", async (original) => {

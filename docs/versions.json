@@ -305,10 +305,6 @@
     "version": "v1.31.1",
     "source": "https://proxy.golang.org/github.com/sqlc-dev/sqlc/@latest"
   },
-  "github.com/pressly/goose/v3": {
-    "version": "v3.29.0",
-    "source": "https://proxy.golang.org/github.com/pressly/goose/v3/@latest"
-  },
   "github.com/casbin/casbin/v2": {
     "version": "v2.135.0",
     "source": "https://proxy.golang.org/github.com/casbin/casbin/v2/@latest"

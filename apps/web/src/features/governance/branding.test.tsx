@@ -5,7 +5,7 @@ import { I18nextProvider, useTranslation } from "react-i18next";
 import { i18n, changeLanguage } from "@/i18n";
 import { ThemeProvider } from "@/app/providers/theme";
 import { useBranding } from "./branding";
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useAuth: () => ({ profile: undefined }),
 }));
 vi.mock("@/api/generated/baseline", async (original) => {
@@ -41,7 +41,7 @@ function BrandView() {
   const { t } = useTranslation();
   return (
     <>
-      <p>{brand.text("branding.tagline", t("admin:workspace"))}</p>
+      <p>{brand.text("branding.tagline", t("admin:subtitle"))}</p>
       <footer>{brand.text("branding.footer", t("admin:footer"))}</footer>
     </>
   );
@@ -60,7 +60,7 @@ it("localizes default branding while preserving an explicitly empty published va
       </ThemeProvider>
     </I18nextProvider>,
   );
-  expect(await screen.findByText("管理工作空间")).toBeVisible();
+  expect(await screen.findByText("系统管理")).toBeVisible();
   await vi.waitFor(() =>
     expect(screen.getByRole("contentinfo")).toBeEmptyDOMElement(),
   );

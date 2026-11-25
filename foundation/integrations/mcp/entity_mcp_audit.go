@@ -14,7 +14,6 @@ func callAuditEntity() contracts.Entity {
 			{Name: "id", Kind: contracts.AttributeSystem, Type: contracts.TypeInteger, Required: true},
 			{Name: "accountId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Required: true},
 			{Name: "tokenId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Required: true},
-			{Name: "departmentId", Kind: contracts.AttributeReference, Type: contracts.TypeReference, Required: true},
 			{Name: "tool", Kind: contracts.AttributeBusiness, Type: contracts.TypeString, Required: true},
 			{Name: "resultCode", Kind: contracts.AttributeBusiness, Type: contracts.TypeString, Required: true},
 			{Name: "durationMs", Kind: contracts.AttributeSystem, Type: contracts.TypeInteger, Required: true},

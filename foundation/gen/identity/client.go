@@ -15,32 +15,137 @@ import (
 
 // Client is the "identity" service client.
 type Client struct {
+	SamlCallbackEndpoint           goa.Endpoint
+	CompleteSamlEndpoint           goa.Endpoint
+	FederationProvidersEndpoint    goa.Endpoint
+	StartFederationEndpoint        goa.Endpoint
+	CompleteFederationEndpoint     goa.Endpoint
 	TemporaryAccessEndpoint        goa.Endpoint
 	RequestTemporaryAccessEndpoint goa.Endpoint
 	ReviewTemporaryAccessEndpoint  goa.Endpoint
 	CancelTemporaryAccessEndpoint  goa.Endpoint
 	RevokeTemporaryAccessEndpoint  goa.Endpoint
-	SwitchDepartmentEndpoint       goa.Endpoint
+	ListSignInIdentitiesEndpoint   goa.Endpoint
+	SelectSignInIdentityEndpoint   goa.Endpoint
+	RedeemSignInInvitationEndpoint goa.Endpoint
 	LoginEndpoint                  goa.Endpoint
+	RequestRegistrationEndpoint    goa.Endpoint
+	CompleteRegistrationEndpoint   goa.Endpoint
+	RequestPasswordResetEndpoint   goa.Endpoint
+	CompletePasswordResetEndpoint  goa.Endpoint
 	MeEndpoint                     goa.Endpoint
 	LogoutEndpoint                 goa.Endpoint
+	RefreshSessionEndpoint         goa.Endpoint
 	SnapshotEndpoint               goa.Endpoint
 }
 
 // NewClient initializes a "identity" service client given the endpoints.
-func NewClient(temporaryAccess, requestTemporaryAccess, reviewTemporaryAccess, cancelTemporaryAccess, revokeTemporaryAccess, switchDepartment, login, me, logout, snapshot goa.Endpoint) *Client {
+func NewClient(samlCallback, completeSaml, federationProviders, startFederation, completeFederation, temporaryAccess, requestTemporaryAccess, reviewTemporaryAccess, cancelTemporaryAccess, revokeTemporaryAccess, listSignInIdentities, selectSignInIdentity, redeemSignInInvitation, login, requestRegistration, completeRegistration, requestPasswordReset, completePasswordReset, me, logout, refreshSession, snapshot goa.Endpoint) *Client {
 	return &Client{
+		SamlCallbackEndpoint:           samlCallback,
+		CompleteSamlEndpoint:           completeSaml,
+		FederationProvidersEndpoint:    federationProviders,
+		StartFederationEndpoint:        startFederation,
+		CompleteFederationEndpoint:     completeFederation,
 		TemporaryAccessEndpoint:        temporaryAccess,
 		RequestTemporaryAccessEndpoint: requestTemporaryAccess,
 		ReviewTemporaryAccessEndpoint:  reviewTemporaryAccess,
 		CancelTemporaryAccessEndpoint:  cancelTemporaryAccess,
 		RevokeTemporaryAccessEndpoint:  revokeTemporaryAccess,
-		SwitchDepartmentEndpoint:       switchDepartment,
+		ListSignInIdentitiesEndpoint:   listSignInIdentities,
+		SelectSignInIdentityEndpoint:   selectSignInIdentity,
+		RedeemSignInInvitationEndpoint: redeemSignInInvitation,
 		LoginEndpoint:                  login,
+		RequestRegistrationEndpoint:    requestRegistration,
+		CompleteRegistrationEndpoint:   completeRegistration,
+		RequestPasswordResetEndpoint:   requestPasswordReset,
+		CompletePasswordResetEndpoint:  completePasswordReset,
 		MeEndpoint:                     me,
 		LogoutEndpoint:                 logout,
+		RefreshSessionEndpoint:         refreshSession,
 		SnapshotEndpoint:               snapshot,
 	}
+}
+
+// SamlCallback calls the "saml_callback" endpoint of the "identity" service.
+// SamlCallback may return the following errors:
+//   - "unauthenticated" (type *IAMProblem)
+//   - "rate_limited" (type *IAMProblem)
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) SamlCallback(ctx context.Context, p *SamlCallbackPayload) (res *FederationStartResult, err error) {
+	var ires any
+	ires, err = c.SamlCallbackEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*FederationStartResult), nil
+}
+
+// CompleteSaml calls the "complete_saml" endpoint of the "identity" service.
+// CompleteSaml may return the following errors:
+//   - "unauthenticated" (type *IAMProblem)
+//   - "rate_limited" (type *IAMProblem)
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) CompleteSaml(ctx context.Context, p *CompleteSamlPayload) (res *FederationCompleteResult, err error) {
+	var ires any
+	ires, err = c.CompleteSamlEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*FederationCompleteResult), nil
+}
+
+// FederationProviders calls the "federation_providers" endpoint of the
+// "identity" service.
+// FederationProviders may return the following errors:
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) FederationProviders(ctx context.Context) (res []*FederationProvider, err error) {
+	var ires any
+	ires, err = c.FederationProvidersEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.([]*FederationProvider), nil
+}
+
+// StartFederation calls the "start_federation" endpoint of the "identity"
+// service.
+// StartFederation may return the following errors:
+//   - "invalid" (type *IAMProblem)
+//   - "rate_limited" (type *IAMProblem)
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) StartFederation(ctx context.Context, p *StartFederationPayload) (res *FederationStartResult, err error) {
+	var ires any
+	ires, err = c.StartFederationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*FederationStartResult), nil
+}
+
+// CompleteFederation calls the "complete_federation" endpoint of the
+// "identity" service.
+// CompleteFederation may return the following errors:
+//   - "unauthenticated" (type *IAMProblem)
+//   - "rate_limited" (type *IAMProblem)
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) CompleteFederation(ctx context.Context, p *CompleteFederationPayload) (res *FederationCompleteResult, err error) {
+	var ires any
+	ires, err = c.CompleteFederationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*FederationCompleteResult), nil
 }
 
 // TemporaryAccess calls the "temporary_access" endpoint of the "identity"
@@ -143,21 +248,50 @@ func (c *Client) RevokeTemporaryAccess(ctx context.Context, p *RevokeTemporaryAc
 	return ires.(*TemporaryAccessRecord), nil
 }
 
-// SwitchDepartment calls the "switch_department" endpoint of the "identity"
-// service.
-// SwitchDepartment may return the following errors:
+// ListSignInIdentities calls the "list_sign_in_identities" endpoint of the
+// "identity" service.
+// ListSignInIdentities may return the following errors:
+//   - "unauthenticated" (type *IAMProblem)
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) ListSignInIdentities(ctx context.Context, p *ListSignInIdentitiesPayload) (res []*SignInIdentity, err error) {
+	var ires any
+	ires, err = c.ListSignInIdentitiesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.([]*SignInIdentity), nil
+}
+
+// SelectSignInIdentity calls the "select_sign_in_identity" endpoint of the
+// "identity" service.
+// SelectSignInIdentity may return the following errors:
 //   - "unauthenticated" (type *IAMProblem)
 //   - "forbidden" (type *IAMProblem)
 //   - "unavailable" (type *IAMProblem)
 //   - "internal" (type *IAMProblem)
 //   - error: internal error
-func (c *Client) SwitchDepartment(ctx context.Context, p *SwitchDepartmentPayload) (res *SessionProfile, err error) {
+func (c *Client) SelectSignInIdentity(ctx context.Context, p *SelectSignInIdentityPayload) (res *SessionProfile, err error) {
 	var ires any
-	ires, err = c.SwitchDepartmentEndpoint(ctx, p)
+	ires, err = c.SelectSignInIdentityEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
 	return ires.(*SessionProfile), nil
+}
+
+// RedeemSignInInvitation calls the "redeem_sign_in_invitation" endpoint of the
+// "identity" service.
+// RedeemSignInInvitation may return the following errors:
+//   - "unauthenticated" (type *IAMProblem)
+//   - "forbidden" (type *IAMProblem)
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) RedeemSignInInvitation(ctx context.Context, p *RedeemSignInInvitationPayload) (err error) {
+	_, err = c.RedeemSignInInvitationEndpoint(ctx, p)
+	return
 }
 
 // Login calls the "login" endpoint of the "identity" service.
@@ -175,6 +309,58 @@ func (c *Client) Login(ctx context.Context, p *LoginPayload) (res *LoginResult, 
 		return
 	}
 	return ires.(*LoginResult), nil
+}
+
+// RequestRegistration calls the "request_registration" endpoint of the
+// "identity" service.
+// RequestRegistration may return the following errors:
+//   - "invalid" (type *IAMProblem)
+//   - "rate_limited" (type *IAMProblem)
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) RequestRegistration(ctx context.Context, p *RequestRegistrationPayload) (err error) {
+	_, err = c.RequestRegistrationEndpoint(ctx, p)
+	return
+}
+
+// CompleteRegistration calls the "complete_registration" endpoint of the
+// "identity" service.
+// CompleteRegistration may return the following errors:
+//   - "forbidden" (type *IAMProblem)
+//   - "rate_limited" (type *IAMProblem)
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) CompleteRegistration(ctx context.Context, p *CompleteRegistrationPayload) (err error) {
+	_, err = c.CompleteRegistrationEndpoint(ctx, p)
+	return
+}
+
+// RequestPasswordReset calls the "request_password_reset" endpoint of the
+// "identity" service.
+// RequestPasswordReset may return the following errors:
+//   - "rate_limited" (type *IAMProblem)
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) RequestPasswordReset(ctx context.Context, p *RequestPasswordResetPayload) (err error) {
+	_, err = c.RequestPasswordResetEndpoint(ctx, p)
+	return
+}
+
+// CompletePasswordReset calls the "complete_password_reset" endpoint of the
+// "identity" service.
+// CompletePasswordReset may return the following errors:
+//   - "invalid" (type *IAMProblem)
+//   - "forbidden" (type *IAMProblem)
+//   - "rate_limited" (type *IAMProblem)
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) CompletePasswordReset(ctx context.Context, p *CompletePasswordResetPayload) (err error) {
+	_, err = c.CompletePasswordResetEndpoint(ctx, p)
+	return
 }
 
 // Me calls the "me" endpoint of the "identity" service.
@@ -207,9 +393,28 @@ func (c *Client) Logout(ctx context.Context, p *LogoutPayload) (res *LogoutResul
 	return ires.(*LogoutResult), nil
 }
 
+// RefreshSession calls the "refresh_session" endpoint of the "identity"
+// service.
+// RefreshSession may return the following errors:
+//   - "invalid" (type *IAMProblem)
+//   - "unauthenticated" (type *IAMProblem)
+//   - "forbidden" (type *IAMProblem)
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) RefreshSession(ctx context.Context, p *RefreshSessionPayload) (res *LoginResult, err error) {
+	var ires any
+	ires, err = c.RefreshSessionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*LoginResult), nil
+}
+
 // Snapshot calls the "snapshot" endpoint of the "identity" service.
 // Snapshot may return the following errors:
 //   - "unauthenticated" (type *IAMProblem)
+//   - "forbidden" (type *IAMProblem)
 //   - "unavailable" (type *IAMProblem)
 //   - "internal" (type *IAMProblem)
 //   - error: internal error

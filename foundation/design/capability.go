@@ -117,6 +117,10 @@ var CapabilityEvent = Type("CapabilityEvent", func() {
 	Required("eventId", "type", "aggregateType", "aggregateId", "payload", "invocationId", "correlationId", "causationId", "depth", "createdAt", "aiStatus", "aiPolicy", "aiRunId")
 })
 
+var MachineAuthorization = APIKeySecurity("machine_credential", func() {
+	Description("Authorization header with a Bearer credential scoped to one machine and audience.")
+})
+
 var _ = Service("capability", func() {
 	Description("Capability catalog, invocation gateway, audit trail, business events and human approvals.")
 	Security(SessionCookie)
@@ -128,7 +132,6 @@ var _ = Service("capability", func() {
 	Error("unavailable", IAMProblem)
 	Error("internal", IAMProblem)
 	HTTP(func() {
-		Header("cookie:Cookie")
 		Response("unauthenticated", StatusUnauthorized)
 		Response("forbidden", StatusForbidden)
 		Response("invalid", StatusBadRequest)
@@ -141,7 +144,7 @@ var _ = Service("capability", func() {
 		Description("List the capabilities the caller may use, with their policy and contracts.")
 		Payload(func() { cookiePayload() })
 		Result(ArrayOf(CapabilityContract))
-		HTTP(func() { GET("/api/capabilities"); Response(StatusOK) })
+		HTTP(func() { GET("/api/capabilities"); Header("cookie:Cookie"); Response(StatusOK) })
 	})
 	Method("invoke", func() {
 		Description("Invoke one capability through the full gateway pipeline.")
@@ -159,6 +162,27 @@ var _ = Service("capability", func() {
 		Result(CapabilityResult)
 		HTTP(func() {
 			POST("/api/capabilities/{name}/invocations")
+			Header("cookie:Cookie")
+			Response(StatusOK)
+		})
+	})
+	Method("invoke_machine", func() {
+		Description("Invoke a pinned capability using an audience-bound machine credential.")
+		Security(MachineAuthorization)
+		Payload(func() {
+			APIKey("machine_credential", "authorization", String)
+			Attribute("delegationId", String, func() { Pattern("^[0-9a-fA-F-]{36}$") })
+			Attribute("name", String, func() { MinLength(1); MaxLength(80) })
+			Attribute("version", String, func() { MinLength(1); MaxLength(16) })
+			Attribute("input", Any)
+			Attribute("idempotencyKey", String, func() { MaxLength(120) })
+			Required("authorization", "name", "version", "input")
+		})
+		Result(CapabilityResult)
+		HTTP(func() {
+			POST("/api/capabilities/{name}/machine-invocations")
+			Header("authorization:Authorization")
+			Header("delegationId:X-Horizon-Delegation")
 			Response(StatusOK)
 		})
 	})
@@ -169,7 +193,12 @@ var _ = Service("capability", func() {
 			Attribute("limit", Int, func() { Minimum(1); Maximum(100); Default(30) })
 		})
 		Result(ArrayOf(CapabilityInvocation))
-		HTTP(func() { GET("/api/capabilities/invocations"); Param("limit"); Response(StatusOK) })
+		HTTP(func() {
+			GET("/api/capabilities/invocations")
+			Header("cookie:Cookie")
+			Param("limit")
+			Response(StatusOK)
+		})
 	})
 	Method("invocation", func() {
 		Description("Read one invocation owned by the caller.")
@@ -179,13 +208,17 @@ var _ = Service("capability", func() {
 			Required("invocationId")
 		})
 		Result(CapabilityInvocation)
-		HTTP(func() { GET("/api/capabilities/invocations/{invocationId}"); Response(StatusOK) })
+		HTTP(func() {
+			GET("/api/capabilities/invocations/{invocationId}")
+			Header("cookie:Cookie")
+			Response(StatusOK)
+		})
 	})
 	Method("approvals", func() {
 		Description("List pending confirmations for the caller, or every pending card for a reviewer.")
 		Payload(func() { cookiePayload() })
 		Result(ArrayOf(CapabilityApproval))
-		HTTP(func() { GET("/api/capabilities/approvals"); Response(StatusOK) })
+		HTTP(func() { GET("/api/capabilities/approvals"); Header("cookie:Cookie"); Response(StatusOK) })
 	})
 	Method("decide", func() {
 		Description("Approve or reject a pending confirmation. Approval re-resolves the requester's authority.")
@@ -197,7 +230,11 @@ var _ = Service("capability", func() {
 			Required("id", "approve")
 		})
 		Result(CapabilityResult)
-		HTTP(func() { POST("/api/capabilities/approvals/{id}/decisions"); Response(StatusOK) })
+		HTTP(func() {
+			POST("/api/capabilities/approvals/{id}/decisions")
+			Header("cookie:Cookie")
+			Response(StatusOK)
+		})
 	})
 	Method("events", func() {
 		Description("List business events the caller may see, with their AI trigger status.")
@@ -206,6 +243,6 @@ var _ = Service("capability", func() {
 			Attribute("limit", Int, func() { Minimum(1); Maximum(100); Default(30) })
 		})
 		Result(ArrayOf(CapabilityEvent))
-		HTTP(func() { GET("/api/capabilities/events"); Param("limit"); Response(StatusOK) })
+		HTTP(func() { GET("/api/capabilities/events"); Header("cookie:Cookie"); Param("limit"); Response(StatusOK) })
 	})
 })

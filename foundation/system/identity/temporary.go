@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	genidentity "horizon/foundation/gen/identity"
 	"horizon/internal/repository/dbgen"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -22,8 +21,18 @@ func validTemporaryMinutes(minutes int) bool {
 	return false
 }
 func (s *Service) canReview(p *Principal) bool {
-	base, err := p.permanent()
-	return err == nil && base.Can("temporary:approve")
+	return p.CanPermanent("temporary:approve")
+}
+
+func currentTemporaryActor(ctx context.Context) (*Principal, error) {
+	p, err := Current(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if p.IdentityBindingID != "" {
+		return nil, problem("forbidden")
+	}
+	return p, nil
 }
 func (s *Service) temporaryRecords(ctx context.Context, p *Principal) ([]*genidentity.TemporaryAccessRecord, error) {
 	rows, err := s.repo.q.IAMListTemporaryRequests(ctx, dbgen.IAMListTemporaryRequestsParams{TenantID: p.TenantID, AllRequests: s.canReview(p), ApplicantID: p.Account.ID})
@@ -40,7 +49,7 @@ func (s *Service) temporaryRecords(ctx context.Context, p *Principal) ([]*genide
 		if err != nil {
 			return nil, safe(err)
 		}
-		out = append(out, &genidentity.TemporaryAccessRecord{ID: row.ID, ApplicantID: row.ApplicantID, ApplicantName: row.ApplicantName, DepartmentID: row.DepartmentID, DepartmentName: row.DepartmentName, RequestedGrants: requested, RequestedMinutes: int(row.RequestedMinutes), Reason: row.Reason, Status: row.Status, ApprovedGrants: approved, ApprovedMinutes: int(row.ApprovedMinutes), ReviewerID: row.ReviewerID, ReviewerName: row.ReviewerName, ReviewNote: row.ReviewNote, CreatedAt: timeValue(row.CreatedAt), ReviewedAt: timeValue(row.ReviewedAt), ExpiresAt: timeValue(row.ExpiresAt)})
+		out = append(out, &genidentity.TemporaryAccessRecord{ID: row.ID, ApplicantID: row.ApplicantID, ApplicantName: row.ApplicantName, RequestedGrants: requested, RequestedMinutes: int(row.RequestedMinutes), Reason: row.Reason, Status: row.Status, ApprovedGrants: approved, ApprovedMinutes: int(row.ApprovedMinutes), ReviewerID: row.ReviewerID, ReviewerName: row.ReviewerName, ReviewNote: row.ReviewNote, CreatedAt: timeValue(row.CreatedAt), ReviewedAt: timeValue(row.ReviewedAt), ExpiresAt: timeValue(row.ExpiresAt)})
 	}
 	return out, nil
 }
@@ -57,7 +66,7 @@ func (s *Service) temporaryRecord(ctx context.Context, p *Principal, id int64) (
 	return nil, problem("not_found")
 }
 func (s *Service) TemporaryAccess(ctx context.Context, _ *genidentity.TemporaryAccessPayload) (*genidentity.TemporaryAccessWorkspace, error) {
-	p, err := Current(ctx)
+	p, err := currentTemporaryActor(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -65,15 +74,7 @@ func (s *Service) TemporaryAccess(ctx context.Context, _ *genidentity.TemporaryA
 	if err != nil {
 		return nil, err
 	}
-	choices, err := s.repo.q.IAMScopeDepartmentChoices(ctx, dbgen.IAMScopeDepartmentChoicesParams{TenantID: p.TenantID, AllCompanies: s.canReview(p), OrganizationID: p.Account.OrganizationID})
-	if err != nil {
-		return nil, safe(err)
-	}
-	departments := []*genidentity.ScopeDepartmentChoice{}
-	for _, row := range choices {
-		departments = append(departments, &genidentity.ScopeDepartmentChoice{ID: row.ID, Name: row.Name, OrganizationID: row.OrganizationID, OrganizationName: row.OrganizationName})
-	}
-	return &genidentity.TemporaryAccessWorkspace{Requests: requests, Catalog: s.permissionCatalog(), Departments: departments, EffectiveGrants: p.Grants, CanReview: s.canReview(p)}, nil
+	return &genidentity.TemporaryAccessWorkspace{Requests: requests, Catalog: s.permissionCatalog(), EffectiveGrants: p.Grants, CanReview: s.canReview(p)}, nil
 }
 func (s *Service) validateTemporary(ctx context.Context, p *Principal, grants []*genidentity.PermissionGrant, minutes int) error {
 	policy, err := s.policy(ctx, p.TenantID)
@@ -87,7 +88,7 @@ func (s *Service) validateTemporary(ctx context.Context, p *Principal, grants []
 	if !allowed || minutes > policy.MaximumMinutes || !validTemporaryMinutes(minutes) || len(grants) == 0 || len(grants) > 30 {
 		return problem("invalid")
 	}
-	if err := s.validateGrants(ctx, p, grants, true); err != nil {
+	if err := s.validateTenantGrants(grants); err != nil {
 		return err
 	}
 	for _, grant := range grants {
@@ -95,14 +96,11 @@ func (s *Service) validateTemporary(ctx context.Context, p *Principal, grants []
 		if definition == nil || !definition.TemporaryEligible || (!definition.ScopeConfigurable && grant.Scope != "ALL") {
 			return problem("invalid")
 		}
-		if grant.Scope != "CUSTOM" && len(grant.DepartmentIds) > 0 {
-			return problem("invalid")
-		}
 	}
 	return nil
 }
 func (s *Service) RequestTemporaryAccess(ctx context.Context, payload *genidentity.RequestTemporaryAccessPayload) (*genidentity.TemporaryAccessRecord, error) {
-	p, err := Current(ctx)
+	p, err := currentTemporaryActor(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -117,11 +115,11 @@ func (s *Service) RequestTemporaryAccess(ctx context.Context, payload *genidenti
 	if err = s.validateTemporary(ctx, p, payload.Grants, payload.Minutes); err != nil {
 		return nil, err
 	}
-	raw, err := json.Marshal(payload.Grants)
+	raw, err := encodeTenantGrants(payload.Grants)
 	if err != nil {
 		return nil, safe(err)
 	}
-	id, err := s.repo.q.IAMCreateTemporaryRequest(ctx, dbgen.IAMCreateTemporaryRequestParams{TenantID: p.TenantID, ApplicantID: p.Account.ID, RequestedGrants: raw, RequestedMinutes: int32(payload.Minutes), Reason: reason, DepartmentID: p.Account.DepartmentID})
+	id, err := s.repo.q.IAMCreateTemporaryRequest(ctx, dbgen.IAMCreateTemporaryRequestParams{TenantID: p.TenantID, ApplicantID: p.Account.ID, RequestedGrants: raw, RequestedMinutes: int32(payload.Minutes), Reason: reason})
 	if err != nil {
 		return nil, safe(err)
 	}
@@ -147,7 +145,8 @@ func (s *Service) resolveTemporary(ctx context.Context, p *Principal, account *g
 	return out, nil
 }
 func (s *Service) withinApprovalScope(ctx context.Context, base *Principal, permission string, target Scope) error {
-	if !base.Can(permission) {
+	if !base.Can(permission) || len(target.OrgIDs) != 0 || len(target.DeptIDs) != 0 ||
+		base.ActingOrganization.OrganizationID != target.ActingOrganizationID {
 		return problem("forbidden")
 	}
 	definition := s.permissionDefinition(permission)
@@ -164,32 +163,13 @@ func (s *Service) withinApprovalScope(ctx context.Context, base *Principal, perm
 	if target.All {
 		return problem("forbidden")
 	}
-	for _, org := range target.OrgIDs {
-		if !contains(ceiling.OrgIDs, org) {
-			return problem("forbidden")
-		}
-	}
-	for _, dept := range target.DeptIDs {
-		if contains(ceiling.DeptIDs, dept) {
-			continue
-		}
-		row, err := s.repo.department(ctx, tenantScope(base), dept)
-		if err != nil {
-			return safe(err)
-		}
-		if !contains(ceiling.OrgIDs, row.OrganizationID) {
-			return problem("forbidden")
-		}
-	}
-	if target.OwnID != 0 {
-		if _, err := s.repo.account(ctx, ceiling, target.OwnID); err != nil {
-			return problem("forbidden")
-		}
+	if target.OwnID != 0 && ceiling.OwnID != target.OwnID {
+		return problem("forbidden")
 	}
 	return nil
 }
 func (s *Service) ReviewTemporaryAccess(ctx context.Context, payload *genidentity.ReviewTemporaryAccessPayload) (*genidentity.TemporaryAccessRecord, error) {
-	p, err := Current(ctx)
+	p, err := currentTemporaryActor(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -214,13 +194,9 @@ func (s *Service) ReviewTemporaryAccess(ctx context.Context, payload *genidentit
 		if err = s.validateTemporary(ctx, p, payload.Grants, payload.Minutes); err != nil {
 			return nil, err
 		}
-		account, err := s.repo.account(ctx, tenantScope(p), row.ApplicantID)
+		account, err := s.repo.authorityAccount(ctx, p.TenantID, row.ApplicantID)
 		if err != nil {
 			return nil, safe(err)
-		}
-		account, err = s.departmentAccount(ctx, p.TenantID, account, row.DepartmentID)
-		if err != nil {
-			return nil, problem("conflict")
 		}
 		if account.Status != "active" {
 			return nil, problem("conflict")
@@ -256,7 +232,7 @@ func (s *Service) ReviewTemporaryAccess(ctx context.Context, payload *genidentit
 	if len(payload.Note) > 2000 {
 		return nil, problem("invalid")
 	}
-	grantJSON, err := json.Marshal(approved)
+	grantJSON, err := encodeTenantGrants(approved)
 	if err != nil {
 		return nil, safe(err)
 	}
@@ -274,7 +250,7 @@ func (s *Service) ReviewTemporaryAccess(ctx context.Context, payload *genidentit
 	return s.temporaryRecord(ctx, p, row.ID)
 }
 func (s *Service) CancelTemporaryAccess(ctx context.Context, payload *genidentity.CancelTemporaryAccessPayload) (*genidentity.TemporaryAccessRecord, error) {
-	p, err := Current(ctx)
+	p, err := currentTemporaryActor(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +261,7 @@ func (s *Service) CancelTemporaryAccess(ctx context.Context, payload *genidentit
 	return s.temporaryRecord(ctx, p, payload.ID)
 }
 func (s *Service) RevokeTemporaryAccess(ctx context.Context, payload *genidentity.RevokeTemporaryAccessPayload) (*genidentity.TemporaryAccessRecord, error) {
-	p, err := Current(ctx)
+	p, err := currentTemporaryActor(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +272,10 @@ func (s *Service) RevokeTemporaryAccess(ctx context.Context, payload *genidentit
 	return s.temporaryRecord(ctx, p, payload.ID)
 }
 func (s *Service) loadTemporary(ctx context.Context, p *Principal) error {
-	rows, err := s.repo.q.IAMActiveTemporaryGrants(ctx, dbgen.IAMActiveTemporaryGrantsParams{TenantID: p.TenantID, ApplicantID: p.Account.ID, DepartmentID: p.Account.DepartmentID})
+	if p.IdentityBindingID != "" {
+		return nil
+	}
+	rows, err := s.repo.q.IAMActiveTemporaryGrants(ctx, dbgen.IAMActiveTemporaryGrantsParams{TenantID: p.TenantID, ApplicantID: p.Account.ID})
 	if err != nil {
 		return safe(err)
 	}
@@ -310,12 +289,19 @@ func (s *Service) loadTemporary(ctx context.Context, p *Principal) error {
 			return safe(err)
 		}
 		for _, grant := range grants {
-			definition := s.permissionDefinition(grant.Permission)
-			scope, ok := scopes[grant.Permission]
-			if definition == nil || !definition.TemporaryEligible || grant.Effect != "allow" || !ok || scope.TenantID != p.TenantID {
+			if grant == nil {
 				return problem("forbidden")
 			}
-			if _, err = p.enforcer.AddPolicy(strconv.FormatInt(p.Account.ID, 10), grant.Permission, "allow"); err != nil {
+			definition := s.permissionDefinition(grant.Permission)
+			scope, ok := scopes[grant.Permission]
+			tenantScope := grant.Scope == "ALL" && scope.All && scope.OwnID == 0
+			ownScope := grant.Scope == "OWN" && !scope.All && scope.OwnID == p.Account.ID
+			if definition == nil || !definition.TemporaryEligible || grant.Effect != "allow" ||
+				!ok || scope.TenantID != p.TenantID || scope.ActingOrganizationID != 0 || len(scope.OrgIDs) != 0 ||
+				len(scope.DeptIDs) != 0 || (!tenantScope && !ownScope) {
+				return problem("forbidden")
+			}
+			if _, err = p.enforcer.AddPolicy(p.policySubject, grant.Permission, "allow"); err != nil {
 				return safe(err)
 			}
 			p.Grants = append(p.Grants, grant)

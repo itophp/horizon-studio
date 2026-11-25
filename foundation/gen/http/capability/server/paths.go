@@ -19,6 +19,11 @@ func InvokeCapabilityPath(name string) string {
 	return fmt.Sprintf("/api/capabilities/%v/invocations", name)
 }
 
+// InvokeMachineCapabilityPath returns the URL path to the capability service invoke_machine HTTP endpoint.
+func InvokeMachineCapabilityPath(name string) string {
+	return fmt.Sprintf("/api/capabilities/%v/machine-invocations", name)
+}
+
 // InvocationsCapabilityPath returns the URL path to the capability service invocations HTTP endpoint.
 func InvocationsCapabilityPath() string {
 	return "/api/capabilities/invocations"

@@ -29,12 +29,32 @@ func workspaceSettingsProviders() []ar.Provider {
 	}
 }
 
-func workspaceSettingsEditor(active ar.Expression) ar.Node {
+func workspaceSettingsEditor(active ar.Expression, version string) ar.Node {
+	return workspaceSettingsForm(active, func(definition governance.Definition) bool {
+		if governance.IsBailianEmbeddingSetting(definition.Key) || governance.IsUnifiedAIModelSetting(definition.Key) {
+			return false
+		}
+		switch version {
+		case "1.0.1":
+			return definition.Group != "aiModels"
+		case "1.0.2":
+			return !slices.Contains([]string{"aiModels.glm.type", "aiModels.glm.providerId", "aiModels.custom.type"}, definition.Key)
+		case "1.0.3":
+			return !governance.IsAIModelSetting(definition.Key)
+		case "1.0.4":
+			return !governance.IsAISetting(definition.Key)
+		default:
+			return !governance.IsAISetting(definition.Key) && definition.Group != "smtp" && definition.Group != "templates"
+		}
+	})
+}
+
+func settingsChangeFormProps(include func(governance.Definition) bool, saveLabel string) (viewProps, bool) {
 	groups := []viewProps{}
 	fields := []viewProps{}
 	seen := map[string]bool{}
 	for _, definition := range governance.Registry {
-		if !slices.Contains(definition.Scopes, "workspace") {
+		if !slices.Contains(definition.Scopes, "workspace") || !include(definition) {
 			continue
 		}
 		if !seen[definition.Group] {
@@ -43,15 +63,21 @@ func workspaceSettingsEditor(active ar.Expression) ar.Node {
 		}
 		fields = append(fields, workspaceSettingField(definition))
 	}
-	editAllowed := permits("settings:update")
-	editor := componentNode("workspace-config-editor", "change-list-form", "$"+workspaceSettingsData, viewProps{
+	return viewProps{
 		"fields": fields, "groups": groups, "entriesPath": "entries",
 		"operationLabelKey": "governance:fieldOperation", "resetLabelKey": "governance:resetDefault",
-		"setLabelKey": "governance:set", "saveLabelKey": "governance:draft", "clearLabelKey": "governance:clear",
+		"setLabelKey": "governance:set", "saveLabelKey": saveLabel, "clearLabelKey": "governance:clear",
 		"noChangesKey": "governance:noChanges", "successKey": "governance:saved", "invalidKey": "governance:invalid",
 		"configuredKey": "governance:configured", "secretHintKey": "governance:secretHint",
-		"effectiveKey": "governance:effective", "reasonKey": "governance:reason",
-	}, ar.EventBinding{
+		"effectiveKey": "governance:effective",
+	}, seen["branding"]
+}
+
+func workspaceSettingsForm(active ar.Expression, include func(governance.Definition) bool) ar.Node {
+	props, hasBranding := settingsChangeFormProps(include, "governance:draft")
+	props["reasonKey"] = "governance:reason"
+	editAllowed := permits("settings:update")
+	editor := componentNode("workspace-config-editor", "change-list-form", "$"+workspaceSettingsData, props, ar.EventBinding{
 		Event: "submit", Action: "invoke", Target: "settings.draft.create@1.0.0", When: &editAllowed,
 		Payload: objectValue(
 			mapping("target", workspaceTarget()),
@@ -60,16 +86,16 @@ func workspaceSettingsEditor(active ar.Expression) ar.Node {
 			mapping("reason", fieldPath("event.reason")),
 		),
 	})
-	componentOf(editor).Bindings = []ar.Mapping{
-		mapping("disabled", operation("not", editAllowed)),
-		mapping("optionData", objectValue(mapping("brandingLogo", operation("if", permits("files:read"),
+	componentOf(editor).Bindings = []ar.Mapping{mapping("disabled", operation("not", editAllowed))}
+	if hasBranding {
+		componentOf(editor).Bindings = append(componentOf(editor).Bindings, mapping("optionData", objectValue(mapping("brandingLogo", operation("if", permits("files:read"),
 			operation("filter", fieldPath("data."+workspaceLogoData), same("record.purpose", "logo")),
 			constant(nil),
-		)))),
+		)))))
+		editor.Layout.Data = []ar.DataSpec{{
+			ID: workspaceLogoData, Provider: "workspace-logos", EnabledWhen: &active, NonBlocking: true,
+		}}
 	}
-	editor.Layout.Data = []ar.DataSpec{{
-		ID: workspaceLogoData, Provider: "workspace-logos", EnabledWhen: &active, NonBlocking: true,
-	}}
 	return editor
 }
 
@@ -110,7 +136,27 @@ func workspaceSettingField(definition governance.Definition) viewProps {
 
 const workspaceActionData = "_workspaceAction"
 
-func workspaceSettingsContent(active ar.Expression) ar.Node {
+func workspaceSettingsContent(active ar.Expression, version string) ar.Node {
+	children := []ar.Node{
+		workspaceSettingsEditor(active, version), workspaceDrafts(), workspaceHistory(),
+		workspaceScheduleQueue(), workspaceActionDialog("publish"), workspaceActionDialog("rollback"),
+		workspaceActionDialog("schedule"),
+	}
+	if version == "1.0.1" || version == "1.0.2" || version == "1.0.3" || version == "1.0.4" {
+		children = append([]ar.Node{workspaceSettingsToolbar()}, children...)
+	}
+	root := layoutNode("workspace-config-content", ar.LayoutProps{Gap: "16px"}, children...)
+	allowed := permits("settings:read")
+	root.Layout.Visible = &allowed
+	root.Layout.Data = []ar.DataSpec{
+		{ID: workspaceSettingsData, Provider: "workspace-settings", EnabledWhen: &active, NonBlocking: true, PollMs: 5000},
+		{ID: workspaceSchedulesData, Provider: "workspace-schedules", EnabledWhen: &active, NonBlocking: true, PollMs: 5000},
+		{ID: workspaceActionData},
+	}
+	return root
+}
+
+func workspaceSettingsToolbar() ar.Node {
 	revision := componentNode("workspace-settings-revision", "text", "$"+workspaceSettingsData, viewProps{"textKey": "governance:revision", "className": "muted-text"})
 	componentOf(revision).Bindings = []ar.Mapping{mapping("values", objectValue(
 		mapping("version", fieldPath("record.revision")),
@@ -123,22 +169,9 @@ func workspaceSettingsContent(active ar.Expression) ar.Node {
 		Payload: objectValue(workspaceInputs()...),
 	})
 	componentOf(export).Visible = &exportAllowed
-	toolbar := layoutNode("workspace-settings-toolbar", ar.LayoutProps{
+	return layoutNode("workspace-settings-toolbar", ar.LayoutProps{
 		ClassName: "gov-toolbar", Columns: "1fr max-content", Gap: "8px",
 	}, revision, export)
-	root := layoutNode("workspace-config-content", ar.LayoutProps{Gap: "16px"},
-		toolbar, workspaceSettingsEditor(active), workspaceDrafts(), workspaceHistory(),
-		workspaceScheduleQueue(), workspaceActionDialog("publish"), workspaceActionDialog("rollback"),
-		workspaceActionDialog("schedule"),
-	)
-	allowed := permits("settings:read")
-	root.Layout.Visible = &allowed
-	root.Layout.Data = []ar.DataSpec{
-		{ID: workspaceSettingsData, Provider: "workspace-settings", EnabledWhen: &active, NonBlocking: true, PollMs: 5000},
-		{ID: workspaceSchedulesData, Provider: "workspace-schedules", EnabledWhen: &active, NonBlocking: true, PollMs: 5000},
-		{ID: workspaceActionData},
-	}
-	return root
 }
 
 func workspaceDrafts() ar.Node {

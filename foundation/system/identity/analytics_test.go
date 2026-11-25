@@ -47,7 +47,7 @@ func TestAnalyticsProjectionCalendarAndMemberships(t *testing.T) {
 	if _, ok := rows[0]["email"]; ok {
 		t.Fatal("email leaked into the dashboard projection")
 	}
-	if err := analyticsDefinition().Output.Validate(contracts.Input(camelData(got).(map[string]any))); err != nil {
+	if err := analyticsDefinition().Output.Validate(contracts.Input(CapabilityData(got).(map[string]any))); err != nil {
 		t.Fatal(err)
 	}
 }

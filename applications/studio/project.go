@@ -11,7 +11,7 @@ import (
 
 	"horizon/foundation/kernel/capability/contracts"
 	"horizon/foundation/system/identity"
-	"horizon/internal/repository/dbgen"
+	"horizon/internal/repository/dbgen/studiodb"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -38,7 +38,7 @@ func floatPointer(value float64) *float64 { return &value }
 
 func intPtr(value int) *int { return &value }
 
-func projectOutput(row dbgen.StudioProjectCreateRow, event string) contracts.Output {
+func projectOutput(row studiodb.StudioProjectCreateRow, event string) contracts.Output {
 	return contracts.Output{Data: map[string]any{
 		"id": row.ID, "root": row.Root, "name": projectName(row.Name, row.Root), "developmentBrief": row.DevelopmentBrief,
 	}, Summary: "project=" + row.Root, Events: []contracts.Event{{
@@ -60,7 +60,7 @@ func instant(value pgtype.Timestamptz) string {
 	return value.Time.UTC().Format(time.RFC3339Nano)
 }
 
-func projectRefOutput(row dbgen.StudioProjectGetRow) map[string]any {
+func projectRefOutput(row studiodb.StudioProjectGetRow) map[string]any {
 	return map[string]any{"id": row.ID, "root": row.Root, "name": projectName(row.Name, row.Root),
 		"developmentBrief": row.DevelopmentBrief, "createdAt": instant(row.CreatedAt),
 		"aiAnalysis": row.AiAnalysis, "aiAnalyzedAt": instant(row.AiAnalyzedAt)}
@@ -103,7 +103,7 @@ func (m *Module) projectLink(ctx context.Context, tx pgx.Tx, in contracts.Input)
 	if err != nil {
 		return contracts.Output{}, err
 	}
-	row, err := dbgen.New(tx).StudioProjectCreate(ctx, dbgen.StudioProjectCreateParams{
+	row, err := studiodb.New(tx).StudioProjectCreate(ctx, studiodb.StudioProjectCreateParams{
 		TenantID: p.TenantID, Root: root, CreatedBy: p.Account.ID,
 		Name: strings.TrimSpace(stringField(in, "name")), DevelopmentBrief: developmentBrief(in),
 	})
@@ -148,7 +148,7 @@ func (m *Module) projectCreate(ctx context.Context, in contracts.Input) (contrac
 	if err != nil {
 		return contracts.Output{}, err
 	}
-	row, err := dbgen.New(m.pool).StudioProjectCreate(ctx, dbgen.StudioProjectCreateParams{
+	row, err := studiodb.New(m.pool).StudioProjectCreate(ctx, studiodb.StudioProjectCreateParams{
 		TenantID: p.TenantID, Root: root, CreatedBy: p.Account.ID,
 		Name: strings.TrimSpace(stringField(in, "name")), DevelopmentBrief: developmentBrief(in),
 	})
@@ -187,7 +187,7 @@ func (m *Module) projectList(ctx context.Context, in contracts.Input) (contracts
 	if !p.Can(ReadPermission) {
 		return contracts.Output{}, contracts.Problem("forbidden")
 	}
-	rows, err := dbgen.New(m.pool).StudioProjectList(ctx, dbgen.StudioProjectListParams{TenantID: p.TenantID, CreatedBy: p.Account.ID})
+	rows, err := studiodb.New(m.pool).StudioProjectList(ctx, studiodb.StudioProjectListParams{TenantID: p.TenantID, CreatedBy: p.Account.ID})
 	if err != nil {
 		return contracts.Output{}, err
 	}
@@ -230,7 +230,7 @@ func (m *Module) projectGet(ctx context.Context, in contracts.Input) (contracts.
 	if !ok || id < 1 {
 		return contracts.Output{}, contracts.Problem("invalid")
 	}
-	row, err := dbgen.New(m.pool).StudioProjectGet(ctx, dbgen.StudioProjectGetParams{TenantID: p.TenantID, ID: int64(id), CreatedBy: p.Account.ID})
+	row, err := studiodb.New(m.pool).StudioProjectGet(ctx, studiodb.StudioProjectGetParams{TenantID: p.TenantID, ID: int64(id), CreatedBy: p.Account.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return contracts.Output{}, contracts.Problem("not_found")
 	}
@@ -242,8 +242,8 @@ func (m *Module) projectGet(ctx context.Context, in contracts.Input) (contracts.
 
 // ownedProject loads the project row for a scoped operation, guaranteeing the
 // caller owns it before any side effect runs.
-func (m *Module) ownedProject(ctx context.Context, in contracts.Input) (*identity.Principal, dbgen.StudioProjectGetRow, error) {
-	var zero dbgen.StudioProjectGetRow
+func (m *Module) ownedProject(ctx context.Context, in contracts.Input) (*identity.Principal, studiodb.StudioProjectGetRow, error) {
+	var zero studiodb.StudioProjectGetRow
 	p, err := identity.Current(ctx)
 	if err != nil {
 		return p, zero, err
@@ -252,14 +252,14 @@ func (m *Module) ownedProject(ctx context.Context, in contracts.Input) (*identit
 	if !ok || id < 1 {
 		return p, zero, contracts.Problem("invalid")
 	}
-	row, err := dbgen.New(m.pool).StudioProjectGet(ctx, dbgen.StudioProjectGetParams{TenantID: p.TenantID, ID: int64(id), CreatedBy: p.Account.ID})
+	row, err := studiodb.New(m.pool).StudioProjectGet(ctx, studiodb.StudioProjectGetParams{TenantID: p.TenantID, ID: int64(id), CreatedBy: p.Account.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, zero, contracts.Problem("not_found")
 	}
 	return p, row, err
 }
 
-func ref(row dbgen.StudioProjectGetRow) projectRef {
+func ref(row studiodb.StudioProjectGetRow) projectRef {
 	return projectRef{ID: row.ID, Root: row.Root}
 }
 
@@ -275,7 +275,7 @@ func itoa(value int) string {
 
 // projectRootOf loads the canonical root of an owned project for CLI side effects.
 func (m *Module) projectRootOf(ctx context.Context, p *identity.Principal, projectID int64) (string, error) {
-	row, err := dbgen.New(m.pool).StudioProjectGet(ctx, dbgen.StudioProjectGetParams{TenantID: p.TenantID, ID: projectID, CreatedBy: p.Account.ID})
+	row, err := studiodb.New(m.pool).StudioProjectGet(ctx, studiodb.StudioProjectGetParams{TenantID: p.TenantID, ID: projectID, CreatedBy: p.Account.ID})
 	if err != nil {
 		return "", contracts.Problem("not_found")
 	}

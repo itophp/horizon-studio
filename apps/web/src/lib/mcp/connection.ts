@@ -27,11 +27,10 @@ async function local(
 export async function prepareInstall(
   key: string,
   client: BusinessClient,
-  accountId: number,
-  departmentId: number,
+  context: { accountId: number; tenantId: string; identityBindingId: string },
 ) {
   const result = prepared.parse(
-    await local("/prepare", key, { client, accountId, departmentId }),
+    await local("/prepare", key, { client, ...context }),
   );
   if (result.url !== `${window.location.origin}/mcp`)
     throw new Error("helper_service_mismatch");

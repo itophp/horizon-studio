@@ -17,9 +17,7 @@ const applications = (
     readFileSync("../../docs/generated/runtime/applications.json", "utf8"),
   ) as RuntimeApplicationV2[]
 ).filter(
-  (app) =>
-    app.version === "1.0.1" &&
-    (app.id === "system-settings" || app.id === "personal-preferences"),
+  (app) => app.id === "system-settings" || app.id === "personal-preferences",
 );
 
 const priority = {
@@ -45,7 +43,7 @@ const detail = {
 const workspace = {
   target,
   revision: 0,
-  definitions: [],
+  definitions: [{ key: "branding.name" }, { key: "display.timezone" }],
   entries: [
     {
       key: "branding.name",
@@ -81,18 +79,17 @@ const effective = () => ({
     },
   ],
 });
-vi.mock("@/features/administration/auth", () => {
+vi.mock("@/features/identity/auth", () => {
   const useSession = () => ({
     tenantId: "t",
-    activeDepartmentId: 1,
+
     account: { id: 1 },
     permissions: mocks.permissions,
   });
   return { useSession, useAuth: () => ({ profile: useSession() }) };
 });
-vi.mock("@/features/administration/shared", async (original) => {
-  const actual =
-    await original<typeof import("@/features/administration/shared")>();
+vi.mock("@/features/identity/shared", async (original) => {
+  const actual = await original<typeof import("@/features/identity/shared")>();
   return {
     ...actual,
     useAdminData: () => ({
@@ -196,14 +193,25 @@ it("submits a settings draft from the Runtime route", async () => {
     screen.queryByRole("combobox", { name: "Configuration scope" }),
   ).not.toBeInTheDocument();
   const user = userEvent.setup();
-  await user.click(await screen.findByRole("button", { name: "Branding" }));
+  const brandingTab = await screen.findByRole("tab", { name: "Branding" });
+  await user.click(brandingTab);
+  expect(brandingTab).toHaveAttribute("aria-selected", "true");
   await user.selectOptions(
     await screen.findByRole("combobox", { name: "Product name · Operation" }),
     "set",
   );
+  expect(
+    screen.queryByRole("combobox", { name: "Brand logo · Operation" }),
+  ).not.toBeInTheDocument();
   await user.clear(screen.getByRole("textbox", { name: "Product name" }));
   await user.type(
     screen.getByRole("textbox", { name: "Product name" }),
+    "Updated brand",
+  );
+  await user.click(screen.getByRole("tab", { selected: false }));
+  expect(screen.queryByRole("textbox", { name: "Product name" })).toBeNull();
+  await user.click(brandingTab);
+  expect(screen.getByRole("textbox", { name: "Product name" })).toHaveValue(
     "Updated brand",
   );
   await user.type(
@@ -260,7 +268,7 @@ it("renders workspace settings in preview with write controls disabled", async (
   show("/settings", true);
   await userEvent
     .setup()
-    .click(await screen.findByRole("button", { name: "Branding" }));
+    .click(await screen.findByRole("tab", { name: "Branding" }));
   expect(
     await screen.findByRole("combobox", { name: "Product name · Operation" }),
   ).toBeDisabled();

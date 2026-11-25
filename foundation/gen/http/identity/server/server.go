@@ -19,15 +19,27 @@ import (
 // Server lists the identity service endpoint HTTP handlers.
 type Server struct {
 	Mounts                 []*MountPoint
+	SamlCallback           http.Handler
+	CompleteSaml           http.Handler
+	FederationProviders    http.Handler
+	StartFederation        http.Handler
+	CompleteFederation     http.Handler
 	TemporaryAccess        http.Handler
 	RequestTemporaryAccess http.Handler
 	ReviewTemporaryAccess  http.Handler
 	CancelTemporaryAccess  http.Handler
 	RevokeTemporaryAccess  http.Handler
-	SwitchDepartment       http.Handler
+	ListSignInIdentities   http.Handler
+	SelectSignInIdentity   http.Handler
+	RedeemSignInInvitation http.Handler
 	Login                  http.Handler
+	RequestRegistration    http.Handler
+	CompleteRegistration   http.Handler
+	RequestPasswordReset   http.Handler
+	CompletePasswordReset  http.Handler
 	Me                     http.Handler
 	Logout                 http.Handler
+	RefreshSession         http.Handler
 	Snapshot               http.Handler
 }
 
@@ -58,26 +70,50 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"SamlCallback", "POST", "/api/auth/federation/saml/{providerId}/acs"},
+			{"CompleteSaml", "POST", "/api/auth/federation/saml/complete"},
+			{"FederationProviders", "GET", "/api/auth/federation/providers"},
+			{"StartFederation", "POST", "/api/auth/federation/start"},
+			{"CompleteFederation", "POST", "/api/auth/federation/complete"},
 			{"TemporaryAccess", "GET", "/api/admin/temporary-access"},
 			{"RequestTemporaryAccess", "POST", "/api/admin/temporary-access"},
 			{"ReviewTemporaryAccess", "POST", "/api/admin/temporary-access/{id}/review"},
 			{"CancelTemporaryAccess", "POST", "/api/admin/temporary-access/{id}/cancel"},
 			{"RevokeTemporaryAccess", "POST", "/api/admin/temporary-access/{id}/revoke"},
-			{"SwitchDepartment", "POST", "/api/auth/department"},
+			{"ListSignInIdentities", "GET", "/api/auth/identities"},
+			{"SelectSignInIdentity", "POST", "/api/auth/identity"},
+			{"RedeemSignInInvitation", "POST", "/api/auth/invitation"},
 			{"Login", "POST", "/api/auth/login"},
+			{"RequestRegistration", "POST", "/api/auth/registration/request"},
+			{"CompleteRegistration", "POST", "/api/auth/registration/complete"},
+			{"RequestPasswordReset", "POST", "/api/auth/password-reset/request"},
+			{"CompletePasswordReset", "POST", "/api/auth/password-reset/complete"},
 			{"Me", "GET", "/api/auth/me"},
 			{"Logout", "POST", "/api/auth/logout"},
+			{"RefreshSession", "POST", "/api/auth/session/refresh"},
 			{"Snapshot", "GET", "/api/admin/snapshot"},
 		},
+		SamlCallback:           NewSamlCallbackHandler(e.SamlCallback, mux, decoder, encoder, errhandler, formatter),
+		CompleteSaml:           NewCompleteSamlHandler(e.CompleteSaml, mux, decoder, encoder, errhandler, formatter),
+		FederationProviders:    NewFederationProvidersHandler(e.FederationProviders, mux, decoder, encoder, errhandler, formatter),
+		StartFederation:        NewStartFederationHandler(e.StartFederation, mux, decoder, encoder, errhandler, formatter),
+		CompleteFederation:     NewCompleteFederationHandler(e.CompleteFederation, mux, decoder, encoder, errhandler, formatter),
 		TemporaryAccess:        NewTemporaryAccessHandler(e.TemporaryAccess, mux, decoder, encoder, errhandler, formatter),
 		RequestTemporaryAccess: NewRequestTemporaryAccessHandler(e.RequestTemporaryAccess, mux, decoder, encoder, errhandler, formatter),
 		ReviewTemporaryAccess:  NewReviewTemporaryAccessHandler(e.ReviewTemporaryAccess, mux, decoder, encoder, errhandler, formatter),
 		CancelTemporaryAccess:  NewCancelTemporaryAccessHandler(e.CancelTemporaryAccess, mux, decoder, encoder, errhandler, formatter),
 		RevokeTemporaryAccess:  NewRevokeTemporaryAccessHandler(e.RevokeTemporaryAccess, mux, decoder, encoder, errhandler, formatter),
-		SwitchDepartment:       NewSwitchDepartmentHandler(e.SwitchDepartment, mux, decoder, encoder, errhandler, formatter),
+		ListSignInIdentities:   NewListSignInIdentitiesHandler(e.ListSignInIdentities, mux, decoder, encoder, errhandler, formatter),
+		SelectSignInIdentity:   NewSelectSignInIdentityHandler(e.SelectSignInIdentity, mux, decoder, encoder, errhandler, formatter),
+		RedeemSignInInvitation: NewRedeemSignInInvitationHandler(e.RedeemSignInInvitation, mux, decoder, encoder, errhandler, formatter),
 		Login:                  NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
+		RequestRegistration:    NewRequestRegistrationHandler(e.RequestRegistration, mux, decoder, encoder, errhandler, formatter),
+		CompleteRegistration:   NewCompleteRegistrationHandler(e.CompleteRegistration, mux, decoder, encoder, errhandler, formatter),
+		RequestPasswordReset:   NewRequestPasswordResetHandler(e.RequestPasswordReset, mux, decoder, encoder, errhandler, formatter),
+		CompletePasswordReset:  NewCompletePasswordResetHandler(e.CompletePasswordReset, mux, decoder, encoder, errhandler, formatter),
 		Me:                     NewMeHandler(e.Me, mux, decoder, encoder, errhandler, formatter),
 		Logout:                 NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
+		RefreshSession:         NewRefreshSessionHandler(e.RefreshSession, mux, decoder, encoder, errhandler, formatter),
 		Snapshot:               NewSnapshotHandler(e.Snapshot, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -87,15 +123,27 @@ func (s *Server) Service() string { return "identity" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.SamlCallback = m(s.SamlCallback)
+	s.CompleteSaml = m(s.CompleteSaml)
+	s.FederationProviders = m(s.FederationProviders)
+	s.StartFederation = m(s.StartFederation)
+	s.CompleteFederation = m(s.CompleteFederation)
 	s.TemporaryAccess = m(s.TemporaryAccess)
 	s.RequestTemporaryAccess = m(s.RequestTemporaryAccess)
 	s.ReviewTemporaryAccess = m(s.ReviewTemporaryAccess)
 	s.CancelTemporaryAccess = m(s.CancelTemporaryAccess)
 	s.RevokeTemporaryAccess = m(s.RevokeTemporaryAccess)
-	s.SwitchDepartment = m(s.SwitchDepartment)
+	s.ListSignInIdentities = m(s.ListSignInIdentities)
+	s.SelectSignInIdentity = m(s.SelectSignInIdentity)
+	s.RedeemSignInInvitation = m(s.RedeemSignInInvitation)
 	s.Login = m(s.Login)
+	s.RequestRegistration = m(s.RequestRegistration)
+	s.CompleteRegistration = m(s.CompleteRegistration)
+	s.RequestPasswordReset = m(s.RequestPasswordReset)
+	s.CompletePasswordReset = m(s.CompletePasswordReset)
 	s.Me = m(s.Me)
 	s.Logout = m(s.Logout)
+	s.RefreshSession = m(s.RefreshSession)
 	s.Snapshot = m(s.Snapshot)
 }
 
@@ -104,21 +152,291 @@ func (s *Server) MethodNames() []string { return identity.MethodNames[:] }
 
 // Mount configures the mux to serve the identity endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountSamlCallbackHandler(mux, h.SamlCallback)
+	MountCompleteSamlHandler(mux, h.CompleteSaml)
+	MountFederationProvidersHandler(mux, h.FederationProviders)
+	MountStartFederationHandler(mux, h.StartFederation)
+	MountCompleteFederationHandler(mux, h.CompleteFederation)
 	MountTemporaryAccessHandler(mux, h.TemporaryAccess)
 	MountRequestTemporaryAccessHandler(mux, h.RequestTemporaryAccess)
 	MountReviewTemporaryAccessHandler(mux, h.ReviewTemporaryAccess)
 	MountCancelTemporaryAccessHandler(mux, h.CancelTemporaryAccess)
 	MountRevokeTemporaryAccessHandler(mux, h.RevokeTemporaryAccess)
-	MountSwitchDepartmentHandler(mux, h.SwitchDepartment)
+	MountListSignInIdentitiesHandler(mux, h.ListSignInIdentities)
+	MountSelectSignInIdentityHandler(mux, h.SelectSignInIdentity)
+	MountRedeemSignInInvitationHandler(mux, h.RedeemSignInInvitation)
 	MountLoginHandler(mux, h.Login)
+	MountRequestRegistrationHandler(mux, h.RequestRegistration)
+	MountCompleteRegistrationHandler(mux, h.CompleteRegistration)
+	MountRequestPasswordResetHandler(mux, h.RequestPasswordReset)
+	MountCompletePasswordResetHandler(mux, h.CompletePasswordReset)
 	MountMeHandler(mux, h.Me)
 	MountLogoutHandler(mux, h.Logout)
+	MountRefreshSessionHandler(mux, h.RefreshSession)
 	MountSnapshotHandler(mux, h.Snapshot)
 }
 
 // Mount configures the mux to serve the identity endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountSamlCallbackHandler configures the mux to serve the "identity" service
+// "saml_callback" endpoint.
+func MountSamlCallbackHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/api/auth/federation/saml/{providerId}/acs", f)
+}
+
+// NewSamlCallbackHandler creates a HTTP handler which loads the HTTP request
+// and calls the "identity" service "saml_callback" endpoint.
+func NewSamlCallbackHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSamlCallbackRequest(mux, decoder)
+		encodeResponse = EncodeSamlCallbackResponse(encoder)
+		encodeError    = EncodeSamlCallbackError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "saml_callback")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCompleteSamlHandler configures the mux to serve the "identity" service
+// "complete_saml" endpoint.
+func MountCompleteSamlHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/api/auth/federation/saml/complete", f)
+}
+
+// NewCompleteSamlHandler creates a HTTP handler which loads the HTTP request
+// and calls the "identity" service "complete_saml" endpoint.
+func NewCompleteSamlHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCompleteSamlRequest(mux, decoder)
+		encodeResponse = EncodeCompleteSamlResponse(encoder)
+		encodeError    = EncodeCompleteSamlError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "complete_saml")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountFederationProvidersHandler configures the mux to serve the "identity"
+// service "federation_providers" endpoint.
+func MountFederationProvidersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/api/auth/federation/providers", f)
+}
+
+// NewFederationProvidersHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identity" service "federation_providers" endpoint.
+func NewFederationProvidersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		encodeResponse = EncodeFederationProvidersResponse(encoder)
+		encodeError    = EncodeFederationProvidersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "federation_providers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
+		var err error
+		res, err := endpoint(ctx, nil)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountStartFederationHandler configures the mux to serve the "identity"
+// service "start_federation" endpoint.
+func MountStartFederationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/api/auth/federation/start", f)
+}
+
+// NewStartFederationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identity" service "start_federation" endpoint.
+func NewStartFederationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeStartFederationRequest(mux, decoder)
+		encodeResponse = EncodeStartFederationResponse(encoder)
+		encodeError    = EncodeStartFederationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "start_federation")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCompleteFederationHandler configures the mux to serve the "identity"
+// service "complete_federation" endpoint.
+func MountCompleteFederationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/api/auth/federation/complete", f)
+}
+
+// NewCompleteFederationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identity" service "complete_federation" endpoint.
+func NewCompleteFederationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCompleteFederationRequest(mux, decoder)
+		encodeResponse = EncodeCompleteFederationResponse(encoder)
+		encodeError    = EncodeCompleteFederationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "complete_federation")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountTemporaryAccessHandler configures the mux to serve the "identity"
@@ -386,21 +704,21 @@ func NewRevokeTemporaryAccessHandler(
 	})
 }
 
-// MountSwitchDepartmentHandler configures the mux to serve the "identity"
-// service "switch_department" endpoint.
-func MountSwitchDepartmentHandler(mux goahttp.Muxer, h http.Handler) {
+// MountListSignInIdentitiesHandler configures the mux to serve the "identity"
+// service "list_sign_in_identities" endpoint.
+func MountListSignInIdentitiesHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/api/auth/department", f)
+	mux.Handle("GET", "/api/auth/identities", f)
 }
 
-// NewSwitchDepartmentHandler creates a HTTP handler which loads the HTTP
-// request and calls the "identity" service "switch_department" endpoint.
-func NewSwitchDepartmentHandler(
+// NewListSignInIdentitiesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identity" service "list_sign_in_identities" endpoint.
+func NewListSignInIdentitiesHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -409,13 +727,120 @@ func NewSwitchDepartmentHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeSwitchDepartmentRequest(mux, decoder)
-		encodeResponse = EncodeSwitchDepartmentResponse(encoder)
-		encodeError    = EncodeSwitchDepartmentError(encoder, formatter)
+		decodeRequest  = DecodeListSignInIdentitiesRequest(mux, decoder)
+		encodeResponse = EncodeListSignInIdentitiesResponse(encoder)
+		encodeError    = EncodeListSignInIdentitiesError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "switch_department")
+		ctx = context.WithValue(ctx, goa.MethodKey, "list_sign_in_identities")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSelectSignInIdentityHandler configures the mux to serve the "identity"
+// service "select_sign_in_identity" endpoint.
+func MountSelectSignInIdentityHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/api/auth/identity", f)
+}
+
+// NewSelectSignInIdentityHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identity" service "select_sign_in_identity" endpoint.
+func NewSelectSignInIdentityHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSelectSignInIdentityRequest(mux, decoder)
+		encodeResponse = EncodeSelectSignInIdentityResponse(encoder)
+		encodeError    = EncodeSelectSignInIdentityError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "select_sign_in_identity")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRedeemSignInInvitationHandler configures the mux to serve the
+// "identity" service "redeem_sign_in_invitation" endpoint.
+func MountRedeemSignInInvitationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/api/auth/invitation", f)
+}
+
+// NewRedeemSignInInvitationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identity" service "redeem_sign_in_invitation"
+// endpoint.
+func NewRedeemSignInInvitationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRedeemSignInInvitationRequest(mux, decoder)
+		encodeResponse = EncodeRedeemSignInInvitationResponse(encoder)
+		encodeError    = EncodeRedeemSignInInvitationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "redeem_sign_in_invitation")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -469,6 +894,218 @@ func NewLoginHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "login")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRequestRegistrationHandler configures the mux to serve the "identity"
+// service "request_registration" endpoint.
+func MountRequestRegistrationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/api/auth/registration/request", f)
+}
+
+// NewRequestRegistrationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identity" service "request_registration" endpoint.
+func NewRequestRegistrationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRequestRegistrationRequest(mux, decoder)
+		encodeResponse = EncodeRequestRegistrationResponse(encoder)
+		encodeError    = EncodeRequestRegistrationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "request_registration")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCompleteRegistrationHandler configures the mux to serve the "identity"
+// service "complete_registration" endpoint.
+func MountCompleteRegistrationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/api/auth/registration/complete", f)
+}
+
+// NewCompleteRegistrationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identity" service "complete_registration" endpoint.
+func NewCompleteRegistrationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCompleteRegistrationRequest(mux, decoder)
+		encodeResponse = EncodeCompleteRegistrationResponse(encoder)
+		encodeError    = EncodeCompleteRegistrationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "complete_registration")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRequestPasswordResetHandler configures the mux to serve the "identity"
+// service "request_password_reset" endpoint.
+func MountRequestPasswordResetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/api/auth/password-reset/request", f)
+}
+
+// NewRequestPasswordResetHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identity" service "request_password_reset" endpoint.
+func NewRequestPasswordResetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRequestPasswordResetRequest(mux, decoder)
+		encodeResponse = EncodeRequestPasswordResetResponse(encoder)
+		encodeError    = EncodeRequestPasswordResetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "request_password_reset")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCompletePasswordResetHandler configures the mux to serve the "identity"
+// service "complete_password_reset" endpoint.
+func MountCompletePasswordResetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/api/auth/password-reset/complete", f)
+}
+
+// NewCompletePasswordResetHandler creates a HTTP handler which loads the HTTP
+// request and calls the "identity" service "complete_password_reset" endpoint.
+func NewCompletePasswordResetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCompletePasswordResetRequest(mux, decoder)
+		encodeResponse = EncodeCompletePasswordResetResponse(encoder)
+		encodeError    = EncodeCompletePasswordResetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "complete_password_reset")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -575,6 +1212,59 @@ func NewLogoutHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "logout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRefreshSessionHandler configures the mux to serve the "identity"
+// service "refresh_session" endpoint.
+func MountRefreshSessionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/api/auth/session/refresh", f)
+}
+
+// NewRefreshSessionHandler creates a HTTP handler which loads the HTTP request
+// and calls the "identity" service "refresh_session" endpoint.
+func NewRefreshSessionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRefreshSessionRequest(mux, decoder)
+		encodeResponse = EncodeRefreshSessionResponse(encoder)
+		encodeError    = EncodeRefreshSessionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "refresh_session")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "identity")
 		payload, err := decodeRequest(r)
 		if err != nil {

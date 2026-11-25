@@ -5,17 +5,28 @@
  * Application infrastructure and technical demonstrations
  * OpenAPI spec version: 0.0.1
  */
-import type { AccountRecord } from "./accountRecord";
+import type { SessionAccount } from "./sessionAccount";
 
 export interface SessionProfile {
-  account: AccountRecord;
-  activeDepartmentId: number;
+  account?: SessionAccount;
+  /**
+   * Organization verified for the active portal binding.
+   * @minimum 1
+   */
+  actingOrganizationId?: number;
+  /** Display name of the verified organization. */
+  actingOrganizationName?: string;
   /**
    * Opaque non-secret authorization cache revision.
    * @pattern ^[a-f0-9]{64}$
    */
   authorizationVersion?: string;
   csrfToken: string;
+  identityBindingId?: string;
   permissions: string[];
+  /** Platform operator management is available in this session. */
+  platformOperator?: boolean;
+  /** Application portal verified for the active binding. */
+  portal?: string;
   tenantId: string;
 }

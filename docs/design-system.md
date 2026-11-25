@@ -26,10 +26,12 @@ Tailwind 4 Vite 插件，基础 tokens 在 styles/index.css，后台在 styles/a
 
 ## 管理后台
 
-后台参考用户提供的深色 shadcn 仪表台：随主题切换的中性页面底色、黑灰工作区、细边框面板、紧凑表格与固定侧栏，tokens 和布局集中在 styles/admin.css。ThemeProvider 管理 dark/light 与 baseline.theme，浅色使用同一结构和组件。登录页采用宽幅品牌区与约 322px 的紧凑表单，不把后台卡片密度搬到登录页。
+后台参考用户提供的深色 shadcn 仪表台：随主题切换的中性页面底色、黑灰租户、细边框面板、紧凑表格与固定侧栏，tokens 和布局集中在 styles/admin.css。ThemeProvider 管理 dark/light 与 baseline.theme，浅色使用同一结构和组件。登录页采用宽幅品牌区与约 322px 的紧凑表单，不把后台卡片密度搬到登录页。
 
 管理页面使用同一 PageHeading、DataTable、EditorDialog、状态徽标及权限矩阵；统计只来自实际授权数据。Dialog、Checkbox、DropdownMenu 等采用 Base UI/shadcn 源码，前端 label/description/error 保持关联，错误不改变控件可访问名称。图标用 lucide，不依赖远程图片或字体。历史技术示例保留自己的 .app-shell 布局，后台不要复制其旧配色。
 
 后台外层统一使用侧栏底色；侧栏本身不画右边框。console-main 是独立的有边框内容面板，左上角 28px 圆角，固定在视口内；顶栏与页脚不参与正文滚动，只有 console-content 独立滚动。不要恢复 window 滚动或把圆角只画在顶栏上，否则正文滚动会盖住包裹式圆角。
+
+浅色主题的顶栏、正文滚动区和页脚统一使用白色面板色 `--app-panel`。
 
 Base UI Button 在项目中默认作为普通按钮使用；表单主提交动作显式声明 type="submit"，取消、添加行、预校验和工具动作使用 type="button"。新表单验证实际点击后调用生成 SDK 的行为，避免仅检查按钮渲染。

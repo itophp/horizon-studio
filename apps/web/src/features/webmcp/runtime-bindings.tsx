@@ -8,7 +8,7 @@ import {
 import { useLocation } from "react-router";
 import { z } from "zod";
 import { BrowserRuntimeContext } from "@/features/application-runtime/protocol/browser-runtime";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   diagnoseRemote,
   installPrepared,
@@ -28,7 +28,6 @@ const prepareInput = z.strictObject({
   key: hexKey,
   token,
   client: agentClient,
-  departmentId: z.number().int().positive().optional(),
 });
 const noInput = z.strictObject({});
 
@@ -69,7 +68,7 @@ export function WebMcpRuntimeBindings({
     location.key,
     session.tenantId,
     session.account.id,
-    session.activeDepartmentId,
+    session.identityBindingId,
     session.authorizationVersion,
   ]);
   const [feedback, setFeedback] = useState<PublicFeedback>();
@@ -149,19 +148,11 @@ export function WebMcpRuntimeBindings({
         case "remote-mcp.prepare": {
           prepared.current = undefined;
           const args = prepareInput.parse(values);
-          const departmentId = args.departmentId ?? session.activeDepartmentId;
-          if (
-            !(session.account.memberships ?? []).some(
-              (item) => item.departmentId === departmentId,
-            )
-          )
-            return false;
-          const result = await prepareInstall(
-            args.key,
-            args.client,
-            session.account.id,
-            departmentId,
-          );
+          const result = await prepareInstall(args.key, args.client, {
+            accountId: session.account.id,
+            tenantId: session.tenantId,
+            identityBindingId: session.identityBindingId ?? "",
+          });
           if (generation.current !== version) return false;
           prepared.current = {
             scope,

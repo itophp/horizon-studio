@@ -1,4 +1,39 @@
 {
+  "audit_export_permit": {
+    "label": "审计导出许可"
+  },
+  "authorization_resource_state": {
+    "label": "授权资源状态"
+  },
+  "login_merge_review": { "label": "登录账号合并复核" },
+  "external_identity": { "label": "外部身份" },
+  "account_role": { "label": "主部门角色" },
+  "department_role": { "label": "附加部门角色" },
+  "external_identity_review": { "label": "外部身份转移" },
+  "login_association": { "label": "关联登录账号" },
+  "external_identity_proof": { "label": "外部身份关联证明" },
+  "federation_flow": { "label": "外部登录流程" },
+  "federation_assertion_use": { "label": "已消费的联合认证断言" },
+  "security_principal": { "label": "安全主体" },
+  "login_account": { "label": "登录账号" },
+  "password_credential": { "label": "密码凭据" },
+  "machine_credential": { "label": "机器凭据" },
+  "agent_delegation": { "label": "Agent 委托" },
+  "tenant": { "label": "租户" },
+  "tenant_membership": { "label": "租户成员关系" },
+  "iam_access_review": { "label": "权限复核" },
+  "verified_login_contact": { "label": "已验证恢复联系方式" },
+  "iam_contact_challenge": { "label": "联系方式验证挑战" },
+  "pending_registration": { "label": "待验证注册" },
+  "login_session": { "label": "登录会话" },
+  "membership_invitation": { "label": "成员邀请" },
+  "identity_binding": { "label": "身份绑定" },
+  "ai_configuration": {
+    "label": "AI 配置"
+  },
+  "knowledge_document": {
+    "label": "知识库文档"
+  },
   "memory_event": {
     "label": "记忆事件"
   },
@@ -58,6 +93,9 @@
   "account": {
     "label": "账号"
   },
+  "context_role_grant": { "label": "上下文角色授予" },
+  "totp_credential": { "label": "验证器凭据" },
+  "mfa_recovery_code": { "label": "恢复码" },
   "session": {
     "label": "登录会话"
   },
@@ -102,6 +140,21 @@
   },
   "project_task_brief": {
     "label": "任务简报"
+  },
+  "security_audit_event": {
+    "label": "安全审计事件"
+  },
+  "security_audit_checkpoint": {
+    "label": "签名审计检查点"
+  },
+  "authorization_policy_version": {
+    "label": "授权策略版本"
+  },
+  "authorization_policy_head": {
+    "label": "生效授权策略"
+  },
+  "example_order": {
+    "label": "供应商订单"
   },
   "example_record": {
     "label": "示例记录",
@@ -227,5 +280,57 @@
   },
   "execution_record": {
     "label": "执行记录"
+  },
+  "automation_task": {
+    "label": "自动化任务"
+  },
+  "automation_run": {
+    "label": "自动化执行",
+    "states": {
+      "queued": "排队中",
+      "running": "运行中",
+      "awaiting_approval": "等待审批",
+      "completed": "已完成",
+      "failed": "失败",
+      "skipped": "已跳过",
+      "cancelled": "已取消"
+    }
+  },
+  "mail_mailbox": {
+    "label": "邮箱",
+    "states": {
+      "unverified": "未验证",
+      "active": "生效",
+      "disabled": "已停用"
+    }
+  },
+  "mail_channel": {
+    "label": "邮件通道"
+  },
+  "mail_credential": {
+    "label": "邮件凭证"
+  },
+  "mail_message": {
+    "label": "邮件"
+  },
+  "mail_message_recipient": {
+    "label": "邮件收件人"
+  },
+  "mail_message_attachment": {
+    "label": "邮件附件"
+  },
+  "mail_outbound_delivery": {
+    "label": "邮件投递",
+    "states": {
+      "queued": "排队中",
+      "sending": "发送中",
+      "sent": "已发送",
+      "failed": "失败",
+      "ambiguous": "结果未知",
+      "cancelled": "已取消"
+    }
+  },
+  "mail_inbox_sync": {
+    "label": "收件箱同步"
   }
 }

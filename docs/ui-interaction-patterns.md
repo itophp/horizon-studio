@@ -149,7 +149,7 @@
 | 数据阅读 | Table、Data Table、Card、Item、Badge、Avatar | 比较数据、可操作表格、独立分组、紧凑条目、状态、人员摘要 |
 | 图形媒体 | Chart、AspectRatio、Carousel | 回答数据问题、封面比例、确需顺序浏览的媒体；图形选型见主指南 |
 | 状态反馈 | Alert、Toast、Sonner、Empty、Skeleton、Spinner、Progress | 持续问题、短反馈、无内容、首次加载、局部进行中、可测进度；Toast 实现只选一套 |
-| 布局基础 | Separator、ScrollArea、Resizable | 分组边界、必要局部滚动、工作区面板；不套无限滚动容器 |
+| 布局基础 | Separator、ScrollArea、Resizable | 分组边界、必要局部滚动、应用内容面板；不套无限滚动容器 |
 | 排版方向 | Typography、Direction | 语义文本层级、方向上下文；不代替 i18n 和 locale 格式化 |
 
 从 Components 当前目录发现 llms 索引尚未列出的条目或 AI 专用组件时，同样先按任务判断，例如 Attachment/Message/Trace 等只在确有附件、对话、追踪语义时评估；不能因为出现在目录里就安装，也不能把 AI 显示组件当作后端 Agent/审批实现。新组件接入仍受项目安全、SDK、国际化和依赖规则约束。
@@ -169,7 +169,7 @@
 | 方案卡片单选 | FieldSet + RadioGroup/Item + Label + 描述/Card | 单选语义、键盘、说明与提交校验 |
 | 创建/编辑小对象 | EditorDialog/Dialog + Field + RHF/Zod + Button + Spinner/Alert | 保留输入、失败不关闭、重复提交与焦点 |
 | 移动筛选/导航 | Sheet + 同源菜单/筛选内容 + Button | 不复制一套不同的数据状态，关闭后恢复焦点 |
-| 可调编辑工作区 | Resizable + 工具栏 + Tabs + 属性 Field + 局部 ScrollArea | 面板最小尺寸、键盘替代、脏状态与窄屏回退 |
+| 可调编辑租户 | Resizable + 工具栏 + Tabs + 属性 Field + 局部 ScrollArea | 面板最小尺寸、键盘替代、脏状态与窄屏回退 |
 | 空列表引导 | Empty + Title/Description + 有权的 Button | 无数据/无匹配区别，不将失败报为空 |
 | 可恢复操作反馈 | 统一 Toaster + 业务 mutation + 持久结果入口 | 去重、受理/完成区别、真实撤销能力 |
 

@@ -25,14 +25,15 @@ const maxResult = 12000
 
 // Adapter builds the tool set for one run.
 type Adapter struct {
-	AllowedKeys []string
-	Gateway     *gateway.Gateway
-	Registry    *registry.Registry
-	Caller      contracts.Caller
-	TraceID     string
-	RunID       int64
-	Depth       int
-	Observe     func(capability, status string)
+	AllowedKeys       []string
+	Gateway           *gateway.Gateway
+	Registry          *registry.Registry
+	Caller            contracts.Caller
+	IdentityBindingID string
+	TraceID           string
+	RunID             int64
+	Depth             int
+	Observe           func(capability, status string)
 }
 
 // Tools returns the capabilities the caller may use.
@@ -96,7 +97,10 @@ func (t *capabilityTool) InvokableRun(ctx context.Context, argumentsInJSON strin
 	}
 	observe("running")
 	if t.adapter.RunID > 0 {
-		ctx = gateway.WithTaskReference(ctx, gateway.TaskReference{RunID: t.adapter.RunID, TenantID: t.adapter.Caller.TenantID, AccountID: t.adapter.Caller.AccountID, DepartmentID: t.adapter.Caller.DepartmentID})
+		ctx = gateway.WithTaskReference(ctx, gateway.TaskReference{
+			RunID: t.adapter.RunID, TenantID: t.adapter.Caller.TenantID, AccountID: t.adapter.Caller.AccountID,
+			IdentityBindingID: t.adapter.IdentityBindingID,
+		})
 	}
 	result, err := t.adapter.Gateway.Invoke(ctx, gateway.Request{
 		Name: t.definition.Name, Version: t.definition.Version, Input: input,

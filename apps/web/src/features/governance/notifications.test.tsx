@@ -30,10 +30,10 @@ vi.mock("./shared", async (original) => ({
   ...(await original<typeof import("./shared")>()),
   downloadContent: mocks.download,
 }));
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "t",
-    activeDepartmentId: 1,
+
     account: { id: 1 },
     permissions: mocks.permissions,
   }),

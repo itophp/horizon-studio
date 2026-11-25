@@ -4,9 +4,10 @@ import { selectSpecs } from "./e2e-changed.mjs";
 
 test("selects the spec that owns the changed feature", () => {
   const { specs } = selectSpecs([
-    "apps/web/src/features/administration/layout.tsx",
+    "apps/web/src/features/identity/layout.tsx",
+    "applications/identity/plugin.go",
   ]);
-  assert.deepEqual(specs, ["administration"]);
+  assert.deepEqual(specs, ["identity"]);
 });
 
 test("falls back to the cheap cross-layer file for shared frontend code", () => {
@@ -31,11 +32,9 @@ test("keeps documentation and rule batches out of the browser", () => {
 });
 
 test("reports backend paths that have no browser route instead of guessing", () => {
-  const { specs, unmapped } = selectSpecs([
-    "foundation/db/migrations/0001_init.sql",
-  ]);
+  const { specs, unmapped } = selectSpecs(["deployment/database/init.sql"]);
   assert.deepEqual(specs, []);
-  assert.deepEqual(unmapped, ["foundation/db/migrations/0001_init.sql"]);
+  assert.deepEqual(unmapped, ["deployment/database/init.sql"]);
 });
 
 test("routes backend modules to the feature they back", () => {
@@ -62,13 +61,13 @@ test("routes backend modules to the feature they back", () => {
   assert.deepEqual(selectSpecs(["foundation/db/query/mcp.sql"]).specs, ["mcp"]);
   assert.deepEqual(
     selectSpecs(["foundation/system/identity/catalog.go"]).specs,
-    ["administration"],
+    ["identity"],
   );
 });
 
 test("keeps harness and dependency edits out of the browser run", () => {
   const { specs, unmapped } = selectSpecs([
-    "Makefile",
+    "cmd/horizon-cli/project.go",
     "package.json",
     "apps/web/playwright.config.ts",
     "apps/web/vite.config.ts",

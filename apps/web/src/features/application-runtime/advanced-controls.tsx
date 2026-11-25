@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { filesUpload } from "@/lib/capabilities";
 import { downloadFile } from "@/features/governance/files";
-import { ErrorBanner } from "@/features/administration/shared";
+import { ErrorBanner } from "@/features/identity/shared";
 import { RegisteredControl, type ControlProps } from "./components";
 import type { Json } from "./expression";
 export function PreciseControl(p: ControlProps) {

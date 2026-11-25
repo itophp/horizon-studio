@@ -1,13 +1,12 @@
 package app
 
 import (
-	"horizon/applications/articles"
-	"horizon/applications/drive"
-	"horizon/applications/example"
+	"horizon/foundation/ai/automation"
+	"horizon/foundation/ai/configuration"
+	"horizon/foundation/ai/knowledge"
 
 	"horizon/foundation/integrations/mcp"
 	"horizon/foundation/kernel/capability/contracts"
-	"horizon/foundation/kernel/plugin"
 	"horizon/foundation/system/applicationruntime"
 	"horizon/foundation/system/dictionaries"
 	"horizon/foundation/system/executionplans"
@@ -22,18 +21,21 @@ import (
 // Entities lists every hand written business entity description. Modules join
 // this list when they ship their entities.go, which keeps the composition root
 // and the entity check reading the same source.
-func Entities() []contracts.Entity { return EntitiesWithPlugins(BuiltinPlugins(nil)) }
+func Entities() []contracts.Entity { return EntitiesWithRegistration(Registration{}) }
 
 // EntitiesWithPlugins builds metadata from the same registered plugins as capabilities.
-func EntitiesWithPlugins(plugins *plugin.Manager) []contracts.Entity {
+func EntitiesWithRegistration(registration Registration) []contracts.Entity {
 	out := append(applicationruntime.Entities(), executionplans.Entities()...)
-	out = append(out, articles.Entities()...)
-	out = append(out, drive.Entities()...)
-	out = append(out, plugins.Catalog.Entities...)
+	out = append(out, automation.Entities()...)
+	out = append(out, configuration.Entities()...)
+	out = append(out, knowledge.Entities()...)
+	out = append(out, registration.Entities...)
+	if plugins := registration.Plugins; plugins != nil {
+		out = append(out, plugins.Catalog.Entities...)
+	}
 	out = append(out, orchestration.Entities()...)
 	out = append(out, identity.Entities()...)
 	out = append(out, memory.Entities()...)
-	out = append(out, example.Entities()...)
 	out = append(out, notifications.Entities()...)
 	out = append(out, files.Entities()...)
 	out = append(out, dictionaries.Entities()...)

@@ -32,7 +32,12 @@ it("reauthenticates the current profile and sends the credential only to DSH", a
   } as Awaited<ReturnType<typeof mcpManagementCreate>>);
   render(
     <I18nextProvider i18n={i18n}>
-      <AgentPairing sessionScope="tenant:1:2" accountId={1} departmentId={2} />
+      <AgentPairing
+        sessionScope="tenant:1:2"
+        accountId={1}
+        tenantId="tenant"
+        identityBindingId="binding"
+      />
     </I18nextProvider>,
   );
 
@@ -70,7 +75,8 @@ it("reauthenticates the current profile and sends the credential only to DSH", a
         credential: {
           token: "fake-one-time-studio-credential",
           accountId: 1,
-          departmentId: 2,
+          tenantId: "tenant",
+          identityBindingId: "binding",
         },
       }),
       agentOrigin,
@@ -80,7 +86,6 @@ it("reauthenticates the current profile and sends the credential only to DSH", a
     {
       name: "HorizonStudio DSH",
       days: 30,
-      departmentId: 2,
       password: "correct-test-password",
     },
     expect.any(AbortSignal),
@@ -105,7 +110,9 @@ it("reuses a valid DSH credential for this account without issuing a new token",
   const profile = {
     permissions: ["studio:read"],
     account: { id: 12 },
-    activeDepartmentId: 3,
+    tenantId: "tenant",
+    identityBindingId: "binding",
+    csrfToken: "",
   } as SessionProfile;
   const pairing = pairStudioMcpAfterLogin(
     profile,
@@ -133,7 +140,11 @@ it("reuses a valid DSH credential for this account without issuing a new token",
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({
         op: "mcp-pair-check",
-        credential: { accountId: 12, departmentId: 3 },
+        credential: {
+          accountId: 12,
+          tenantId: "tenant",
+          identityBindingId: "binding",
+        },
       }),
       agentOrigin,
     ),

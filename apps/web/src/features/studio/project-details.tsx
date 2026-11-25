@@ -12,11 +12,7 @@ import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  ErrorBanner,
-  Loading,
-  PageHeading,
-} from "@/features/administration/shared";
+import { ErrorBanner, Loading, PageHeading } from "@/features/identity/shared";
 import type { Initialization, Project } from "./api";
 import {
   isRunning,

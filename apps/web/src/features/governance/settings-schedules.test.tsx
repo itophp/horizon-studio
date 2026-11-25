@@ -16,10 +16,10 @@ const mocks = vi.hoisted(() => ({
     data: { proof: "one-time-schedule-proof" },
   })),
 }));
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "t",
-    activeDepartmentId: 1,
+
     account: { id: 1 },
     permissions: ["settings:read", "settings:publish"],
   }),

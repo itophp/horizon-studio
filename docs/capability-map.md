@@ -47,9 +47,8 @@ xxh-baseline/
 ├── scripts/                   门禁、代码生成校验、WebMCP/远程 MCP 本机服务
 ├── docs/                      架构、安全、测试、决策记录与外部规范
 ├── .github/workflows/ci.yml   CI 质量门禁
-├── Makefile                   全部可执行入口（开发、生成、测试、CI）
 ├── compose.yaml               本地 PostgreSQL 18.6（54329）
-├── package.json               pnpm 工作区根脚本
+├── package.json               pnpm 租户根脚本
 ├── skills-lock.json           上游 Skill 的版本与 hash 锁定
 ├── AGENTS.md                  项目长期开发规则（根）
 └── README.md                  项目定位与架构方向说明
@@ -61,38 +60,38 @@ xxh-baseline/
 |---|---|
 | `AGENTS.md` | 根规则：能力契约、Gateway 唯一入口、事务与事件、策略确定性、生成禁区、验证与交付纪律。改文件前必须从根沿路径读到目标目录的规则。 |
 | `README.md` | 对外介绍：Skills / MCP / WebMCP / AI Assistant 四件配套、架构方向与能力归属判据。 |
-| `Makefile` | 唯一命令入口。开发、迁移、生成、检查、测试、CI 全在此定义（见 §4）。 |
+| `cmd/horizon-cli/` | 开发、迁移、生成、检查、测试和 CI 命令入口（见 §4）。 |
 | `compose.yaml` | 本地依赖：`postgres:18.6`，只绑定 `127.0.0.1:54329`，数据落 `postgres-data` 卷。 |
 | `package.json` | pnpm 根脚本，聚合 web 的 lint/typecheck/test/build，以及 `rules:check`、`webmcp:*`、`mcp:*`。 |
-| `pnpm-workspace.yaml` | 工作区定义（`apps/*`）。 |
+| `pnpm-workspace.yaml` | 前端包组织（`apps/*`）。 |
 | `pnpm-lock.yaml` | 依赖锁文件；版本升级需在 `docs/versions.md` 记录依据。 |
 | `.npmrc` | npm registry、`save-exact`、`strict-peer-dependencies=true`。 |
-| `.env` | 本地实际配置，不入库；由 Makefile `-include` 读入。 |
-| `.env.example` | 全部环境变量样例与语义注释：`DATABASE_URL`、`COOKIE_SECURE`、`BOOTSTRAP_*`、`DEMO_AUTH_TOKEN`、`SETTINGS_ENCRYPTION_KEY`、`FILE_STORAGE_ROOT`、`PUBLIC_WORKSPACE_ID`、`PUBLIC_APP_URL`、`SMTP_ALLOWED_HOSTS`、`WEBMCP_*`、`MCP_BUSINESS_URL`。 |
+| `.env` | 本地实际配置，不入库；由 Horizon CLI 读取，进程环境变量优先。 |
+| `.env.example` | 全部环境变量样例与语义注释：`DATABASE_URL`、`COOKIE_SECURE`、`BOOTSTRAP_*`、`DEMO_AUTH_TOKEN`、`SETTINGS_ENCRYPTION_KEY`、`FILE_STORAGE_ROOT`、`PUBLIC_TENANT_ID`、`PUBLIC_APP_URL`、`SMTP_ALLOWED_HOSTS`、`WEBMCP_*`、`MCP_BUSINESS_URL`。 |
 | `.gitignore` / `.prettierignore` | 忽略产物目录（`dist`、`.local`、`test-results`、`playwright-report`、`.tools`）与格式化范围。 |
 | `skills-lock.json` | 上游 `goa-service-designer` 等 Skill 的来源与 hash，防止手改上游指南夹带项目约定。 |
-| `.github/workflows/ci.yml` | CI：pnpm/node 22.23.2 + Go + PostgreSQL service → `make ci-fast` → `test-integration` → WebMCP 真实客户端 → 全量 E2E，失败上传报告。 |
+| `.github/workflows/ci.yml` | CI：pnpm/node 22.23.2 + Go + PostgreSQL service → `./horizon-cli ci-fast` → `test-integration` → WebMCP 真实客户端 → 全量 E2E，失败上传报告。 |
 | `.workbuddy/memory/` | 会话工作记忆（每日日志 + 长期项目约定），不参与构建。 |
 
-## 4. 命令入口（Makefile / npm scripts）
+## 4. 命令入口（Horizon CLI / pnpm scripts）
 
 | 命令 | 作用 |
 |---|---|
-| `make install` / `make tools` | 安装前端依赖 / 安装锁版本 sqlc 到 `.tools/bin`。 |
-| `make db-up` / `make db-down` | 起停本地 PostgreSQL。 |
-| `make migrate` / `make bootstrap` | 执行迁移 / 首次创建内置管理员与租户。 |
-| `make dev` / `make dev-api` | Vite 5173 / Go 8080（经 `scripts/go.sh` 使用项目工具链）。 |
-| `make generate` | Goa → sqlc → Orval → prettier，四步全量生成。 |
-| `make check-generated` | 重新生成后比对，防止手改生成代码。 |
-| `make format` / `format-check` / `lint` / `typecheck` | 格式、ESLint + `go vet`、`tsc --noEmit`。 |
-| `make test` | Vitest + `go test ./...` + i18n key 一致性。 |
-| `make build` | 前端生产构建 + `go build ./...`。 |
-| `make test-integration` | `-tags=integration`，连真实 PostgreSQL 的迁移/约束/范围/事务测试。 |
-| `make test-e2e` / `-smoke` / `-changed` / `-parallel` | 全量 / `@smoke` 最小链路 / 按改动选文件（`scripts/e2e-changed.mjs`）/ 两套独立栈并行。 |
-| `make test-webmcp-e2e` / `test-mcp` / `test-mcp-e2e` / `test-mcp-native*` | 页面工具专项 / 远程 MCP 协议+DB+浏览器 / 真实 Codex、WorkBuddy 客户端验收。 |
-| `make check-rules` | 校验 AGENTS/Skill/清单结构与链接。 |
-| `make test-security` | 认证、授权、配置、范围、身份、MCP、传输单测 + 集成测试。 |
-| `make ci-fast` / `make ci` | 提交级门禁 / 发布候选全量。 |
+| `./horizon-cli install` / `./horizon-cli tools` | 安装前端依赖 / 安装锁版本 sqlc 到 `.tools/bin`。 |
+| `./horizon-cli db-up` / `./horizon-cli db-down` | 起停本地 PostgreSQL。 |
+| `./horizon-cli migrate` / `./horizon-cli bootstrap` | 执行迁移 / 首次创建内置管理员与租户。 |
+| `./horizon-cli dev` / `./horizon-cli dev-api` | Vite 5173 / Go 8080（CLI 优先选择项目 Go 工具链）。 |
+| `./horizon-cli generate` | Workflow → Goa → sqlc → Orval → Runtime 与 Capability SDK → Prettier。 |
+| `./horizon-cli check-generated` | 重新生成后比对，防止手改生成代码。 |
+| `./horizon-cli format` / `format-check` / `lint` / `typecheck` | 格式、ESLint + `go vet`、`tsc --noEmit`。 |
+| `./horizon-cli test` | Vitest + `go test ./...` + i18n key 一致性。 |
+| `./horizon-cli build` | 前端生产构建 + `go build ./...`。 |
+| `./horizon-cli test-integration` | `-tags=integration`，连真实 PostgreSQL 的迁移/约束/范围/事务测试。 |
+| `./horizon-cli test-e2e` / `-smoke` / `-changed` / `-parallel` | 全量 / `@smoke` 最小链路 / 按改动选文件（`scripts/e2e-changed.mjs`）/ 两套独立栈并行。 |
+| `./horizon-cli test-webmcp-e2e` / `test-mcp` / `test-mcp-e2e` / `test-mcp-native*` | 页面工具专项 / 远程 MCP 协议+DB+浏览器 / 真实 Codex、WorkBuddy 客户端验收。 |
+| `./horizon-cli check-rules` | 校验 AGENTS/Skill/清单结构与链接。 |
+| `./horizon-cli test-security` | 认证、授权、配置、范围、身份、MCP、传输单测 + 集成测试。 |
+| `./horizon-cli ci-fast` / `./horizon-cli ci` | 提交级门禁 / 发布候选全量。 |
 
 ## 5. Agent 资产
 
@@ -163,7 +162,7 @@ xxh-baseline/
 | 文件 | 作用 |
 |---|---|
 | `cmd/api/main.go` | 加载配置、初始化结构化日志、信号处理，交给 `server.Run`。 |
-| `cmd/bootstrap/main.go` | 首次部署创建内置管理员与工作区（读取 `BOOTSTRAP_*`）。 |
+| `cmd/bootstrap/main.go` | 首次部署创建内置管理员与租户（读取 `BOOTSTRAP_*`）。 |
 | `cmd/migrate/main.go` | 执行 Goose 迁移（嵌入 `db/migrations`）。 |
 | `cmd/e2e/main.go` | E2E 专用启动器：从 `TEST_DATABASE_URL` 建隔离数据库/schema，迁移后以独立端口启动服务，供 Playwright `webServer` 使用。 |
 
@@ -195,7 +194,7 @@ xxh-baseline/
 | `platform/metadata/schema.go` | 解析 embed 的 goose 迁移，还原基表、列、CHECK 枚举与复合外键（`ParentOf`/`ScopeTarget`/`ChildrenOf`）。 |
 | `platform/metadata/validate.go` | 实体声明与物理 schema 的 E1–E6、E10 校验；`ReferenceAliases` 处理身份指针表。 |
 | `platform/metadata/transitions.go` | E8：状态转移与能力目录的双向核对。 |
-| `cmd/entitycheck/` | `make check-entities` 入口：结构问题、契约问题、schema 问题、hint 与 accepted gaps 分列输出。 |
+| `cmd/entitycheck/` | `./horizon-cli check-entities` 入口：结构问题、契约问题、schema 问题、hint 与 accepted gaps 分列输出。 |
 
 ### 6.6 system/identity — 身份与权限后台
 
@@ -254,7 +253,7 @@ xxh-baseline/
 |---|---|
 | `example/module.go` | 参考模块：3 个能力（list/create/archive，覆盖读→写→高风险状态变更）+ Outbox 事件 + 事件触发 AI 评审，示范完整闭环。 |
 | `settings/types.go` | 设置域类型：`ConfigDefinition`、`ConfigEntry`、`ChangeEntry/ChangeRecord`、`ConfigTarget`。 |
-| `settings/capability.go` | 12 个设置能力（读工作区/生效值/偏好、草稿、发布、回滚、导出、Logo、密码验证、排期增删查）。 |
+| `settings/capability.go` | 12 个设置能力（读租户/生效值/偏好、草稿、发布、回滚、导出、Logo、密码验证、排期增删查）。 |
 | `settings/service.go` | 发布事务：版本锁、同事务快照与审计、敏感发布单次绑定重新认证、偏好写入。 |
 | `settings/schedules.go` | 定时发布 worker：`pending` 部分唯一索引 + `SKIP LOCKED` 领取，到期重建原 Principal 重新授权，状态与失败码原子保存。 |
 | `dictionaries/types.go` | 字典域类型：定义、文档、条目、覆盖、引用。 |
@@ -553,7 +552,7 @@ xxh-baseline/
 | 能力 | 说明 |
 |---|---|
 | `identity.account.create/update/delete` | 账号增改删（含部门与权限覆盖），事件 `identity.account.{created,updated,deleted}`。 |
-| `identity.organization.create/update/delete` | 组织（企业/公司）增改删。 |
+| `identity.organization.update` | 更新当前租户的组织资料。 |
 | `identity.department.create/update/delete` | 部门增改删。 |
 | `identity.role.create/update/delete` | 角色与授权增改删。 |
 
@@ -561,7 +560,7 @@ xxh-baseline/
 
 | 能力 | 风险/审批 | 说明 |
 |---|---|---|
-| `settings.workspace.read` | low/auto | 工作区配置目录。 |
+| `settings.workspace.read` | low/auto | 租户配置目录。 |
 | `settings.effective.read` | low/auto | 生效配置与 revision。 |
 | `settings.preferences.update` | low/auto | 个人偏好。 |
 | `settings.draft.create` | medium/auto | 创建草稿。 |
@@ -666,7 +665,7 @@ settings.schedule.create → gov_settings_schedules(pending)
 | 要改的东西 | 主要文件 |
 |---|---|
 | 新增业务能力 | `system/<模块>/capability.go` 或 `applications/<模块>/module.go`（契约 + 注册）、service 里实现 Executor、必要时 `db/migrations` + `db/query`、`tests/capability_modules_test.go` |
-| 新增会话/系统端点 | `design/*.go` → `make generate` → `runtime/transport/*.go` 适配 → `guardedPath` 与 `tests` |
+| 新增会话/系统端点 | `design/*.go` → `./horizon-cli generate` → `runtime/transport/*.go` 适配 → `guardedPath` 与 `tests` |
 | 改权限/角色/范围 | `system/identity/{catalog,policy,governance}.go`、`authorization/*`、`dataaccess/scope.go`、`tests/identity_test.go`、前端 `permission-matrix.tsx` |
 | 改临时权限 | `system/identity/temporary.go`、`db/query/temporary_access.sql`、`temporary-access.tsx`、`tests/temporary_access_test.go` |
 | 改设置/字典 | `system/{settings,dictionaries}`、`system/governance/registry.go`、`gov_*` 迁移、`features/governance/*` |
@@ -675,7 +674,7 @@ settings.schedule.create → gov_settings_schedules(pending)
 | 改远程 MCP | `integrations/mcp/*`、`db/query/mcp.sql`、`mcp/remote.tsx`、`scripts/mcp-business-*`、`webskills/baseline-business` |
 | 改页面工具 | `features/webmcp/*`、`lib/webmcp/{runtime,routes}.ts`、`e2e/webmcp.spec.ts`、`webskills/baseline-web-*` |
 | 加文案 | `i18n/locales/{en,zh-CN}/<namespace>.json`（两侧同步） |
-| 加门禁/脚本 | `scripts/*.mjs` + 自身测试、`Makefile`、`docs/agent-policy.json`、`ci.yml` |
+| 加门禁/脚本 | `scripts/*.mjs` + 自身测试、`cmd/horizon-cli/project.go`、`docs/agent-policy.json`、`ci.yml` |
 
 ## 13. 生成边界与禁区
 
@@ -685,7 +684,7 @@ settings.schedule.create → gov_settings_schedules(pending)
 | `services/db/migrations/*.sql`、`db/query/*.sql` | `services/internal/repository/dbgen/**` |
 | `services/gen/http/openapi3.json`（间接） | `apps/web/src/api/generated/**` |
 
-- 改源之后必须 `make generate`，再 `make check-generated`；生成失败时用正确 Node（`/usr/local/opt/node@22/bin`）重新生成，不手写生成文件。
+- 改源之后必须 `./horizon-cli generate`，再 `./horizon-cli check-generated`；生成失败时用正确 Node（`/usr/local/opt/node@22/bin`）重新生成，不手写生成文件。
 - `components/ui/*` 是可维护的 shadcn 源码，与生成目录性质不同，不适用"禁改"。
 - 契约字段改名、收紧校验、状态码或权限变化属于兼容性变更，必须同步 SDK、前端与测试。
 
@@ -705,5 +704,5 @@ settings.schedule.create → gov_settings_schedules(pending)
 1. 目录或生成边界变化必须同步本文件 §2、§13。
 2. 新增/删除能力必须同步 §10 与 `docs/agent-tooling.md` 的任务矩阵。
 3. 新增页面或路由必须同步 §7.1、`lib/webmcp/routes.ts` 与 E2E 清单。
-4. 新增 Skill 或规则目录必须同步 §5 与 `docs/agent-policy.json`，然后跑 `make check-rules`。
+4. 新增 Skill 或规则目录必须同步 §5 与 `docs/agent-policy.json`，然后跑 `./horizon-cli check-rules`。
 5. 本文件描述"现状"，不写计划；未实现的能力标注为未实现，不提前登记。

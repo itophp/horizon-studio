@@ -28,7 +28,7 @@ func (q *Queries) GovCancelSettingsSchedule(ctx context.Context, arg GovCancelSe
 }
 
 const govClaimSettingsSchedule = `-- name: GovClaimSettingsSchedule :one
-SELECT id,tenant_id,draft_id,actor_id,department_id,base_revision,draft_hash,sensitive_confirmed FROM gov_settings_schedules WHERE status='pending' AND scheduled_at<=clock_timestamp() ORDER BY scheduled_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
+SELECT id,tenant_id,draft_id,actor_id,department_id,base_revision,draft_hash,sensitive_confirmed,identity_binding_id FROM gov_settings_schedules WHERE status='pending' AND scheduled_at<=clock_timestamp() ORDER BY scheduled_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
 `
 
 type GovClaimSettingsScheduleRow struct {
@@ -40,6 +40,7 @@ type GovClaimSettingsScheduleRow struct {
 	BaseRevision       int64
 	DraftHash          string
 	SensitiveConfirmed bool
+	IdentityBindingID  pgtype.UUID
 }
 
 func (q *Queries) GovClaimSettingsSchedule(ctx context.Context) (GovClaimSettingsScheduleRow, error) {
@@ -54,13 +55,14 @@ func (q *Queries) GovClaimSettingsSchedule(ctx context.Context) (GovClaimSetting
 		&i.BaseRevision,
 		&i.DraftHash,
 		&i.SensitiveConfirmed,
+		&i.IdentityBindingID,
 	)
 	return i, err
 }
 
 const govCreateSettingsSchedule = `-- name: GovCreateSettingsSchedule :one
-INSERT INTO gov_settings_schedules(tenant_id,draft_id,actor_id,department_id,base_revision,draft_hash,sensitive_confirmed,scheduled_at)
-SELECT $1,$2,$3,$4,$5,$6,$7::boolean,$8::timestamptz WHERE $8::timestamptz>clock_timestamp()+interval '1 minute' AND $8::timestamptz<=clock_timestamp()+interval '8760 hours' RETURNING id
+INSERT INTO gov_settings_schedules(tenant_id,draft_id,actor_id,department_id,base_revision,draft_hash,sensitive_confirmed,scheduled_at,identity_binding_id)
+SELECT $1,$2,$3,$4,$5,$6,$7::boolean,$8::timestamptz,NULLIF($9::text, '')::uuid WHERE $8::timestamptz>clock_timestamp()+interval '1 minute' AND $8::timestamptz<=clock_timestamp()+interval '8760 hours' RETURNING id
 `
 
 type GovCreateSettingsScheduleParams struct {
@@ -72,6 +74,7 @@ type GovCreateSettingsScheduleParams struct {
 	DraftHash          string
 	SensitiveConfirmed bool
 	ScheduledAt        pgtype.Timestamptz
+	BindingID          string
 }
 
 func (q *Queries) GovCreateSettingsSchedule(ctx context.Context, arg GovCreateSettingsScheduleParams) (int64, error) {
@@ -84,6 +87,7 @@ func (q *Queries) GovCreateSettingsSchedule(ctx context.Context, arg GovCreateSe
 		arg.DraftHash,
 		arg.SensitiveConfirmed,
 		arg.ScheduledAt,
+		arg.BindingID,
 	)
 	var id int64
 	err := row.Scan(&id)

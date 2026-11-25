@@ -16,7 +16,7 @@ vi.mock("@/lib/capabilities", async (original) => ({
   runtimeRead: api.read,
   runtimeExecute: api.execute,
 }));
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({ permissions: ["applications:manage"] }),
 }));
 vi.mock("./design-activation", () => ({ DesignActivation: () => null }));

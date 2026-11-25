@@ -64,6 +64,10 @@
 | 一次性验证码 | InputOTP | 允许粘贴与自动填充；不是密码输入替代品 |
 | 文件与附件 | Button + 必要的隐藏原生 file input + 共享文件服务 | 类型/大小、上传进度、取消/重试、删除与权限校验；不虚构 shadcn 内置 Upload |
 
+Markdown/富文本编辑器、多行文本域与子表在双列表单中**必须占整行（跨列）**，不与单行字段并排；只有短字段才允许两列并排。Markdown 编辑器需要足够的编辑高度，字段说明与校验错误紧随其后。
+
+日期与时间必须使用日期/时间选择器，离散的时、分、秒、星期和日号使用下拉选择，不提供需要用户手填的分段数字输入框；服务端仍按稳定格式解析并校验范围。
+
 Field/FieldGroup/FieldLabel/FieldDescription/FieldError 组织标签、说明和错误；与 RHF Controller 及 Zod 配合，具体 props 按所引入 Base UI 源码核对。字段错误关联 aria-describedby/aria-invalid；错误不改控件可访问名称。必填、禁用、只读、加载、无权语义分开；业务服务端验证仍是最终依据。
 
 ## 下拉选择决策
@@ -143,7 +147,7 @@ Field/FieldGroup/FieldLabel/FieldDescription/FieldError 组织标签、说明和
 | Popover | 日期选择、小型筛选等局部交互 | 不承担复杂表单与多层业务流程 |
 | Tooltip | 图标含义和短辅助提示 | 关键内容、错误与必读说明必须直接可见；触屏有等价入口 |
 | HoverCard | 对象的补充预览 | 不把必要操作只藏在 hover 内 |
-| Resizable / ScrollArea | 可调工作区 / 确需定制的局部滚动 | 默认用正常布局与 overflow；不要层层包 ScrollArea |
+| Resizable / ScrollArea | 可调租户 / 确需定制的局部滚动 | 默认用正常布局与 overflow；不要层层包 ScrollArea |
 | ContextMenu / Menubar | 画布/编辑器的辅助命令 | 右键与快捷键必须有可见菜单替代，普通管理页不滥用 |
 
 浮层须保留标题/描述、焦点约束与返回、Escape/关闭策略、表单错误和未保存提示；嵌套选择器优先在当前弹层完成，不堆多层 Dialog。不能在 Router Link 内再嵌套 Button。

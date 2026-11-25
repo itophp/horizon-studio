@@ -17,7 +17,7 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import { errorText } from "@/features/administration/shared";
+import { errorText } from "@/features/identity/shared";
 import { studio, type Project, type Requirement } from "./api";
 import { studioWorkbenchPath } from "./routes";
 

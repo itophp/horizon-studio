@@ -11,9 +11,5 @@ export type PermissionGrantScope =
 
 export const PermissionGrantScope = {
   ALL: "ALL",
-  ORGANIZATION: "ORGANIZATION",
-  DEPARTMENT: "DEPARTMENT",
-  DEPARTMENT_TREE: "DEPARTMENT_TREE",
   OWN: "OWN",
-  CUSTOM: "CUSTOM",
 } as const;

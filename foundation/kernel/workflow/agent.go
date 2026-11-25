@@ -43,6 +43,9 @@ func (e *Engine) agent(ctx context.Context, s Step, args contracts.Input, onInte
 	if err != nil {
 		return nil, err
 	}
+	if state.Manifest.PlanResult != "" && !e.planAgentToolsAllowed(s, p, state.Manifest.PlanCapability) {
+		return nil, contracts.Problem("forbidden")
+	}
 	model, err := e.AgentModel(ctx)
 	if err != nil {
 		return nil, err
@@ -270,6 +273,11 @@ func (t *agentTool) InvokableRun(ctx context.Context, raw string, _ ...tool.Opti
 		return "", contracts.Problem("invalid")
 	}
 	step := Step{ID: t.step + "_tool_" + contracts.Digest(contracts.Input{"callId": callID}), Capability: t.definition.Name, Version: t.definition.Version, Constants: args}
+	if state, err := current(ctx); err == nil && state.Manifest.PlanResult != "" {
+		step.CallMode = "invoke_pinned_plan"
+		step.PlanID = contracts.DefaultExecutionBinding(t.definition).Plan.PlanID
+		step.PlanVersion = 1
+	}
 	out, err := t.engine.step(ctx, step, map[string]any{}, 0)
 	if err != nil {
 		return "", err

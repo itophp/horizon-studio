@@ -158,7 +158,7 @@ func (e *Engine) stepBody(ctx context.Context, s Step, values map[string]any, it
 			}
 		}()
 	}
-	principal, err := e.Core.Identity.PrincipalForTask(ctx, state.Tenant, state.Account, row.DepartmentID)
+	principal, err := e.workflowPrincipal(ctx, state.Tenant, state.Account, row.IdentityBindingID, state.Manifest)
 	if err != nil {
 		return nil, contracts.Problem("forbidden")
 	}
@@ -248,7 +248,7 @@ func (e *Engine) stepBody(ctx context.Context, s Step, values map[string]any, it
 	if state.AgentTools {
 		origin = contracts.OriginAgent
 	}
-	ctx = gateway.WithTaskReference(ctx, gateway.TaskReference{RunID: state.ID, TenantID: state.Tenant, AccountID: state.Account, DepartmentID: row.DepartmentID})
+	ctx = gateway.WithTaskReference(ctx, gateway.TaskReference{RunID: state.ID, TenantID: state.Tenant, AccountID: state.Account, IdentityBindingID: row.IdentityBindingID})
 	request := gateway.Request{Name: s.Capability, Version: s.Version, Input: args, Origin: origin, CorrelationID: state.Manifest.Correlation, CausationID: state.Manifest.Parent, TriggerDepth: state.Manifest.Depth + 1, IdempotencyKey: fmt.Sprintf("orch:%d:%s:%d", state.ID, s.ID, iteration)}
 	var result *contracts.Result
 	switch s.CallMode {

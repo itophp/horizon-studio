@@ -9,12 +9,8 @@ import { DriveItemsTable, type Item, type DriveDialog } from "./items-table";
 import { useTranslation } from "react-i18next";
 import { Link, useParams, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
-import { useSession } from "@/features/administration/auth";
-import {
-  ErrorBanner,
-  Loading,
-  PageHeading,
-} from "@/features/administration/shared";
+import { useSession } from "@/features/identity/auth";
+import { ErrorBanner, Loading, PageHeading } from "@/features/identity/shared";
 import {
   driveFiles,
   driveFolderPath,
@@ -37,7 +33,7 @@ export function DriveDetailPage() {
   const search = params.get("q") ?? "";
   const kind = params.get("type") ?? "all";
   const sort = params.get("sort") ?? "name";
-  const identity = `${session.tenantId}:${session.account.id}:${session.activeDepartmentId}`;
+  const identity = `${session.tenantId}:${session.account.id}:${session.identityBindingId}`;
   const uploadKey = `drive-upload:${identity}:${spaceId}:${folderId}`;
   const canUse =
     session.permissions.includes("drive:use") &&

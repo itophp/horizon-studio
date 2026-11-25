@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { EditorDialog } from "@/features/administration/shared";
+import { EditorDialog } from "@/features/identity/shared";
 import { Button } from "@/components/ui/button";
 import type { EventBinding } from "./types";
 

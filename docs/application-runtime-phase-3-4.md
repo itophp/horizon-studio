@@ -8,7 +8,7 @@
 - 安装、应用状态、历史、运行依赖、调用依赖与任务事件迁移；正式 applications:read/manage 权限；生命周期 CAS、事务历史/Outbox、依赖与活动引用检查。
 - Gateway 安装可用性检查、固定版本发现、字段读写政策、审批恢复检查；可选 Runtime 调用引用拒绝旧版本表单提交。
 - 服务端 data.read/context.resolve/action.invoke，固定 Provider、查询预算与投影、记录范围复核、正文排除、受限映射和自动化子调用来源。
-- 组件资源租约、释放/回滚、受控静态异步组件、Locale/Theme 资源接口；Split/Master-detail、Drawer Host、Shell 插槽、工作区和列偏好。
+- 组件资源租约、释放/回滚、受控静态异步组件、Locale/Theme 资源接口；Split/Master-detail、Drawer Host、Shell 插槽、租户和列偏好。
 - 金额字符串、时间、多选、附件、数组子表、字段组、联动及远程引用搜索；定义变化保留过期表单内容并禁止提交。
 - 文章/项目分析工作流复用 Eino ADK；服务端语义接入 Harness/浏览器恢复；固定工具集与授权目录取交集。
 - Goa 原生 SSE 任务读取、序号重放、状态/步骤/工具调用事件；任务面板、取消能力、页面工具租约及注销。事件不存正文或工具参数。
@@ -25,7 +25,7 @@
 | Form Runtime | v2-form、command-fields、advanced-controls | 子表嵌套引用、上传期间提交协调及定义变更测试 |
 | Table Runtime | v2-table、table-preferences | 偏好恢复与动态权限撤销测试 |
 | Action Runtime | action、runtime-tools、action.invoke | 跨渠道审批/恢复组合回归 |
-| State Runtime | workspace、page-view | 工作区关闭保护、标签隔离与恢复专项 |
+| State Runtime | workspace、page-view | 页面关闭保护、标签隔离与恢复专项 |
 | Permission Runtime | Gateway access；module permission | 完整安全回归当前失败，需要修正测试身份与核查行为 |
 | Runtime Context | context.resolve；harness/semantic | 撤权、版本变更、检查点恢复的组合覆盖 |
 | Context Provider | Harness、Workflow、SSE、RuntimeTools | 外部模型服务未验收；Memory 未接入 |

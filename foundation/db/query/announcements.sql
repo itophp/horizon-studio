@@ -45,4 +45,6 @@ SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(tenant_id)::text||':file:
 
 -- name: GovInboxMessage :one
 SELECT n.id,n.payload,n.read_at,n.created_at FROM gov_notifications n WHERE n.tenant_id=$1 AND n.recipient_id=$2 AND n.id=$3
-AND (n.department_id=$4 OR (n.announcement_id IS NOT NULL AND EXISTS(SELECT 1 FROM gov_notification_members m WHERE m.tenant_id=n.tenant_id AND m.account_id=n.recipient_id AND m.department_id=n.department_id)));
+AND (n.department_id = sqlc.arg(department_id)::bigint
+    OR (n.department_id IS NULL AND sqlc.arg(tenant_base)::boolean) OR (n.announcement_id IS NOT NULL AND EXISTS(SELECT 1 FROM gov_notification_members m WHERE m.tenant_id=n.tenant_id AND m.account_id=n.recipient_id AND m.department_id=n.department_id)))
+AND (COALESCE(n.payload->>'event','') <> 'requested' OR sqlc.arg(can_review)::boolean);

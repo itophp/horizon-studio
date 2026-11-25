@@ -179,24 +179,24 @@ func (q *Queries) AITriggerPoliciesForEvent(ctx context.Context, arg AITriggerPo
 }
 
 const capAppendEvent = `-- name: CapAppendEvent :exec
-INSERT INTO cap_events (tenant_id, event_id, event_type, aggregate_type, aggregate_id, payload, invocation_id, account_id, department_id, correlation_id, causation_id, trigger_depth)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+INSERT INTO cap_events (tenant_id, event_id, event_type, aggregate_type, aggregate_id, payload, invocation_id, account_id, correlation_id, causation_id, trigger_depth, identity_binding_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF($12::text, '')::uuid)
 ON CONFLICT (tenant_id, event_id) DO NOTHING
 `
 
 type CapAppendEventParams struct {
-	TenantID      string
-	EventID       string
-	EventType     string
-	AggregateType string
-	AggregateID   string
-	Payload       []byte
-	InvocationID  string
-	AccountID     int64
-	DepartmentID  int64
-	CorrelationID string
-	CausationID   string
-	TriggerDepth  int32
+	TenantID          string
+	EventID           string
+	EventType         string
+	AggregateType     string
+	AggregateID       string
+	Payload           []byte
+	InvocationID      string
+	AccountID         int64
+	CorrelationID     string
+	CausationID       string
+	TriggerDepth      int32
+	IdentityBindingID string
 }
 
 func (q *Queries) CapAppendEvent(ctx context.Context, arg CapAppendEventParams) error {
@@ -209,33 +209,33 @@ func (q *Queries) CapAppendEvent(ctx context.Context, arg CapAppendEventParams) 
 		arg.Payload,
 		arg.InvocationID,
 		arg.AccountID,
-		arg.DepartmentID,
 		arg.CorrelationID,
 		arg.CausationID,
 		arg.TriggerDepth,
+		arg.IdentityBindingID,
 	)
 	return err
 }
 
 const capAppendOutbox = `-- name: CapAppendOutbox :exec
-INSERT INTO cap_outbox (tenant_id, event_id, event_type, aggregate_type, aggregate_id, payload, invocation_id, account_id, department_id, correlation_id, causation_id, trigger_depth)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+INSERT INTO cap_outbox (tenant_id, event_id, event_type, aggregate_type, aggregate_id, payload, invocation_id, account_id, correlation_id, causation_id, trigger_depth, identity_binding_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULLIF($12::text, '')::uuid)
 ON CONFLICT (tenant_id, event_id) DO NOTHING
 `
 
 type CapAppendOutboxParams struct {
-	TenantID      string
-	EventID       string
-	EventType     string
-	AggregateType string
-	AggregateID   string
-	Payload       []byte
-	InvocationID  string
-	AccountID     int64
-	DepartmentID  int64
-	CorrelationID string
-	CausationID   string
-	TriggerDepth  int32
+	TenantID          string
+	EventID           string
+	EventType         string
+	AggregateType     string
+	AggregateID       string
+	Payload           []byte
+	InvocationID      string
+	AccountID         int64
+	CorrelationID     string
+	CausationID       string
+	TriggerDepth      int32
+	IdentityBindingID string
 }
 
 func (q *Queries) CapAppendOutbox(ctx context.Context, arg CapAppendOutboxParams) error {
@@ -248,10 +248,10 @@ func (q *Queries) CapAppendOutbox(ctx context.Context, arg CapAppendOutboxParams
 		arg.Payload,
 		arg.InvocationID,
 		arg.AccountID,
-		arg.DepartmentID,
 		arg.CorrelationID,
 		arg.CausationID,
 		arg.TriggerDepth,
+		arg.IdentityBindingID,
 	)
 	return err
 }
@@ -267,24 +267,25 @@ WITH claimed AS (
 UPDATE cap_outbox o SET attempts = o.attempts + 1
 FROM claimed c WHERE o.id = c.id
 RETURNING o.id, o.tenant_id, o.event_id, o.event_type, o.aggregate_type, o.aggregate_id, o.payload,
-          o.invocation_id, o.account_id, o.department_id, o.correlation_id, o.causation_id, o.trigger_depth, o.attempts
+          o.invocation_id, o.account_id, o.correlation_id, o.causation_id, o.trigger_depth, o.attempts,
+          COALESCE(o.identity_binding_id::text, '')::text AS identity_binding_id
 `
 
 type CapClaimOutboxRow struct {
-	ID            int64
-	TenantID      string
-	EventID       string
-	EventType     string
-	AggregateType string
-	AggregateID   string
-	Payload       []byte
-	InvocationID  string
-	AccountID     int64
-	DepartmentID  int64
-	CorrelationID string
-	CausationID   string
-	TriggerDepth  int32
-	Attempts      int32
+	ID                int64
+	TenantID          string
+	EventID           string
+	EventType         string
+	AggregateType     string
+	AggregateID       string
+	Payload           []byte
+	InvocationID      string
+	AccountID         int64
+	CorrelationID     string
+	CausationID       string
+	TriggerDepth      int32
+	Attempts          int32
+	IdentityBindingID string
 }
 
 func (q *Queries) CapClaimOutbox(ctx context.Context, maxRows int32) ([]CapClaimOutboxRow, error) {
@@ -306,11 +307,11 @@ func (q *Queries) CapClaimOutbox(ctx context.Context, maxRows int32) ([]CapClaim
 			&i.Payload,
 			&i.InvocationID,
 			&i.AccountID,
-			&i.DepartmentID,
 			&i.CorrelationID,
 			&i.CausationID,
 			&i.TriggerDepth,
 			&i.Attempts,
+			&i.IdentityBindingID,
 		); err != nil {
 			return nil, err
 		}
@@ -324,7 +325,7 @@ func (q *Queries) CapClaimOutbox(ctx context.Context, maxRows int32) ([]CapClaim
 
 const capCompleteApproval = `-- name: CapCompleteApproval :exec
 UPDATE cap_approvals SET status = $3, execution_code = $4
-WHERE tenant_id = $1 AND id = $2
+WHERE tenant_id = $1 AND id = $2 AND status = 'approved'
 `
 
 type CapCompleteApprovalParams struct {
@@ -345,9 +346,9 @@ func (q *Queries) CapCompleteApproval(ctx context.Context, arg CapCompleteApprov
 }
 
 const capCreateApproval = `-- name: CapCreateApproval :one
-INSERT INTO cap_approvals (tenant_id, account_id, department_id, capability, capability_version, invocation_id, risk, approval, status, arguments, arguments_digest, expires_at, action_key)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, now() + make_interval(mins => $11::int), $12)
-ON CONFLICT (tenant_id, capability, account_id, arguments_digest, action_key) WHERE status = 'pending'
+INSERT INTO cap_approvals (tenant_id, account_id, capability, capability_version, invocation_id, risk, approval, status, arguments, arguments_digest, expires_at, action_key, identity_binding_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, now() + make_interval(mins => $10::int), $11, NULLIF($12::text, '')::uuid)
+ON CONFLICT (tenant_id, capability, account_id, arguments_digest, action_key, identity_binding_id) WHERE status = 'pending'
 DO UPDATE SET expires_at = cap_approvals.expires_at
 RETURNING id
 `
@@ -355,7 +356,6 @@ RETURNING id
 type CapCreateApprovalParams struct {
 	TenantID          string
 	AccountID         int64
-	DepartmentID      int64
 	Capability        string
 	CapabilityVersion string
 	InvocationID      string
@@ -365,13 +365,13 @@ type CapCreateApprovalParams struct {
 	ArgumentsDigest   string
 	ExpiresMinutes    int32
 	ActionKey         string
+	IdentityBindingID string
 }
 
 func (q *Queries) CapCreateApproval(ctx context.Context, arg CapCreateApprovalParams) (int64, error) {
 	row := q.db.QueryRow(ctx, capCreateApproval,
 		arg.TenantID,
 		arg.AccountID,
-		arg.DepartmentID,
 		arg.Capability,
 		arg.CapabilityVersion,
 		arg.InvocationID,
@@ -381,6 +381,7 @@ func (q *Queries) CapCreateApproval(ctx context.Context, arg CapCreateApprovalPa
 		arg.ArgumentsDigest,
 		arg.ExpiresMinutes,
 		arg.ActionKey,
+		arg.IdentityBindingID,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -389,33 +390,43 @@ func (q *Queries) CapCreateApproval(ctx context.Context, arg CapCreateApprovalPa
 
 const capCreateInvocation = `-- name: CapCreateInvocation :one
 WITH invocation AS (
-INSERT INTO cap_invocations (tenant_id, account_id, department_id, invocation_id, capability, capability_version, origin, idempotency_key, status, input, input_digest, correlation_id, causation_id, trigger_depth, trace_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+INSERT INTO cap_invocations (tenant_id, account_id, invocation_id, capability, capability_version, origin, idempotency_key, status, input, input_digest, correlation_id, causation_id, trigger_depth, trace_id, identity_binding_id, machine_credential_id, agent_delegation_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULLIF($15::text, '')::uuid,
+        NULLIF($16::text, '')::uuid, NULLIF($17::text, '')::uuid)
 RETURNING id, created_at, tenant_id, invocation_id, account_id
 ), record AS (
-INSERT INTO cap_execution_records(tenant_id,invocation_id,account_id,binding)
-SELECT tenant_id,invocation_id,account_id,COALESCE($16::jsonb,'{}'::jsonb) FROM invocation
+INSERT INTO cap_execution_records(tenant_id,invocation_id,account_id,binding,actor_context)
+SELECT tenant_id,invocation_id,account_id,COALESCE($18::jsonb,'{}'::jsonb),
+       CASE WHEN $19::bigint > 0
+            THEN jsonb_build_object('actingOrganizationId', $19::bigint,
+                                    'portal', $20::text)
+            ELSE '{}'::jsonb END
+FROM invocation
 )
 SELECT id,created_at FROM invocation
 `
 
 type CapCreateInvocationParams struct {
-	TenantID          string
-	AccountID         int64
-	DepartmentID      int64
-	InvocationID      string
-	Capability        string
-	CapabilityVersion string
-	Origin            string
-	IdempotencyKey    string
-	Status            string
-	Input             []byte
-	InputDigest       string
-	CorrelationID     string
-	CausationID       string
-	TriggerDepth      int32
-	TraceID           string
-	ExecutionBinding  []byte
+	TenantID             string
+	AccountID            int64
+	InvocationID         string
+	Capability           string
+	CapabilityVersion    string
+	Origin               string
+	IdempotencyKey       string
+	Status               string
+	Input                []byte
+	InputDigest          string
+	CorrelationID        string
+	CausationID          string
+	TriggerDepth         int32
+	TraceID              string
+	IdentityBindingID    string
+	MachineCredentialID  string
+	AgentDelegationID    string
+	ExecutionBinding     []byte
+	ActingOrganizationID int64
+	ActorPortal          string
 }
 
 type CapCreateInvocationRow struct {
@@ -427,7 +438,6 @@ func (q *Queries) CapCreateInvocation(ctx context.Context, arg CapCreateInvocati
 	row := q.db.QueryRow(ctx, capCreateInvocation,
 		arg.TenantID,
 		arg.AccountID,
-		arg.DepartmentID,
 		arg.InvocationID,
 		arg.Capability,
 		arg.CapabilityVersion,
@@ -440,7 +450,12 @@ func (q *Queries) CapCreateInvocation(ctx context.Context, arg CapCreateInvocati
 		arg.CausationID,
 		arg.TriggerDepth,
 		arg.TraceID,
+		arg.IdentityBindingID,
+		arg.MachineCredentialID,
+		arg.AgentDelegationID,
 		arg.ExecutionBinding,
+		arg.ActingOrganizationID,
+		arg.ActorPortal,
 	)
 	var i CapCreateInvocationRow
 	err := row.Scan(&i.ID, &i.CreatedAt)
@@ -486,9 +501,21 @@ func (q *Queries) CapExpireApprovals(ctx context.Context, tenantID string) error
 }
 
 const capFindIdempotent = `-- name: CapFindIdempotent :one
-SELECT id, invocation_id, capability, capability_version, status, result, error_code, approval_id, trace_id, created_at, finished_at, account_id, input_digest
+SELECT id, invocation_id, capability, capability_version, status, result, error_code, approval_id, trace_id, created_at, finished_at, account_id, input_digest,
+       COALESCE(identity_binding_id::text, '')::text AS identity_binding_id,
+       COALESCE(machine_credential_id::text, '')::text AS machine_credential_id,
+       COALESCE(agent_delegation_id::text, '')::text AS agent_delegation_id,
+       EXISTS (
+           SELECT 1 FROM iam_accounts placement
+           LEFT JOIN iam_login_accounts login ON login.id = placement.login_account_id
+           JOIN iam_tenant_memberships member ON member.tenant_id = placement.tenant_id
+                AND member.principal_id = COALESCE(login.principal_id, placement.machine_principal_id)
+           WHERE placement.tenant_id = cap_invocations.tenant_id AND placement.id = cap_invocations.account_id
+             AND member.access_revoked_at >= cap_invocations.created_at
+       ) AS membership_revoked_since_invocation
 FROM cap_invocations
-WHERE tenant_id = $1 AND capability = $2 AND idempotency_key = $3 AND idempotency_key <> ''
+WHERE cap_invocations.tenant_id = $1 AND cap_invocations.capability = $2
+    AND cap_invocations.idempotency_key = $3 AND cap_invocations.idempotency_key <> ''
 `
 
 type CapFindIdempotentParams struct {
@@ -498,19 +525,23 @@ type CapFindIdempotentParams struct {
 }
 
 type CapFindIdempotentRow struct {
-	ID                int64
-	InvocationID      string
-	Capability        string
-	CapabilityVersion string
-	Status            string
-	Result            []byte
-	ErrorCode         string
-	ApprovalID        int64
-	TraceID           string
-	CreatedAt         pgtype.Timestamptz
-	FinishedAt        pgtype.Timestamptz
-	AccountID         int64
-	InputDigest       string
+	ID                               int64
+	InvocationID                     string
+	Capability                       string
+	CapabilityVersion                string
+	Status                           string
+	Result                           []byte
+	ErrorCode                        string
+	ApprovalID                       int64
+	TraceID                          string
+	CreatedAt                        pgtype.Timestamptz
+	FinishedAt                       pgtype.Timestamptz
+	AccountID                        int64
+	InputDigest                      string
+	IdentityBindingID                string
+	MachineCredentialID              string
+	AgentDelegationID                string
+	MembershipRevokedSinceInvocation bool
 }
 
 func (q *Queries) CapFindIdempotent(ctx context.Context, arg CapFindIdempotentParams) (CapFindIdempotentRow, error) {
@@ -530,6 +561,10 @@ func (q *Queries) CapFindIdempotent(ctx context.Context, arg CapFindIdempotentPa
 		&i.FinishedAt,
 		&i.AccountID,
 		&i.InputDigest,
+		&i.IdentityBindingID,
+		&i.MachineCredentialID,
+		&i.AgentDelegationID,
+		&i.MembershipRevokedSinceInvocation,
 	)
 	return i, err
 }
@@ -563,9 +598,9 @@ func (q *Queries) CapFinishInvocation(ctx context.Context, arg CapFinishInvocati
 }
 
 const capGetApproval = `-- name: CapGetApproval :one
-SELECT id, tenant_id, account_id, department_id, capability, capability_version, invocation_id, risk, approval,
+SELECT id, tenant_id, account_id, capability, capability_version, invocation_id, risk, approval,
        arguments, arguments_digest, status, requested_at, expires_at, decided_by, decided_at,
-       decision_note, execution_code, action_key
+       decision_note, execution_code, action_key, identity_binding_id
 FROM cap_approvals
 WHERE tenant_id = $1 AND id = $2
 `
@@ -582,7 +617,6 @@ func (q *Queries) CapGetApproval(ctx context.Context, arg CapGetApprovalParams) 
 		&i.ID,
 		&i.TenantID,
 		&i.AccountID,
-		&i.DepartmentID,
 		&i.Capability,
 		&i.CapabilityVersion,
 		&i.InvocationID,
@@ -598,6 +632,7 @@ func (q *Queries) CapGetApproval(ctx context.Context, arg CapGetApprovalParams) 
 		&i.DecisionNote,
 		&i.ExecutionCode,
 		&i.ActionKey,
+		&i.IdentityBindingID,
 	)
 	return i, err
 }
@@ -608,12 +643,14 @@ SELECT id, invocation_id, capability, capability_version, origin, status, input,
        duration_ms, trace_id, created_at, finished_at
 FROM cap_invocations
 WHERE tenant_id = $1 AND account_id = $2 AND invocation_id = $3
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF($4::text, '')::uuid
 `
 
 type CapGetInvocationParams struct {
 	TenantID     string
 	AccountID    int64
 	InvocationID string
+	Binding      string
 }
 
 type CapGetInvocationRow struct {
@@ -638,7 +675,12 @@ type CapGetInvocationRow struct {
 }
 
 func (q *Queries) CapGetInvocation(ctx context.Context, arg CapGetInvocationParams) (CapGetInvocationRow, error) {
-	row := q.db.QueryRow(ctx, capGetInvocation, arg.TenantID, arg.AccountID, arg.InvocationID)
+	row := q.db.QueryRow(ctx, capGetInvocation,
+		arg.TenantID,
+		arg.AccountID,
+		arg.InvocationID,
+		arg.Binding,
+	)
 	var i CapGetInvocationRow
 	err := row.Scan(
 		&i.ID,
@@ -664,7 +706,9 @@ func (q *Queries) CapGetInvocation(ctx context.Context, arg CapGetInvocationPara
 }
 
 const capInvocationTrace = `-- name: CapInvocationTrace :one
-SELECT trace_id, correlation_id, causation_id, trigger_depth, capability, capability_version
+SELECT trace_id, correlation_id, causation_id, trigger_depth, capability, capability_version, origin,
+       COALESCE(machine_credential_id::text, '')::text AS machine_credential_id,
+       COALESCE(agent_delegation_id::text, '')::text AS agent_delegation_id
 FROM cap_invocations
 WHERE tenant_id = $1 AND invocation_id = $2
 `
@@ -675,12 +719,15 @@ type CapInvocationTraceParams struct {
 }
 
 type CapInvocationTraceRow struct {
-	TraceID           string
-	CorrelationID     string
-	CausationID       string
-	TriggerDepth      int32
-	Capability        string
-	CapabilityVersion string
+	TraceID             string
+	CorrelationID       string
+	CausationID         string
+	TriggerDepth        int32
+	Capability          string
+	CapabilityVersion   string
+	Origin              string
+	MachineCredentialID string
+	AgentDelegationID   string
 }
 
 func (q *Queries) CapInvocationTrace(ctx context.Context, arg CapInvocationTraceParams) (CapInvocationTraceRow, error) {
@@ -693,16 +740,24 @@ func (q *Queries) CapInvocationTrace(ctx context.Context, arg CapInvocationTrace
 		&i.TriggerDepth,
 		&i.Capability,
 		&i.CapabilityVersion,
+		&i.Origin,
+		&i.MachineCredentialID,
+		&i.AgentDelegationID,
 	)
 	return i, err
 }
 
 const capListApprovals = `-- name: CapListApprovals :many
-SELECT id, tenant_id, account_id, department_id, capability, capability_version, invocation_id, risk, approval,
+SELECT id, tenant_id, account_id, capability, capability_version, invocation_id, risk, approval,
        arguments, arguments_digest, status, requested_at, expires_at, decided_by, decided_at,
-       decision_note, execution_code, action_key
+       decision_note, execution_code, action_key, identity_binding_id
 FROM cap_approvals
-WHERE tenant_id = $1 AND status = 'pending' AND (account_id = $2 OR $3::bool)
+WHERE tenant_id = $1 AND status = 'pending' AND (
+    ($3::bool AND account_id <> $2) OR (
+        account_id = $2
+        AND identity_binding_id IS NOT DISTINCT FROM NULLIF($4::text, '')::uuid
+    )
+)
 ORDER BY id DESC
 LIMIT 100
 `
@@ -711,10 +766,16 @@ type CapListApprovalsParams struct {
 	TenantID  string
 	AccountID int64
 	Reviewer  bool
+	Binding   string
 }
 
 func (q *Queries) CapListApprovals(ctx context.Context, arg CapListApprovalsParams) ([]CapApproval, error) {
-	rows, err := q.db.Query(ctx, capListApprovals, arg.TenantID, arg.AccountID, arg.Reviewer)
+	rows, err := q.db.Query(ctx, capListApprovals,
+		arg.TenantID,
+		arg.AccountID,
+		arg.Reviewer,
+		arg.Binding,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -726,7 +787,6 @@ func (q *Queries) CapListApprovals(ctx context.Context, arg CapListApprovalsPara
 			&i.ID,
 			&i.TenantID,
 			&i.AccountID,
-			&i.DepartmentID,
 			&i.Capability,
 			&i.CapabilityVersion,
 			&i.InvocationID,
@@ -742,6 +802,7 @@ func (q *Queries) CapListApprovals(ctx context.Context, arg CapListApprovalsPara
 			&i.DecisionNote,
 			&i.ExecutionCode,
 			&i.ActionKey,
+			&i.IdentityBindingID,
 		); err != nil {
 			return nil, err
 		}
@@ -755,7 +816,7 @@ func (q *Queries) CapListApprovals(ctx context.Context, arg CapListApprovalsPara
 
 const capListEvents = `-- name: CapListEvents :many
 SELECT e.id, e.event_id, e.event_type, e.aggregate_type, e.aggregate_id, e.payload, e.invocation_id,
-       e.account_id, e.department_id, e.correlation_id, e.causation_id, e.trigger_depth, e.created_at,
+       e.account_id, e.correlation_id, e.causation_id, e.trigger_depth, e.created_at,
        COALESCE((SELECT x.status FROM ai_trigger_executions x
                  WHERE x.tenant_id = e.tenant_id AND x.event_id = e.event_id
                  ORDER BY x.id DESC LIMIT 1), '')::text AS ai_status,
@@ -766,15 +827,19 @@ SELECT e.id, e.event_id, e.event_type, e.aggregate_type, e.aggregate_id, e.paylo
                  WHERE x.tenant_id = e.tenant_id AND x.event_id = e.event_id
                  ORDER BY x.id DESC LIMIT 1), 0)::bigint AS ai_run_id
 FROM cap_events e
-WHERE e.tenant_id = $1 AND (e.account_id = $2 OR $3::bool)
+WHERE e.tenant_id = $1 AND ($3::bool OR (
+    e.account_id = $2
+    AND e.identity_binding_id IS NOT DISTINCT FROM NULLIF($4::text, '')::uuid
+))
 ORDER BY e.id DESC
-LIMIT $4::int
+LIMIT $5::int
 `
 
 type CapListEventsParams struct {
 	TenantID  string
 	AccountID int64
 	Reviewer  bool
+	Binding   string
 	MaxRows   int32
 }
 
@@ -787,7 +852,6 @@ type CapListEventsRow struct {
 	Payload       []byte
 	InvocationID  string
 	AccountID     int64
-	DepartmentID  int64
 	CorrelationID string
 	CausationID   string
 	TriggerDepth  int32
@@ -802,6 +866,7 @@ func (q *Queries) CapListEvents(ctx context.Context, arg CapListEventsParams) ([
 		arg.TenantID,
 		arg.AccountID,
 		arg.Reviewer,
+		arg.Binding,
 		arg.MaxRows,
 	)
 	if err != nil {
@@ -820,7 +885,6 @@ func (q *Queries) CapListEvents(ctx context.Context, arg CapListEventsParams) ([
 			&i.Payload,
 			&i.InvocationID,
 			&i.AccountID,
-			&i.DepartmentID,
 			&i.CorrelationID,
 			&i.CausationID,
 			&i.TriggerDepth,
@@ -845,13 +909,15 @@ SELECT id, invocation_id, capability, capability_version, origin, status, input,
        duration_ms, trace_id, created_at, finished_at
 FROM cap_invocations
 WHERE tenant_id = $1 AND account_id = $2
+AND identity_binding_id IS NOT DISTINCT FROM NULLIF($3::text, '')::uuid
 ORDER BY id DESC
-LIMIT $3::int
+LIMIT $4::int
 `
 
 type CapListInvocationsParams struct {
 	TenantID  string
 	AccountID int64
+	Binding   string
 	MaxRows   int32
 }
 
@@ -877,7 +943,12 @@ type CapListInvocationsRow struct {
 }
 
 func (q *Queries) CapListInvocations(ctx context.Context, arg CapListInvocationsParams) ([]CapListInvocationsRow, error) {
-	rows, err := q.db.Query(ctx, capListInvocations, arg.TenantID, arg.AccountID, arg.MaxRows)
+	rows, err := q.db.Query(ctx, capListInvocations,
+		arg.TenantID,
+		arg.AccountID,
+		arg.Binding,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1013,15 +1084,21 @@ SELECT a.id, a.invocation_id, i.trace_id
 FROM cap_approvals a
 JOIN cap_invocations i ON i.tenant_id = a.tenant_id AND i.invocation_id = a.invocation_id
 WHERE a.tenant_id = $1 AND a.capability = $2 AND a.account_id = $3 AND a.arguments_digest = $4 AND a.action_key = $5 AND a.status = 'pending'
+AND a.identity_binding_id IS NOT DISTINCT FROM NULLIF($6::text, '')::uuid
+AND i.machine_credential_id IS NOT DISTINCT FROM NULLIF($7::text, '')::uuid
+AND i.agent_delegation_id IS NOT DISTINCT FROM NULLIF($8::text, '')::uuid
 LIMIT 1
 `
 
 type CapPendingApprovalForParams struct {
-	TenantID        string
-	Capability      string
-	AccountID       int64
-	ArgumentsDigest string
-	ActionKey       string
+	TenantID            string
+	Capability          string
+	AccountID           int64
+	ArgumentsDigest     string
+	ActionKey           string
+	IdentityBindingID   string
+	MachineCredentialID string
+	AgentDelegationID   string
 }
 
 type CapPendingApprovalForRow struct {
@@ -1037,6 +1114,9 @@ func (q *Queries) CapPendingApprovalFor(ctx context.Context, arg CapPendingAppro
 		arg.AccountID,
 		arg.ArgumentsDigest,
 		arg.ActionKey,
+		arg.IdentityBindingID,
+		arg.MachineCredentialID,
+		arg.AgentDelegationID,
 	)
 	var i CapPendingApprovalForRow
 	err := row.Scan(&i.ID, &i.InvocationID, &i.TraceID)

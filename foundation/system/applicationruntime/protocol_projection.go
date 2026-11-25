@@ -24,6 +24,10 @@ func (m *Module) projectProtocol(source ar.ApplicationV3, principal *identity.Pr
 	providers := []ar.Provider{}
 	allowedProviders := map[string]bool{}
 	for _, provider := range protocol.Providers {
+		if principal.ActingOrganization.OrganizationID != 0 &&
+			!slices.Contains(m.Definitions[provider.Capability.Name+"@"+provider.Capability.Version].Tags, contracts.OrganizationScopedTag) {
+			continue
+		}
 		if (provider.Permission == "" && ar.PublicSystemProvider(provider.Adapter)) || canOpenRuntime(principal, provider.Permission) {
 			providers = append(providers, provider)
 			allowedProviders[provider.ID] = true
@@ -64,6 +68,9 @@ func (m *Module) allowedEventTargets(principal *identity.Principal, source ar.Ap
 	})
 	allowed := map[string]bool{}
 	for key, definition := range m.Definitions {
+		if principal.ActingOrganization.OrganizationID != 0 && !slices.Contains(definition.Tags, contracts.OrganizationScopedTag) {
+			continue
+		}
 		allowed[key] = principal.Can(definition.Permission) || (principal.Account.ID > 0 && isUploadParser(definition)) ||
 			(authenticated && isAuthenticatedAction(definition))
 	}

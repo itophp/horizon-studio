@@ -13,8 +13,8 @@ import {
 } from "@/lib/capabilities";
 import type { ConfigEntry } from "@/api/generated/models";
 import type { ConfigTarget, ConfigDefinition, ChangeEntry } from "@/api/types";
-import { useSession } from "@/features/administration/auth";
-import { ErrorBanner, Loading } from "@/features/administration/shared";
+import { useSession } from "@/features/identity/auth";
+import { ErrorBanner, Loading } from "@/features/identity/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {

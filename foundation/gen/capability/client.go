@@ -15,25 +15,27 @@ import (
 
 // Client is the "capability" service client.
 type Client struct {
-	DefinitionsEndpoint goa.Endpoint
-	InvokeEndpoint      goa.Endpoint
-	InvocationsEndpoint goa.Endpoint
-	InvocationEndpoint  goa.Endpoint
-	ApprovalsEndpoint   goa.Endpoint
-	DecideEndpoint      goa.Endpoint
-	EventsEndpoint      goa.Endpoint
+	DefinitionsEndpoint   goa.Endpoint
+	InvokeEndpoint        goa.Endpoint
+	InvokeMachineEndpoint goa.Endpoint
+	InvocationsEndpoint   goa.Endpoint
+	InvocationEndpoint    goa.Endpoint
+	ApprovalsEndpoint     goa.Endpoint
+	DecideEndpoint        goa.Endpoint
+	EventsEndpoint        goa.Endpoint
 }
 
 // NewClient initializes a "capability" service client given the endpoints.
-func NewClient(definitions, invoke, invocations, invocation, approvals, decide, events goa.Endpoint) *Client {
+func NewClient(definitions, invoke, invokeMachine, invocations, invocation, approvals, decide, events goa.Endpoint) *Client {
 	return &Client{
-		DefinitionsEndpoint: definitions,
-		InvokeEndpoint:      invoke,
-		InvocationsEndpoint: invocations,
-		InvocationEndpoint:  invocation,
-		ApprovalsEndpoint:   approvals,
-		DecideEndpoint:      decide,
-		EventsEndpoint:      events,
+		DefinitionsEndpoint:   definitions,
+		InvokeEndpoint:        invoke,
+		InvokeMachineEndpoint: invokeMachine,
+		InvocationsEndpoint:   invocations,
+		InvocationEndpoint:    invocation,
+		ApprovalsEndpoint:     approvals,
+		DecideEndpoint:        decide,
+		EventsEndpoint:        events,
 	}
 }
 
@@ -69,6 +71,26 @@ func (c *Client) Definitions(ctx context.Context, p *DefinitionsPayload) (res []
 func (c *Client) Invoke(ctx context.Context, p *InvokePayload) (res *CapabilityResult, err error) {
 	var ires any
 	ires, err = c.InvokeEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CapabilityResult), nil
+}
+
+// InvokeMachine calls the "invoke_machine" endpoint of the "capability"
+// service.
+// InvokeMachine may return the following errors:
+//   - "unauthenticated" (type *IAMProblem)
+//   - "forbidden" (type *IAMProblem)
+//   - "invalid" (type *IAMProblem)
+//   - "not_found" (type *IAMProblem)
+//   - "conflict" (type *IAMProblem)
+//   - "unavailable" (type *IAMProblem)
+//   - "internal" (type *IAMProblem)
+//   - error: internal error
+func (c *Client) InvokeMachine(ctx context.Context, p *InvokeMachinePayload) (res *CapabilityResult, err error) {
+	var ires any
+	ires, err = c.InvokeMachineEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

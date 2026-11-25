@@ -9,6 +9,31 @@ package server
 
 import "fmt"
 
+// SamlCallbackIdentityPath returns the URL path to the identity service saml_callback HTTP endpoint.
+func SamlCallbackIdentityPath(providerID string) string {
+	return fmt.Sprintf("/api/auth/federation/saml/%v/acs", providerID)
+}
+
+// CompleteSamlIdentityPath returns the URL path to the identity service complete_saml HTTP endpoint.
+func CompleteSamlIdentityPath() string {
+	return "/api/auth/federation/saml/complete"
+}
+
+// FederationProvidersIdentityPath returns the URL path to the identity service federation_providers HTTP endpoint.
+func FederationProvidersIdentityPath() string {
+	return "/api/auth/federation/providers"
+}
+
+// StartFederationIdentityPath returns the URL path to the identity service start_federation HTTP endpoint.
+func StartFederationIdentityPath() string {
+	return "/api/auth/federation/start"
+}
+
+// CompleteFederationIdentityPath returns the URL path to the identity service complete_federation HTTP endpoint.
+func CompleteFederationIdentityPath() string {
+	return "/api/auth/federation/complete"
+}
+
 // TemporaryAccessIdentityPath returns the URL path to the identity service temporary_access HTTP endpoint.
 func TemporaryAccessIdentityPath() string {
 	return "/api/admin/temporary-access"
@@ -34,14 +59,44 @@ func RevokeTemporaryAccessIdentityPath(id int64) string {
 	return fmt.Sprintf("/api/admin/temporary-access/%v/revoke", id)
 }
 
-// SwitchDepartmentIdentityPath returns the URL path to the identity service switch_department HTTP endpoint.
-func SwitchDepartmentIdentityPath() string {
-	return "/api/auth/department"
+// ListSignInIdentitiesIdentityPath returns the URL path to the identity service list_sign_in_identities HTTP endpoint.
+func ListSignInIdentitiesIdentityPath() string {
+	return "/api/auth/identities"
+}
+
+// SelectSignInIdentityIdentityPath returns the URL path to the identity service select_sign_in_identity HTTP endpoint.
+func SelectSignInIdentityIdentityPath() string {
+	return "/api/auth/identity"
+}
+
+// RedeemSignInInvitationIdentityPath returns the URL path to the identity service redeem_sign_in_invitation HTTP endpoint.
+func RedeemSignInInvitationIdentityPath() string {
+	return "/api/auth/invitation"
 }
 
 // LoginIdentityPath returns the URL path to the identity service login HTTP endpoint.
 func LoginIdentityPath() string {
 	return "/api/auth/login"
+}
+
+// RequestRegistrationIdentityPath returns the URL path to the identity service request_registration HTTP endpoint.
+func RequestRegistrationIdentityPath() string {
+	return "/api/auth/registration/request"
+}
+
+// CompleteRegistrationIdentityPath returns the URL path to the identity service complete_registration HTTP endpoint.
+func CompleteRegistrationIdentityPath() string {
+	return "/api/auth/registration/complete"
+}
+
+// RequestPasswordResetIdentityPath returns the URL path to the identity service request_password_reset HTTP endpoint.
+func RequestPasswordResetIdentityPath() string {
+	return "/api/auth/password-reset/request"
+}
+
+// CompletePasswordResetIdentityPath returns the URL path to the identity service complete_password_reset HTTP endpoint.
+func CompletePasswordResetIdentityPath() string {
+	return "/api/auth/password-reset/complete"
 }
 
 // MeIdentityPath returns the URL path to the identity service me HTTP endpoint.
@@ -52,6 +107,11 @@ func MeIdentityPath() string {
 // LogoutIdentityPath returns the URL path to the identity service logout HTTP endpoint.
 func LogoutIdentityPath() string {
 	return "/api/auth/logout"
+}
+
+// RefreshSessionIdentityPath returns the URL path to the identity service refresh_session HTTP endpoint.
+func RefreshSessionIdentityPath() string {
+	return "/api/auth/session/refresh"
 }
 
 // SnapshotIdentityPath returns the URL path to the identity service snapshot HTTP endpoint.

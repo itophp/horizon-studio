@@ -418,6 +418,43 @@ func (q *Queries) ExecutionListRecords(ctx context.Context, arg ExecutionListRec
 	return items, nil
 }
 
+const executionMachineRunActive = `-- name: ExecutionMachineRunActive :one
+SELECT EXISTS (
+    SELECT 1 FROM cap_execution_records plan
+    JOIN cap_invocations call ON call.tenant_id = plan.tenant_id AND call.invocation_id = plan.invocation_id
+    JOIN ai_runs run ON run.tenant_id = plan.tenant_id AND run.id = plan.run_id AND run.account_id = plan.account_id
+    WHERE plan.tenant_id = $1 AND plan.account_id = $2
+    AND plan.invocation_id = $3 AND run.id = $4::bigint
+    AND run.identity_binding_id IS NOT DISTINCT FROM call.identity_binding_id AND call.status = 'executing'
+    AND run.status IN ('running', 'awaiting_approval')
+    AND call.machine_credential_id = $5::text::uuid
+    AND call.agent_delegation_id IS NOT DISTINCT FROM NULLIF($6::text, '')::uuid
+)
+`
+
+type ExecutionMachineRunActiveParams struct {
+	TenantID     string
+	AccountID    int64
+	InvocationID string
+	RunID        int64
+	CredentialID string
+	DelegationID string
+}
+
+func (q *Queries) ExecutionMachineRunActive(ctx context.Context, arg ExecutionMachineRunActiveParams) (bool, error) {
+	row := q.db.QueryRow(ctx, executionMachineRunActive,
+		arg.TenantID,
+		arg.AccountID,
+		arg.InvocationID,
+		arg.RunID,
+		arg.CredentialID,
+		arg.DelegationID,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const executionPlanIdentity = `-- name: ExecutionPlanIdentity :one
 SELECT capability,capability_version FROM cap_execution_plans WHERE tenant_id=$1 AND plan_id=$2 ORDER BY version DESC LIMIT 1
 `

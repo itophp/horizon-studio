@@ -46,7 +46,12 @@ func (s *Service) resolveSemantic(ctx context.Context, page aicontext.Page) (*ar
 }
 
 func (s *Service) toolProfile(ctx context.Context) ([]string, error) {
-	keys := []string{"example.record.list@1.0.0", "example.record.get@1.0.0", "example.record.create@1.0.0", "example.record.archive@1.0.0", "knowledge.search@1.0.0"}
+	// The default profile carries platform knowledge tools only; application
+	// tools arrive through the trusted contribution profile.
+	keys := []string{
+		"knowledge.search@1.0.0", "knowledge.query@1.0.0",
+		"knowledge.read@1.0.0", "knowledge.update@1.0.0",
+	}
 	if s.Profile != nil {
 		extra, err := s.Profile(ctx)
 		if err != nil {
@@ -70,19 +75,20 @@ func (s *Service) authorityStamp(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fresh, err := s.Core.Identity.PrincipalForTask(ctx, p.TenantID, p.Account.ID, p.Account.DepartmentID)
+	fresh, err := s.refreshAuthority(ctx, p)
 	if err != nil {
 		return "", err
-	}
-	if p.TokenHash != "" {
-		session, e := dbgen.New(s.Core.Pool).IAMSession(ctx, p.TokenHash)
-		if e != nil || session.ActiveDepartmentID != p.Account.DepartmentID {
-			return "", contracts.Problem("unauthenticated")
-		}
 	}
 	rows, err := dbgen.New(s.Core.Pool).RuntimeScopeStamp(ctx, p.TenantID)
 	if err != nil {
 		return "", err
 	}
 	return contracts.Digest(contracts.Input{"principal": identity.AuthorizationVersion(fresh), "applications": rows}), nil
+}
+
+func (s *Service) refreshAuthority(ctx context.Context, principal *identity.Principal) (*identity.Principal, error) {
+	if principal.TokenHash != "" {
+		return s.Core.Identity.PrincipalForSessionInvocation(ctx, principal, false)
+	}
+	return s.Core.Identity.RefreshTaskPrincipal(ctx, principal)
 }

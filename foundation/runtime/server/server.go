@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"horizon/applications/projects"
 	"horizon/foundation/integrations/mcp"
+	"horizon/foundation/kernel/audit"
 	"horizon/foundation/runtime/app"
 	"horizon/foundation/runtime/config"
 	"horizon/foundation/runtime/transport"
@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-func Run(ctx context.Context, c config.Config) error {
+func Run(ctx context.Context, c config.Config, register app.Register) error {
 	var identityPool *pgxpool.Pool
 	if c.DatabaseURL != "" {
 		dbctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -37,26 +37,49 @@ func Run(ctx context.Context, c config.Config) error {
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
 	iam := identity.New(identityPool, c.SecureCookies)
-	iam.CookieSuffix = c.SessionCookieSuffix
+	iam.ConfigurePlatformOperators(c.PlatformOperatorIDs)
 	core := governance.New(identityPool, iam, c.Governance)
-	iam.Policies = core
-	plugins := app.BuiltinPlugins(projects.New(core.Pool))
-	if err := iam.ConfigurePluginPermissions(plugins.Catalog.Permissions); err != nil {
+	iam.AttachSecretProtector(core)
+	mail := notifications.New(core)
+	var email identity.ContactDelivery
+	if c.Governance.PublicWorkspace != "" {
+		email = func(ctx context.Context, destination, purpose, code, id string) error {
+			return mail.SendIAMChallenge(ctx, c.Governance.PublicWorkspace, destination, purpose, code, id)
+		}
+	}
+	iam.ConfigureContactDelivery(email, smsContactDelivery(c.SMSURL, c.SMSToken))
+	go iam.RunContactDelivery(workerCtx)
+	if err := iam.ConfigureOIDC(ctx, c.OIDCProviders, c.Governance.PublicURL); err != nil {
 		return err
+	}
+	if err := iam.ConfigureSAML(c.SAMLProviders, c.Governance.PublicURL); err != nil {
+		return err
+	}
+	iam.Policies = core
+	var registration app.Registration
+	if register != nil {
+		registration = register(core)
+	}
+	plugins := registration.Plugins
+	if plugins != nil {
+		if err := iam.ConfigurePluginPermissions(plugins.Catalog.Permissions); err != nil {
+			return err
+		}
+		if err := plugins.Start(ctx); err != nil {
+			return err
+		}
+		defer func() {
+			cancelWorkers()
+			stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := plugins.Stop(stopCtx); err != nil {
+				slog.Error("plugin shutdown failed", "error", err)
+			}
+		}()
 	}
 
-	if err := plugins.Start(ctx); err != nil {
-		return err
-	}
-	defer func() {
-		cancelWorkers()
-		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := plugins.Stop(stopCtx); err != nil {
-			slog.Error("plugin shutdown failed", "error", err)
-		}
-	}()
 	if identityPool != nil {
+		go audit.NewSecurityLog(identityPool, c.Governance.AuditSigningSeed, c.AuditPreviousKeys...).Run(workerCtx, c.AuditOnlineDays, c.AuditRetentionDays)
 		fileService := files.New(core)
 		mcpService := mcp.New(identityPool, iam)
 		worker := notifications.New(core)
@@ -80,7 +103,7 @@ func Run(ctx context.Context, c config.Config) error {
 			}
 		}()
 	}
-	handler, start := transport.HandlerWithPlugins(app.System{}, core, plugins, iam)
+	handler, start := transport.HandlerWithRegistration(app.System{}, core, registration, iam)
 	if identityPool != nil {
 		go start(workerCtx)
 	}

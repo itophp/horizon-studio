@@ -66,7 +66,8 @@ export async function diagnose(url, token, expected, requiredTool) {
       response?.status !== "succeeded" ||
       !context ||
       context.accountId !== expected.accountId ||
-      context.departmentId !== expected.departmentId
+      context.tenantId !== expected.tenantId ||
+      context.identityBindingId !== expected.identityBindingId
     )
       throw new Error("identity_mismatch");
     return { connected: true, toolCount: list.tools.length };
@@ -201,13 +202,19 @@ export function createBusinessHelper({
   });
   app.use(express.json({ limit: "16kb" }));
   app.post("/prepare", (req, res) => {
-    const { client, accountId, departmentId } = req.body ?? {};
+    const { client, accountId, tenantId, identityBindingId } = req.body ?? {};
     if (
       !["codex", "workbuddy"].includes(client) ||
       !Number.isSafeInteger(accountId) ||
       accountId < 1 ||
-      !Number.isSafeInteger(departmentId) ||
-      departmentId < 1
+      typeof tenantId !== "string" ||
+      tenantId.length === 0 ||
+      tenantId.length > 128 ||
+      typeof identityBindingId !== "string" ||
+      (identityBindingId !== "" &&
+        !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(
+          identityBindingId,
+        ))
     )
       return res.status(400).json({ code: "invalid_setup" });
     const proof = randomBytes(32).toString("hex");
@@ -215,7 +222,8 @@ export function createBusinessHelper({
       proof,
       client,
       accountId,
-      departmentId,
+      tenantId,
+      identityBindingId,
       expires: Date.now() + 60000,
     };
     res.json({ proof, url, client });

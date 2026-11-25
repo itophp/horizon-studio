@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -28,9 +29,6 @@ func buildRegistry() []Definition {
 	add := func(key, group, kind, def string, scopes []string, sensitive, secret, ui bool, min, max int64, choices ...string) {
 		out = append(out, Definition{key, group, kind, def, scopes, choices, sensitive, secret, min, max, ui})
 	}
-	// Article moderation policy is content configuration, not account security:
-	// its own group keeps the word list where an editor looks for it.
-	add("articles.blockedWords", "articles", "string", `""`, workspace, true, false, true, 0, 10000)
 	add("memory.activitySamplePercent", "memory", "integer", `10`, workspace, false, false, true, 0, 100)
 	add("branding.name", "branding", "string", `"Horizon"`, branding, false, false, true, 1, 100)
 	add("branding.tagline", "branding", "string", `"Administration workspace"`, branding, false, false, true, 0, 200)
@@ -89,7 +87,7 @@ func buildRegistry() []Definition {
 	// so they stay workspace scoped and the credential is sealed at rest.
 	assistantScope := []string{"workspace"}
 	add("assistant.enabled", "assistant", "boolean", `false`, assistantScope, false, false, true, 0, 0)
-	add("assistant.baseUrl", "assistant", "string", `"https://open.bigmodel.cn/api/v1"`, assistantScope, false, false, true, 8, 500)
+	add("assistant.baseUrl", "assistant", "string", `"https://open.bigmodel.cn/api/v1"`, assistantScope, false, false, true, 0, 500)
 	add("assistant.model", "assistant", "string", `"glm-5.3-flash"`, assistantScope, false, false, true, 1, 100)
 	add("assistant.token", "assistant", "secret", `""`, assistantScope, true, true, true, 0, 500)
 	// The Eino agent speaks the Chat Completion protocol, so it carries its own
@@ -109,10 +107,9 @@ func buildRegistry() []Definition {
 	add("files.maxBytes", "files", "integer", `20971520`, limits, false, false, false, 1024, 20971520)
 	add("files.logoMaxBytes", "files", "integer", `2097152`, limits, false, false, false, 1024, 2097152)
 	add("files.extensions", "files", "set", `["png","jpg","jpeg","webp","pdf","txt","csv","docx","xlsx"]`, limits, false, false, false, 0, 0, "png", "jpg", "jpeg", "webp", "pdf", "txt", "csv", "docx", "xlsx")
-	add("drive.maxBytes", "files", "integer", `1073741824`, limits, false, false, true, 1, 1073741824)
-	add("drive.quotaBytes", "files", "integer", `0`, limits, false, false, true, 0, 1<<50)
-	add("drive.blockedExtensions", "files", "string", `""`, limits, true, false, true, 0, 2048)
-	return out
+	out = append(out, aiModelDefinitions()...)
+	out = append(out, knowledgeEmbeddingDefinitions()...)
+	return append(out, unifiedModelDefinitions...)
 }
 func FindDefinition(key string) *Definition {
 	for i := range Registry {
@@ -120,8 +117,49 @@ func FindDefinition(key string) *Definition {
 			return &Registry[i]
 		}
 	}
-	return nil
+	return customModelDefinition(Registry, key)
 }
+
+// registeredCores tracks assembled Core instances so plugin-declared settings
+// become visible to cores constructed earlier in the startup sequence. The
+// deployment assembly is sequential, so a simple mutex is sufficient.
+var (
+	registerMu      sync.Mutex
+	registeredCores []*Core
+)
+
+// RegisterDefinitions appends deployment-assembled definitions to the shared
+// registry. It runs once during startup assembly before requests are served;
+// the registry var is read dynamically, so registered keys resolve everywhere.
+func RegisterDefinitions(defs ...Definition) {
+	registerMu.Lock()
+	defer registerMu.Unlock()
+	known := map[string]bool{}
+	for _, existing := range Registry {
+		known[existing.Key] = true
+	}
+	fresh := make([]Definition, 0, len(defs))
+	for _, def := range defs {
+		if known[def.Key] {
+			continue
+		}
+		known[def.Key] = true
+		fresh = append(fresh, def)
+	}
+	Registry = append(Registry, fresh...)
+	for _, core := range registeredCores {
+		coreSeen := map[string]bool{}
+		for _, existing := range core.Definitions {
+			coreSeen[existing.Key] = true
+		}
+		for _, def := range fresh {
+			if !coreSeen[def.Key] {
+				core.Definitions = append(core.Definitions, def)
+			}
+		}
+	}
+}
+
 func Has(values []string, value string) bool {
 	for _, v := range values {
 		if v == value {
@@ -146,7 +184,10 @@ func (d Definition) Validate(raw string) error {
 		if len([]rune(v)) < int(d.Min) || len([]rune(v)) > int(d.Max) && d.Max > 0 {
 			return Problem("invalid")
 		}
-		if d.Kind == "enum" && !Has(d.Choices, v) {
+		modelSelection := d.Key == "aiModels.default" || strings.HasPrefix(d.Key, "aiModels.route.") || d.Key == KnowledgeEmbeddingProfileKey
+		modelProtocol := strings.HasPrefix(d.Key, "aiModels.") && strings.HasSuffix(d.Key, ".protocol")
+		if d.Kind == "enum" && !Has(d.Choices, v) &&
+			!(modelSelection && isModelProfile(v)) && !(modelProtocol && Has(modelProtocols, v)) {
 			return Problem("invalid")
 		}
 		if strings.HasPrefix(d.Key, "smtp.") && strings.ContainsAny(v, "\r\n\x00") {
@@ -171,7 +212,15 @@ func (d Definition) Validate(raw string) error {
 				return Problem("invalid")
 			}
 		}
-		if d.Key == "assistant.baseUrl" || d.Key == "agent.baseUrl" || d.Key == "knowledge.embedding.baseUrl" {
+		managedModel := strings.HasPrefix(d.Key, "aiModels.")
+		if managedModel && strings.HasSuffix(d.Key, ".providerId") && !modelProviderID.MatchString(v) {
+			return Problem("invalid")
+		}
+		if managedModel && (strings.TrimSpace(v) != v || strings.ContainsAny(v, "\r\n\x00")) {
+			return Problem("invalid")
+		}
+		modelEndpoint := managedModel && (strings.HasSuffix(d.Key, ".baseUrl") || strings.HasSuffix(d.Key, ".responsesBaseUrl"))
+		if (modelEndpoint || d.Key == "assistant.baseUrl") && v != "" || d.Key == "agent.baseUrl" || d.Key == "knowledge.embedding.baseUrl" {
 			u, err := url.Parse(v)
 			if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || strings.ContainsAny(v, "\r\n\x00\t ") {
 				return Problem("invalid")

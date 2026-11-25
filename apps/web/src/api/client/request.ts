@@ -17,6 +17,7 @@ export function requestTimeout(url: string): number {
   const longRunning =
     url.startsWith("/api/capabilities/") ||
     url.startsWith("/api/assistant/chat") ||
+    url.startsWith("/api/assistant/agent") ||
     url.startsWith("/api/ai/runs");
   return longRunning ? 180000 : 10000;
 }
@@ -33,6 +34,12 @@ export async function openResponse(
   const method = (options.method ?? "GET").toUpperCase();
   if (!["GET", "HEAD", "OPTIONS"].includes(method) && csrfToken)
     headers.set("X-CSRF-Token", csrfToken);
+  if (
+    csrfToken &&
+    url.startsWith("/api/") &&
+    !["/api/auth/me", "/api/auth/login"].includes(url)
+  )
+    headers.set("X-Horizon-Context", csrfToken);
   const response = await fetch(url, {
     ...options,
     signal,
@@ -51,7 +58,15 @@ export async function openResponse(
     };
     if (
       response.status === 401 &&
-      (url.startsWith("/api/admin/") || url.startsWith("/api/capabilities/"))
+      (url.startsWith("/api/admin/") ||
+        url.startsWith("/api/capabilities/") ||
+        url.startsWith("/api/assistant/") ||
+        url.startsWith("/api/ai/") ||
+        [
+          "/api/auth/identities",
+          "/api/auth/identity",
+          "/api/auth/invitation",
+        ].includes(url.split("?", 1)[0]))
     )
       window.dispatchEvent(new Event("baseline:unauthenticated"));
     throw new ApiError(codes[response.status] ?? "internal", response.status);

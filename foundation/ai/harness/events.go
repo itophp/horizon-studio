@@ -27,18 +27,12 @@ func (s *Service) Events(ctx context.Context, id, after int64, send func(TaskEve
 	deadline := time.NewTimer(30 * time.Minute)
 	defer deadline.Stop()
 	for {
-		p, err := s.Core.Identity.PrincipalForTask(ctx, original.TenantID, original.Account.ID, original.Account.DepartmentID)
+		p, err := s.refreshAuthority(ctx, original)
 		if err != nil || !p.Can("assistant:use") {
 			return contracts.Problem("forbidden")
 		}
-		if original.TokenHash != "" {
-			session, e := q.IAMSession(ctx, original.TokenHash)
-			if e != nil || session.ActiveDepartmentID != original.Account.DepartmentID {
-				return contracts.Problem("unauthenticated")
-			}
-		}
 		run, err := q.AIGetRun(ctx, dbgen.AIGetRunParams{TenantID: p.TenantID, AccountID: p.Account.ID, ID: id})
-		if err != nil || run.DepartmentID != p.Account.DepartmentID {
+		if err != nil || run.DepartmentID != p.Account.DepartmentID || run.IdentityBindingID != p.IdentityBindingID {
 			return contracts.Problem("not_found")
 		}
 		rows, err := q.AIRunEvents(ctx, dbgen.AIRunEventsParams{TenantID: p.TenantID, RunID: id, AccountID: p.Account.ID, DepartmentID: p.Account.DepartmentID, Sequence: after})

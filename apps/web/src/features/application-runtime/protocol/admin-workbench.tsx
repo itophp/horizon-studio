@@ -1,3 +1,6 @@
+import { AdminPageTabs } from "@/features/identity/page-tabs";
+import { RoleChangePreview } from "@/features/identity/role-change-preview";
+import type { IdentityRolePreviewOutput } from "@/api/generated/capability-identity";
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -23,6 +26,7 @@ import {
   Trash2,
   Users,
   XCircle,
+  LoaderCircle,
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -42,22 +46,24 @@ import {
   SuccessNotice,
   ScopeLabel,
   type AdminColumn,
-} from "@/features/administration/shared";
-import { useSession } from "@/features/administration/auth";
-import { AdminPageTabs } from "@/features/administration/page-tabs";
+} from "@/features/identity/shared";
+import { useSession } from "@/features/identity/auth";
 import { useConfiguration } from "@/features/governance/runtime";
-import { PermissionMatrix } from "@/features/administration/permission-matrix";
+import { PermissionMatrix } from "@/features/identity/permission-matrix";
 import { Checkbox } from "@/components/ui/checkbox";
 import type {
-  DepartmentRecord,
   PermissionDefinition,
   PermissionGrant,
 } from "@/api/generated/models";
-import { runtimeExecute, runtimeRead } from "@/lib/capabilities";
+import {
+  previewIdentityRole,
+  runtimeExecute,
+  runtimeRead,
+} from "@/lib/capabilities";
 import { ApiError } from "@/api/client/request";
 import { RegisteredControl } from "../components";
 import { MarkdownDisplay } from "../markdown";
-import { evaluate, mapInput, type Json } from "../expression";
+import { evaluate, mapInput, referencesPath, type Json } from "../expression";
 import { formSchema } from "../form-schema";
 import { FormField } from "@/components/shared/form-field";
 import type {
@@ -76,12 +82,13 @@ import {
   type ContentAction,
 } from "./content-components";
 import {
-  AIFormAssistant,
   AIResult,
   aiSnapshot,
+  localNowRFC3339,
   requestAI,
   useAIAnalysis,
 } from "./ai-components";
+import { AIFormAssistant } from "./ai-form-assistant";
 import { runtimeAIAnalysisSpecSchema } from "@/api/generated/runtime";
 import type { ComponentRendererProps } from "./component-registry";
 import type { ProtocolRecord } from "./types";
@@ -436,12 +443,13 @@ export function TablePanelComponent({
               ? t("runtime:ai.analyzeSelected", { count: selectedRows.length })
               : t("runtime:ai.analyzePage");
             return (
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-2">
                 {column.labelKey ? t(column.labelKey) : column.name}
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-sm"
+                  className="ai-action"
                   disabled={
                     readOnly ||
                     dataRefreshing ||
@@ -457,7 +465,15 @@ export function TablePanelComponent({
                     )
                   }
                 >
-                  <Sparkles aria-hidden="true" size={14} />
+                  {batchRunning ? (
+                    <LoaderCircle
+                      aria-hidden="true"
+                      size={14}
+                      className="motion-safe:animate-spin"
+                    />
+                  ) : (
+                    <Sparkles aria-hidden="true" size={14} />
+                  )}
                 </Button>
               </span>
             );
@@ -510,7 +526,7 @@ export function TablePanelComponent({
                         column.languageFields?.[i18n.resolvedLanguage ?? ""] ??
                           column.name
                       ] || row[column.name],
-                    )}
+                    ) || (column.emptyKey ? t(column.emptyKey) : "")}
                   </strong>
                   {column.subtitleField && (
                     <small>{text(row[column.subtitleField])}</small>
@@ -1462,7 +1478,7 @@ export function RecordFormPanelComponent({
 type WorkbenchAction = {
   labelKey: string;
   icon?: string;
-  mode: "view" | "edit" | "access" | "delete" | "event";
+  mode: "view" | "edit" | "access" | "delete" | "event" | "copy";
   event?: string;
   permission?: string;
   requirePermissions?: string[];
@@ -1950,7 +1966,7 @@ export function CardGridPanelComponent({
   const actionConfig = (props.rowActions as WorkbenchAction[]) ?? [];
   const dialog = params.get("dialog");
   const dialogMode =
-    dialog && ["create", "edit", "access", "view"].includes(dialog)
+    dialog && ["create", "edit", "access", "view", "copy"].includes(dialog)
       ? dialog
       : undefined;
   const dialogId = Number(params.get("id")) || 0;
@@ -2449,6 +2465,10 @@ function ProtocolRecordForm({
   );
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const [rolePreview, setRolePreview] = useState<{
+    input: string;
+    result: IdentityRolePreviewOutput;
+  }>();
   const [notice, setNotice] = useState("");
   const [appliedRevisions, setAppliedRevisions] = useState<
     Record<string, number>
@@ -2544,8 +2564,15 @@ function ProtocolRecordForm({
   const scopeRecordId = Number(
     mode === "create" ? (route.projectId ?? route.id) : record?.id,
   );
+  // A create form may suggest from the draft before any record exists; edit
+  // still needs the record to authorize the provider read on the server.
+  const hasRecordScope =
+    Number.isSafeInteger(scopeRecordId) && scopeRecordId > 0;
   const aiField = (name: string) =>
-    visibleFields.find((field) => field.name === name);
+    command.fields.find((field) => field.name === name);
+  // A target may be conditionally visible (the schedule kind decides which
+  // time component applies), so it must resolve outside the current visible
+  // set. Input fields still need a visible value the model can read.
   const showAssistant =
     assistant &&
     aiContext?.componentId &&
@@ -2553,10 +2580,33 @@ function ProtocolRecordForm({
     (mode === "create" || mode === "edit") &&
     !readOnly &&
     !runtime.readOnly &&
-    Number.isSafeInteger(scopeRecordId) &&
-    scopeRecordId > 0 &&
-    assistant.inputFields.every((name) => aiField(name)) &&
+    (mode === "create" || hasRecordScope) &&
+    assistant.inputFields.every((name) =>
+      visibleFields.some((field) => field.name === name),
+    ) &&
     assistant.targetFields.every((name) => aiField(name));
+  // Existing definitions can supply a textarea used exclusively as AI input.
+  // Render it inside the assistant when it has no write binding.
+  const assistantSource = showAssistant
+    ? fields.find(
+        (field) =>
+          field.type === "string" &&
+          field.component === "textarea" &&
+          !field.required &&
+          !field.group &&
+          !field.readOnly &&
+          !field.disabledWhen?.kind &&
+          !field.visibleWhen?.kind &&
+          assistant.inputFields.includes(field.name) &&
+          !assistant.targetFields.includes(field.name) &&
+          !command.input.some(({ value }) =>
+            referencesPath(value, `form.${field.name}`),
+          ),
+      )
+    : undefined;
+  const editorFields = fields.filter(
+    (field) => field.name !== assistantSource?.name,
+  );
   const referenceOptions = (
     field: RuntimeFieldV2,
   ): { value: Json; label: string }[] => {
@@ -2623,10 +2673,21 @@ function ProtocolRecordForm({
         selection: { ids: [] },
         context: { accountId: session.account.id },
       });
+      const submission = { ...input };
+      if (command.capability.name === "identity.role.update") {
+        const signature = JSON.stringify(input);
+        if (rolePreview?.input !== signature) {
+          setRolePreview(undefined);
+          const preview = await previewIdentityRole(input);
+          setRolePreview({ input: signature, result: preview.data });
+          return;
+        }
+        submission.revision = rolePreview.result.revision;
+      }
       const result = await runtimeExecute(
         command.capability.name,
         command.capability.version,
-        input,
+        submission,
         crypto.randomUUID(),
         runtime.correlationId,
         runtime.invocation,
@@ -2641,6 +2702,7 @@ function ProtocolRecordForm({
       onSaved?.();
       onClose?.();
     } catch (cause) {
+      setRolePreview(undefined);
       setError(cause);
     } finally {
       setBusy(false);
@@ -2660,6 +2722,18 @@ function ProtocolRecordForm({
       {showAssistant && aiContext && (
         <AIFormAssistant
           spec={assistant}
+          draftSource={
+            assistantSource && {
+              label: t(assistantSource.labelKey),
+              value: String(watched[assistantSource.name] ?? ""),
+              maxLength: assistantSource.maxLength,
+              onChange: (value) =>
+                form.setValue(assistantSource.name, value, {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                }),
+            }
+          }
           disabled={
             busy ||
             assistant.targetFields.every((name) => {
@@ -2667,11 +2741,13 @@ function ProtocolRecordForm({
               return !field || isFieldDisabled(field);
             })
           }
-          request={() =>
+          request={(source) =>
             requestAI(aiContext.emit, assistant.action, {
+              ...source,
+              now: localNowRFC3339(),
               componentId: aiContext.componentId,
               sceneId: definition.id,
-              recordId: scopeRecordId,
+              recordId: hasRecordScope ? scopeRecordId : 0,
               mode,
               draft: Object.fromEntries(
                 assistant.inputFields.map((name) => [
@@ -2682,13 +2758,17 @@ function ProtocolRecordForm({
             })
           }
           current={(name) => watched[name]}
+          currentValue={(name) => form.getValues(name)}
           label={(name) => t(aiField(name)?.labelKey ?? name)}
           canApply={({ field, value }) => {
             const config = aiField(field);
             return Boolean(
               config &&
               !isFieldDisabled(config) &&
-              formSchema([config], {}).safeParse({ [field]: value }).success,
+              formSchema([config], {}).safeParse({
+                ...form.getValues(),
+                [field]: value,
+              }).success,
             );
           }}
           apply={({ field, value }) => {
@@ -2741,7 +2821,7 @@ function ProtocolRecordForm({
         />
       )}
       <div className="editor-grid">
-        {fields.map((field) => (
+        {editorFields.map((field) => (
           <Controller
             key={field.name}
             control={form.control}
@@ -2762,14 +2842,6 @@ function ProtocolRecordForm({
                           ),
                         ) as unknown as PermissionDefinition[]
                       }
-                      departments={
-                        records(
-                          pathValue(
-                            optionsData,
-                            formPaths.departments ?? "departments",
-                          ),
-                        ) as unknown as DepartmentRecord[]
-                      }
                       grants={(controlled.value as PermissionGrant[]) ?? []}
                       disabled={isFieldDisabled(field)}
                       onChange={controlled.onChange}
@@ -2781,7 +2853,8 @@ function ProtocolRecordForm({
                     error={form.formState.errors[field.name]?.message}
                     wide={
                       field.component === "textarea" ||
-                      field.component === "subtable"
+                      field.component === "subtable" ||
+                      field.component === "markdown"
                     }
                   >
                     <RegisteredControl
@@ -2836,8 +2909,17 @@ function ProtocolRecordForm({
             {t("admin:actions.cancel")}
           </Button>
         )}
+        {rolePreview && <RoleChangePreview result={rolePreview.result} />}
         <Button type="submit" disabled={busy || readOnly || mode === "view"}>
-          {busy ? t("admin:actions.saving") : t("admin:actions.save")}
+          {busy
+            ? t("admin:actions.saving")
+            : command.capability.name === "identity.role.update"
+              ? t(
+                  rolePreview
+                    ? "admin:roleReview.apply"
+                    : "admin:roleReview.preview",
+                )
+              : t("admin:actions.save")}
         </Button>
       </div>
     </form>
@@ -2876,9 +2958,6 @@ function MembershipEditor({
   const catalog = records(
     snapshot?.catalog,
   ) as unknown as PermissionDefinition[];
-  const matrixDepartments = records(
-    snapshot?.departments,
-  ) as unknown as DepartmentRecord[];
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [additionalDepartment, setAdditionalDepartment] = useState(0);
   const primaryDepartment = Number(form.getValues("departmentId") ?? 0);
@@ -3079,9 +3158,7 @@ function MembershipEditor({
                       {t("admin:roles.permissions", { count: grants.length })}
                     </small>
                   </span>
-                  <ScopeLabel
-                    scope={String(grants[0]?.scope ?? "DEPARTMENT")}
-                  />
+                  <ScopeLabel scope={String(grants[0]?.scope ?? "OWN")} />
                 </label>
               );
             })}
@@ -3098,7 +3175,6 @@ function MembershipEditor({
           <PermissionMatrix
             key={String(selectedMembership?.departmentId ?? primaryDepartment)}
             catalog={catalog}
-            departments={matrixDepartments}
             grants={overrides}
             account
             disabled={!canGrant}

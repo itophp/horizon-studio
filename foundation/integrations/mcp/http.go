@@ -65,7 +65,7 @@ func (s *Service) Handler(core *governance.Core) http.Handler {
 			http.Error(w, "rate_limited", 429)
 			return
 		}
-		p, err := s.identity.PrincipalForTask(ctx, row.TenantID, row.AccountID, row.DepartmentID)
+		p, err := s.identity.PrincipalForBoundTask(ctx, row.TenantID, row.AccountID, row.IdentityBindingID)
 		if err != nil {
 			http.Error(w, "unauthenticated", 401)
 			return
@@ -110,7 +110,7 @@ func (s *Service) Handler(core *governance.Core) http.Handler {
 							err = contracts.Problem("invalid")
 						} else {
 							digest := sha256.Sum256([]byte(supplied))
-							key = fmt.Sprintf("mcp:%d:%d:%x", p.Account.ID, p.Account.DepartmentID, digest)
+							key = fmt.Sprintf("mcp:%d:%s:%x", p.Account.ID, p.IdentityBindingID, digest)
 						}
 					} else {
 						var raw [16]byte
@@ -136,7 +136,7 @@ func (s *Service) Handler(core *governance.Core) http.Handler {
 					}
 				}
 				auditCtx, cancel := context.WithTimeout(context.WithoutCancel(callctx), 2*time.Second)
-				auditErr := q.MCPInsertAudit(auditCtx, dbgen.MCPInsertAuditParams{TenantID: row.TenantID, AccountID: row.AccountID, TokenID: row.ID, DepartmentID: row.DepartmentID, Tool: d.ToolName(), ResultCode: code, DurationMs: time.Since(started).Milliseconds(), RequestID: w.Header().Get("X-Request-ID")})
+				auditErr := q.MCPInsertAudit(auditCtx, dbgen.MCPInsertAuditParams{TenantID: row.TenantID, AccountID: row.AccountID, TokenID: row.ID, Tool: d.ToolName(), ResultCode: code, DurationMs: time.Since(started).Milliseconds(), RequestID: w.Header().Get("X-Request-ID")})
 				cancel()
 				if auditErr != nil {
 					return nil, errors.New("audit_unavailable")

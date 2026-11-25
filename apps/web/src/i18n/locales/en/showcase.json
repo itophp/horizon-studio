@@ -95,7 +95,7 @@
   "settings": "View settings",
   "compact": "Compact density",
   "profile": "Design reviewer",
-  "profileDescription": "Workspace member · UI standards team",
+  "profileDescription": "Team member · UI standards",
   "emptyHint": "Create a record to begin, or restore the normal preview.",
   "errorHint": "Demonstration failure. Restore the normal view to continue.",
   "amount": "Amount",
@@ -138,7 +138,7 @@
     },
     "3": {
       "name": "Layout Runtime",
-      "description": "Process work in a multi-panel workspace"
+      "description": "Process work in a multi-panel tenant"
     },
     "4": {
       "name": "Data Runtime",
@@ -200,7 +200,7 @@
   "weekPrefix": "W",
   "deliveryRatio": "74 /",
   "targetValue": "100",
-  "workspace": "Workspace",
+  "workspace": "System",
   "calendar": "Calendar",
   "gantt": "Delivery schedule",
   "inputs": "Input controls",
@@ -260,7 +260,7 @@
   "general": "General",
   "deliveryOptions": "Delivery and notifications",
   "advanced": "Advanced",
-  "workspaceName": "Workspace name",
+  "workspaceName": "System name",
   "summary": "Summary",
   "dailyDigest": "Daily digest",
   "failureAlerts": "Failure alerts",
@@ -305,7 +305,7 @@
   "total": "Total",
   "localOnly": "Changes stay on this page and reset on refresh.",
   "catalogue": "8 page types · multiple layout variants",
-  "settingsDescription": "Manage workspace configuration, notifications and processing preferences.",
+  "settingsDescription": "Manage system settings, notifications, and preferences.",
   "approvalAmount": "Adjust the requested budget to ¥ 68,000",
   "approvalImpact": "Affects scheduling and resource allocation. Completed milestones remain unchanged.",
   "richPreview": "Content and attachments",
@@ -362,7 +362,7 @@
     }
   },
   "editAction": "Edit record",
-  "erpTitle": "Manufacturing ERP workspace",
+  "erpTitle": "Manufacturing ERP tenant",
   "erpIntro": "Procurement, inventory, production and finance · East China Manufacturing",
   "erpOverview": "Operations overview",
   "erpProcurement": "Procurement",

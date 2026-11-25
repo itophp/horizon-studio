@@ -9,3 +9,20 @@ extensions:
   - entity
   - permission
   - event
+permissions:
+  - code: studio:read
+    module: studio
+    function: studio
+    action: read
+  - code: studio:write
+    module: studio
+    function: studio
+    action: write
+  - code: studio:control
+    module: studio
+    function: studio
+    action: control
+  - code: studio:invoke
+    module: studio
+    function: studio
+    action: invoke

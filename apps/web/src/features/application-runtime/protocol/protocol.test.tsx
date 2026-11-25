@@ -29,7 +29,7 @@ vi.mock("@/lib/capabilities", async (original) => ({
   runtimeExecute: api.execute,
 }));
 
-vi.mock("@/features/administration/auth", () => ({
+vi.mock("@/features/identity/auth", () => ({
   useSession: () => ({
     tenantId: "tenant",
     account: {
@@ -39,8 +39,13 @@ vi.mock("@/features/administration/auth", () => ({
         { departmentId: 4, departmentName: "Operations" },
       ],
     },
-    activeDepartmentId: 3,
-    permissions: ["runtime.protocol.view", "accounts:read", "projects:write"],
+
+    permissions: [
+      "runtime.protocol.view",
+      "accounts:read",
+      "projects:write",
+      "automation:write",
+    ],
   }),
 }));
 
@@ -274,25 +279,8 @@ beforeEach(async () => {
   api.read.mockImplementation(async (name: string) =>
     name === "application.runtime.list"
       ? { items: [fixture] }
-      : name === "identity.accounts.admin.read"
-        ? {
-            items: [
-              {
-                id: 1,
-                fullName: "Alice Chen",
-                username: "alice",
-                email: "alice@example.test",
-                status: "active",
-                createdAt: "2026-01-01T00:00:00Z",
-                memberships: [],
-              },
-            ],
-            organizations: [],
-            departments: [],
-            roles: [],
-            catalog: [],
-            total: 1,
-          }
+      : name === "identity.accounts.read"
+        ? { items: [{ id: 1, username: "alice", status: "active" }], total: 1 }
         : { items: [{ id: 1, name: "Alice" }] },
   );
   api.execute.mockResolvedValue({ status: "succeeded" });
@@ -365,12 +353,12 @@ it("routes the deployment catalog through the V3 protocol renderer", async () =>
     </I18nextProvider>,
   );
 
-  expect(await screen.findByText("Alice Chen")).toBeInTheDocument();
+  expect(await screen.findByText("alice")).toBeInTheDocument();
   expect(
     screen.getByRole("heading", { name: "Runtime protocol preview" }),
   ).toBeInTheDocument();
   expect(api.read).toHaveBeenCalledWith(
-    "identity.accounts.admin.read",
+    "identity.accounts.read",
     {},
     expect.any(AbortSignal),
     "1.0.0",
@@ -637,7 +625,7 @@ it("submits an action form without retaining its password in the page retry stat
   expect(password).toHaveValue("");
 });
 
-it("resolves a bound dialog title and projects the current account's department options", async () => {
+it("resolves a bound dialog title and submits the credential label", async () => {
   const candidate = dialogPage();
   const modal =
     candidate.root.layout!.children![1].layout!.children![0].component!;
@@ -665,32 +653,18 @@ it("resolves a bound dialog title and projects the current account's department 
                 target: "name",
                 value: expression({
                   kind: "literal",
-                  literal: '"departmentId"',
+                  literal: '"name"',
                 }),
               },
               {
                 target: "type",
-                value: expression({ kind: "literal", literal: '"select"' }),
+                value: expression({ kind: "literal", literal: '"text"' }),
               },
               {
                 target: "labelKey",
                 value: expression({
                   kind: "literal",
-                  literal: '"mcp:department"',
-                }),
-              },
-              {
-                target: "options",
-                value: expression({
-                  kind: "path",
-                  path: "context.departmentOptions",
-                }),
-              },
-              {
-                target: "defaultValue",
-                value: expression({
-                  kind: "path",
-                  path: "context.activeDepartmentId",
+                  literal: '"mcp:name"',
                 }),
               },
             ],
@@ -707,7 +681,7 @@ it("resolves a bound dialog title and projects the current account's department 
       payload: expression({ kind: "path", path: "event.values" }),
       inputSchema: JSON.stringify({
         type: "object",
-        properties: { departmentId: { type: "integer" } },
+        properties: { name: { type: "string" } },
       }),
     },
   ];
@@ -719,21 +693,17 @@ it("resolves a bound dialog title and projects the current account's department 
   const dialog = await screen.findByRole("dialog", {
     name: "Rotate token: Deployment",
   });
-  const field = within(dialog).getByRole("combobox", { name: "Department" });
-  expect(field).toHaveValue("3");
-  expect(
-    within(field)
-      .getAllByRole("option")
-      .map((option) => option.textContent),
-  ).toEqual(["Engineering", "Operations"]);
-  await user.selectOptions(field, "4");
+  await user.type(
+    within(dialog).getByRole("textbox", { name: "Token name" }),
+    "Deployment",
+  );
   await user.click(
     within(dialog).getByRole("button", { name: "Create token" }),
   );
   expect(api.execute).toHaveBeenCalledWith(
     "mcp.token.create",
     "1.0.0",
-    { departmentId: 4 },
+    { name: "Deployment" },
     expect.any(String),
     expect.any(String),
     undefined,
@@ -768,11 +738,11 @@ it.each([
   },
 );
 
-function mountProjectAI(pageId: string, route: string) {
-  const projects = deploymentApplications.find(
-    (item) => item.id === "projects",
+function mountAI(pageId: string, route: string, applicationId = "projects") {
+  const application = deploymentApplications.find(
+    (item) => item.id === applicationId,
   )!.protocol!;
-  const projectPage = projects.pages.find((item) => item.id === pageId)!;
+  const page = application.pages.find((item) => item.id === pageId)!;
   return render(
     <I18nextProvider i18n={i18n}>
       <QueryClientProvider
@@ -783,21 +753,21 @@ function mountProjectAI(pageId: string, route: string) {
         <MemoryRouter initialEntries={[route]}>
           <Routes>
             <Route
-              path={projectPage.route}
+              path={page.route}
               element={
                 <ProtocolPage
                   application={{
-                    ...projects,
+                    ...application,
                     permission: "runtime.protocol.view",
-                    providers: projects.providers.map((provider) => ({
+                    providers: application.providers.map((provider) => ({
                       ...provider,
                       permission: "",
                       outputSchema: "",
                     })),
                   }}
-                  page={{ ...projectPage, permission: "runtime.protocol.view" }}
+                  page={{ ...page, permission: "runtime.protocol.view" }}
                   invocation={{
-                    applicationId: "projects",
+                    applicationId,
                     pageId,
                     metadataVersion: "metadata",
                     installationRevision: 1,
@@ -842,7 +812,7 @@ it("analyzes selected project rows and retries a failed row in place", async () 
         summary: "One task is overdue",
       },
     });
-  mountProjectAI("project.list", "/projects");
+  mountAI("project.list", "/projects");
   const row = await screen.findByRole("row", { name: /First project/ });
   const user = userEvent.setup();
   await user.click(within(row).getByRole("checkbox"));
@@ -869,7 +839,7 @@ it("renders the project task table only in the Tasks tab", async () => {
       return { items: [{ id: 4, title: "Release plan" }] };
     return { items: [] };
   });
-  mountProjectAI("project.detail", "/projects/7");
+  mountAI("project.detail", "/projects/7");
   const user = userEvent.setup();
   expect(
     await screen.findByRole("heading", { name: "Release project" }),
@@ -910,7 +880,7 @@ it("keeps separate results for project analysis scenarios", async () => {
           : "No visible blockers",
     },
   }));
-  mountProjectAI("project.detail", "/projects/7");
+  mountAI("project.detail", "/projects/7");
   const user = userEvent.setup();
   await user.click(
     await screen.findByRole("button", { name: "Schedule risk" }),
@@ -941,7 +911,7 @@ it("applies a task description suggestion to the draft before the existing save"
         }
       : { status: "succeeded" },
   );
-  mountProjectAI("project.detail", "/projects/7?tab=tasks&dialog=create");
+  mountAI("project.detail", "/projects/7?tab=tasks&dialog=create");
   const user = userEvent.setup();
   const dialog = await screen.findByRole("dialog");
   await user.type(
@@ -951,15 +921,25 @@ it("applies a task description suggestion to the draft before the existing save"
   await user.click(
     within(dialog).getByRole("button", { name: "Draft task description" }),
   );
-  expect(
-    await within(dialog).findByText(
-      "Suggested: Prepare the release checklist.",
-    ),
-  ).toBeInTheDocument();
-  await user.click(
-    within(dialog).getByRole("button", { name: "Apply to draft" }),
+  expect(within(dialog).getByLabelText(/Task title/i)).toBeVisible();
+  await user.type(
+    within(dialog).getByLabelText("Generation instructions"),
+    "Use the rollout checklist.",
   );
-  expect(api.execute).toHaveBeenCalledTimes(1);
+  await user.click(
+    within(dialog).getByRole("button", { name: "Generate with AI" }),
+  );
+  expect(
+    await within(dialog).findByText("Generated and added to the draft."),
+  ).toBeVisible();
+  expect(api.execute).toHaveBeenCalledExactlyOnceWith(
+    "application.runtime.ai.suggest",
+    "1.0.0",
+    expect.objectContaining({ sourceText: "Use the rollout checklist." }),
+    expect.any(String),
+    expect.any(String),
+    expect.any(Object),
+  );
   await user.click(
     within(dialog).getByRole("button", { name: "Save changes" }),
   );
@@ -976,3 +956,125 @@ it("applies a task description suggestion to the draft before the existing save"
     ),
   );
 });
+
+it("generates from an attachment and fills the automation draft only after success", async () => {
+  api.read.mockResolvedValue({ items: [], total: 0 });
+  api.execute.mockResolvedValueOnce({
+    status: "failed",
+    errorCode: "ai_attachment_invalid",
+  });
+  api.execute.mockResolvedValueOnce({
+    status: "succeeded",
+    data: {
+      suggestions: [
+        { field: "description", value: "Summarize the sales figures." },
+      ],
+    },
+  });
+  mountAI("automation.list", "/automation?dialog=create", "automation");
+  const user = userEvent.setup();
+  const dialog = within(await screen.findByRole("dialog"));
+  const assistant = dialog.getByRole("button", {
+    name: "Fill task and schedule from a description",
+  });
+  expect(assistant).toHaveAttribute("aria-expanded", "false");
+  expect(dialog.queryByRole("textbox", { name: "One-line brief" })).toBeNull();
+  await user.click(assistant);
+  expect(dialog.getByLabelText("One-line brief")).toBeVisible();
+  await user.upload(
+    dialog.getByLabelText("Source file"),
+    new File(["test"], "sales.docx"),
+  );
+  const generate = dialog.getByRole("button", { name: "Generate with AI" });
+  await user.click(generate);
+  expect(
+    await dialog.findByText(
+      "The file is unsupported, empty, too large, or could not be read.",
+    ),
+  ).toBeVisible();
+  expect(dialog.queryByText("Summarize the sales figures.")).toBeNull();
+  await user.click(generate);
+  expect(
+    await dialog.findByText("Generated and added to the draft."),
+  ).toBeVisible();
+  expect(await dialog.findByText("Summarize the sales figures.")).toBeVisible();
+  expect(api.execute).toHaveBeenCalledTimes(2);
+  expect(api.execute).toHaveBeenLastCalledWith(
+    "application.runtime.ai.suggest",
+    "1.0.0",
+    expect.objectContaining({
+      recordId: 0,
+      draft: { brief: "" },
+      attachment: { name: "sales.docx", content: "dGVzdA==" },
+    }),
+    expect.any(String),
+    expect.any(String),
+    expect.any(Object),
+  );
+});
+
+it("fills the automation name and schedule from the same description", async () => {
+  api.read.mockResolvedValue({ items: [], total: 0 });
+  api.execute.mockImplementation(async (name: string) =>
+    name === "application.runtime.ai.suggest"
+      ? {
+          status: "succeeded",
+          data: {
+            suggestions: [
+              { field: "name", value: "Daily sales report" },
+              { field: "scheduleKind", value: "daily" },
+              { field: "time", value: "09:00" },
+              { field: "timezone", value: "Asia/Shanghai" },
+              {
+                field: "description",
+                value: "Summarize yesterday's sales.",
+              },
+            ],
+          },
+        }
+      : { status: "succeeded" },
+  );
+  mountAI("automation.list", "/automation?dialog=create", "automation");
+  const user = userEvent.setup();
+  const dialog = within(await screen.findByRole("dialog"));
+  await user.click(
+    dialog.getByRole("button", {
+      name: "Fill task and schedule from a description",
+    }),
+  );
+  await user.type(
+    dialog.getByLabelText("One-line brief"),
+    "every day at 9 summarize yesterday's sales",
+  );
+  await user.click(dialog.getByRole("button", { name: "Generate with AI" }));
+  expect(
+    await dialog.findByText("Generated and added to the draft."),
+  ).toBeVisible();
+  const request = api.execute.mock.calls.find(
+    ([name]) => name === "application.runtime.ai.suggest",
+  )?.[2] as Record<string, unknown>;
+  expect(request.now).toMatch(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/,
+  );
+  expect(dialog.getByLabelText("Name")).toHaveValue("Daily sales report");
+  expect(dialog.getByLabelText("Schedule")).toHaveValue("daily");
+  expect(dialog.getByLabelText("Time")).toHaveValue("09:00");
+  expect(dialog.getByLabelText("Time zone")).toHaveValue("Asia/Shanghai");
+  await user.click(dialog.getByRole("button", { name: "Save changes" }));
+  await waitFor(() =>
+    expect(api.execute).toHaveBeenLastCalledWith(
+      "automation.task.create",
+      "1.0.0",
+      expect.objectContaining({
+        name: "Daily sales report",
+        scheduleKind: "daily",
+        time: "09:00",
+        timezone: "Asia/Shanghai",
+        description: "Summarize yesterday's sales.",
+      }),
+      expect.any(String),
+      expect.any(String),
+      expect.any(Object),
+    ),
+  );
+}, 20000);

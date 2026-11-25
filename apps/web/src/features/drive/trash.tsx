@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
-import { useSession } from "@/features/administration/auth";
+import { useSession } from "@/features/identity/auth";
 import {
   DataTable,
   EditorDialog,
@@ -16,7 +16,7 @@ import {
   ShortDate,
   RowActions,
   type AdminColumn,
-} from "@/features/administration/shared";
+} from "@/features/identity/shared";
 import {
   driveFileRestore,
   driveFolderRestore,
@@ -33,7 +33,7 @@ export function DriveTrashPage() {
   const session = useSession();
   const client = useQueryClient();
   const spaceId = Number(useParams().id);
-  const identity = `${session.tenantId}:${session.account.id}:${session.activeDepartmentId}`;
+  const identity = `${session.tenantId}:${session.account.id}:${session.identityBindingId}`;
   const [selected, setSelected] = useState<DriveTrashItem>();
   const [name, setName] = useState<string>();
   const [purging, setPurging] = useState<DriveTrashItem>();

@@ -1,6 +1,6 @@
 # 账号级远程 MCP 服务实现方案
 
-> **现行行为（2026-11-05）**：远程 MCP 与 AI 助手使用同一自动化能力目录，按凭证绑定部门的当前正式权限动态发现，不再固定 Token 工具集合；旧 Token 同样适用。人工专用和内部专用能力不在自动化目录中，业务调用仍由 Gateway 检查权限、来源、范围、幂等和审批。`tools` 是兼容旧客户端的忽略字段。旧工具名称已更换为能力工具名称；使用 `mcp_context_get` 检查配对身份，使用标准 `tools/list` 发现能力。需要安全重试写入时，在 MCP 请求 `_meta.idempotencyKey` 提供稳定键；未提供时每次调用生成新键，不能保证跨请求重试去重。以下历史阶段描述如有冲突，以本段为准。
+> **现行行为**：远程 MCP 凭据绑定租户、账号和可选身份绑定。每次请求以当前正式权限动态发现工具，业务调用经 Gateway 执行范围、来源、幂等和审批校验。配对使用 `mcp_context_get` 核对完整身份上下文，使用标准 `tools/list` 发现能力。写入重试使用 MCP 请求 `_meta.idempotencyKey`。
 
 
 日期：2026-10-30。状态：首阶段开发与验收中。实际实现边界见 [ADR 011](decisions/011-remote-mcp.md)，使用与恢复见 [操作指南](mcp-operations.md)。OAuth 和写操作仍属于后续阶段。
@@ -113,7 +113,7 @@ WorkBuddy 推荐生成官方连接器结构：`connector-meta.json`、`mcp.json`
 | D | 首批只读工具、生产代理、真实两平台端到端 | 各平台初始化→目录→调用→撤销拒绝；关闭网页后仍可用；原 WebMCP 回归 |
 | E | 单独确认的写工具与 OAuth | 幂等/确认重放/过期/撤权/回滚及标准授权互通 |
 
-代码批次依赖顺序为 SQL/Goa → generate → 应用/协议 → SDK/UI → check-generated → 浏览器与客户端；阶段统一 ci-fast，追加 test-security（含真实数据库）、协议测试、相关 Playwright 和 `pnpm webmcp:test`。发布候选运行完整 ci。新增 MCP 专项命令需实施时接入 Makefile/CI；目前不存在，不报告运行成功。
+代码批次依赖顺序为 SQL/Goa → generate → 应用/协议 → SDK/UI → check-generated → 浏览器与客户端；阶段统一 ci-fast，追加 test-security（含真实数据库）、协议测试、相关 Playwright 和 `pnpm webmcp:test`。发布候选运行完整 ci。MCP 专项命令由 Horizon CLI 提供，见 [验证入口](testing.md#账号远程-mcp)。
 
 负向验收至少覆盖：无效/过期/撤销 Token、A 管理 B Token、越权工具直接调用、篡改部门/租户/owner、禁用与归属移除、敏感字段泄漏、readonly 调写、批量范围混入、日志/下载/安装包泄密、恶意 Origin/Host、请求过大/超时/限流、跨身份流/会话、轮换并发与审计失败。客户端缺失应记未执行，不能以模拟器代替真实平台通过。
 

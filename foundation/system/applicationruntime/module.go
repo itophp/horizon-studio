@@ -13,13 +13,21 @@ import (
 )
 
 type Module struct {
-	Entities     []contracts.Entity
-	Applications []ar.ApplicationV2
-	Versions     []ar.ApplicationV2
-	Pool         *pgxpool.Pool
-	Invoke       func(context.Context, string, string, contracts.Input, string) (*contracts.Result, error)
-	Definitions  map[string]contracts.Definition
-	GenerateAI   func(context.Context, string, string) (string, error)
+	Entities            []contracts.Entity
+	Applications        []ar.ApplicationV2
+	Versions            []ar.ApplicationV2
+	BasePlugins         map[string]bool
+	Pool                *pgxpool.Pool
+	Invoke              func(context.Context, string, string, contracts.Input, string) (*contracts.Result, error)
+	Definitions         map[string]contracts.Definition
+	GenerateAIWithImage func(context.Context, string, string, string, string) (string, error)
+	GenerateAI          func(context.Context, string, string) (string, error)
+}
+
+// isBasePlugin reports a platform-managed application package. The set comes
+// from deployment composition, never from tenant input.
+func (m *Module) isBasePlugin(pluginID string) bool {
+	return m.BasePlugins[pluginID]
 }
 
 func (m *Module) Entries() []registry.Entry {
@@ -51,6 +59,7 @@ func (m *Module) Entries() []registry.Entry {
 			required = append(required, "pageId")
 		}
 		d := contracts.Definition{Name: name, Version: "1.0.0", Title: name, Description: "Authorized runtime definition projection; contains no business records.", Domain: "runtime", Entity: primary, Entities: entities, Layer: contracts.LayerAtomic, Risk: contracts.RiskLow, Approval: contracts.ApprovalAuto, ReadOnly: true, TransientResult: true, Executor: "go:" + name, Input: contracts.Object(props, required...), Output: ar.Schema(ar.ApplicationV2{})}
+		d.Tags = append(d.Tags, contracts.OrganizationScopedTag)
 		if name == "application.runtime.page.resolve" {
 			d.Output = ar.Schema(ar.PageV3{})
 		}
@@ -95,6 +104,9 @@ func (m *Module) Entries() []registry.Entry {
 					continue
 				}
 				app.Protocol = m.projectProtocol(*app.Protocol, p)
+				if p.ActingOrganization.OrganizationID != 0 && len(app.Protocol.Pages) == 0 {
+					continue
+				}
 				app.Navigation = app.Protocol.Navigation
 				app.Pages = []ar.PageV2{}
 				app.Providers = []ar.Provider{}

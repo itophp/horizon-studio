@@ -8,7 +8,8 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	systemhttp "horizon/foundation/gen/http/system/server"
 	"horizon/foundation/gen/system"
-	"horizon/foundation/kernel/plugin"
+	"horizon/foundation/kernel/audit"
+	"horizon/foundation/runtime/app"
 	"horizon/foundation/system/governance"
 	"horizon/foundation/system/identity"
 	memorysystem "horizon/foundation/system/memory"
@@ -27,14 +28,14 @@ func Handler(systemService system.Service, options governance.Options, identitie
 // HandlerWithGovernance keeps the historical name used by callers that pass
 // module options instead of a prebuilt core.
 func HandlerWithGovernance(systemService system.Service, options governance.Options, identities ...*identity.Service) http.Handler {
-	handler, _ := handlerWithCore(systemService, options, nil, nil, identities...)
+	handler, _ := handlerWithCore(systemService, options, nil, app.Registration{}, identities...)
 	return handler
 }
 
 // HandlerWithCore accepts an already configured core, which is what long lived
 // processes and multi-tenant tests use.
 func HandlerWithCore(systemService system.Service, core *governance.Core, identities ...*identity.Service) http.Handler {
-	handler, _ := handlerWithCore(systemService, core.Options, core, nil, identities...)
+	handler, _ := handlerWithCore(systemService, core.Options, core, app.Registration{}, identities...)
 	return handler
 }
 
@@ -42,30 +43,33 @@ func HandlerWithCore(systemService system.Service, core *governance.Core, identi
 // relay and AI trigger engine). Tests keep using Handler, which never spawns
 // workers.
 func HandlerWithRuntime(systemService system.Service, core *governance.Core, identities ...*identity.Service) (http.Handler, func(context.Context)) {
-	return handlerWithCore(systemService, core.Options, core, nil, identities...)
+	return handlerWithCore(systemService, core.Options, core, app.Registration{}, identities...)
 }
 
-// HandlerWithPlugins uses the already registered runtime plugin instances.
-func HandlerWithPlugins(systemService system.Service, core *governance.Core, plugins *plugin.Manager, identities ...*identity.Service) (http.Handler, func(context.Context)) {
-	return handlerWithCore(systemService, core.Options, core, plugins, identities...)
+// HandlerWithRegistration uses the already registered runtime plugin instances.
+func HandlerWithRegistration(systemService system.Service, core *governance.Core, registration app.Registration, identities ...*identity.Service) (http.Handler, func(context.Context)) {
+	return handlerWithCore(systemService, core.Options, core, registration, identities...)
 }
 
-func handlerWithCore(systemService system.Service, options governance.Options, core *governance.Core, plugins *plugin.Manager, identities ...*identity.Service) (http.Handler, func(context.Context)) {
+func handlerWithCore(systemService system.Service, options governance.Options, core *governance.Core, registration app.Registration, identities ...*identity.Service) (http.Handler, func(context.Context)) {
 	mux := goahttp.NewMuxer()
 	errors := func(_ context.Context, _ http.ResponseWriter, err error) {
 		slog.Error("transport failure", "error", err)
 	}
 	systemhttp.Mount(mux, systemhttp.New(system.NewEndpoints(systemService), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, errors, nil))
 	var identityGuard func(http.ResponseWriter, *http.Request) (*http.Request, bool)
+	var signIns applicationSignIns
 	start := func(context.Context) {}
 	var observer *memorysystem.Observer
 	if len(identities) > 0 {
-		identityGuard = mountIdentity(mux, identities[0], errors)
+		signIns = newApplicationSignIns(registration)
+		identityGuard = mountIdentity(mux, identities[0], registration.Authentication, errors)
 		if core == nil || core.Pool == nil {
 			core = governance.New(identities[0].Database(), identities[0], options)
 		}
+		identities[0].AttachSecretProtector(core)
 		observer = memorysystem.NewObserver(core.Pool)
-		start = mountGovernance(mux, core, plugins, observer, errors)
+		start = mountGovernance(mux, core, registration, observer, errors)
 		startGovernance := start
 		start = func(ctx context.Context) { startGovernance(ctx); go observer.Run(ctx) }
 	}
@@ -77,7 +81,7 @@ func handlerWithCore(systemService system.Service, options governance.Options, c
 			return
 		}
 		id := hex.EncodeToString(raw[:])
-		r = r.WithContext(context.WithValue(r.Context(), requestCorrelationKey{}, "req_"+id))
+		r = r.WithContext(audit.WithCorrelation(context.WithValue(r.Context(), requestCorrelationKey{}, "req_"+id), "req_"+id))
 		w.Header().Set("X-Request-ID", id)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
@@ -91,6 +95,11 @@ func handlerWithCore(systemService system.Service, options governance.Options, c
 			slog.Info("request completed", "request_id", id, "method", r.Method, "duration_ms", time.Since(started).Milliseconds())
 		}()
 		if identityGuard != nil {
+			bound, ok := signIns.bind(w, r)
+			if !ok {
+				return
+			}
+			r = bound.WithContext(identity.WithInteractiveTenant(bound.Context(), options.PublicWorkspace))
 			next, ok := identityGuard(w, r)
 			if !ok {
 				return
@@ -114,6 +123,10 @@ func handlerWithCore(systemService system.Service, options governance.Options, c
 		if r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/capabilities/") && strings.HasSuffix(r.URL.Path, "/invocations") {
 			// A capability input may carry a base64 attachment (file.upload).
 			limit = 29 << 20
+		}
+		if r.Method == "POST" && (r.URL.Path == "/api/ai/runs" || r.URL.Path == "/api/ai/runs/stream") {
+			// One AI attachment is at most 2 MiB before base64 encoding.
+			limit = 4 << 20
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		mux.ServeHTTP(w, r)
