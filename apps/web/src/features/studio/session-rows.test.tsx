@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { expect, it, vi } from "vitest";
 import { i18n } from "@/i18n";
@@ -117,17 +117,23 @@ function requirement(overrides: Partial<Requirement> = {}): Requirement {
   return { id: 12, title: "Account flow requirement", ...overrides };
 }
 
-function group(row: Requirement) {
+function group(
+  row: Requirement,
+  options: {
+    tasks?: Item[];
+    agentStatuses?: Record<string, AgentSessionStatus>;
+  } = {},
+) {
   const onCreate = vi.fn();
   render(
     <I18nextProvider i18n={i18n}>
       <RequirementGroup
         requirement={row}
         open
-        tasks={[]}
+        tasks={options.tasks ?? []}
         canWrite
         busy={false}
-        agentStatuses={{}}
+        agentStatuses={options.agentStatuses ?? {}}
         onCreate={onCreate}
         onSelect={() => {}}
         onPin={() => {}}
@@ -157,5 +163,49 @@ it("keeps archived requirements readable without offering new sessions", () => {
   expect(screen.getByText("Archived")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "New task" }),
+  ).not.toBeInTheDocument();
+});
+
+function summaryOf(title: string) {
+  return screen.getByText(title).closest("summary") as HTMLElement;
+}
+
+it("mirrors a running child session on the requirement", () => {
+  group(requirement(), {
+    tasks: [
+      task({ id: 21, title: "Running task", dshSessionId: "dsh-run" }),
+      task({ id: 22, title: "Done task", dshSessionId: "dsh-done" }),
+    ],
+    agentStatuses: {
+      "dsh-run": status("dsh-run", { running: true }),
+      "dsh-done": status("dsh-done", { completed: true }),
+    },
+  });
+  const summary = summaryOf("Account flow requirement");
+  expect(
+    within(summary).getByRole("status", { name: "Working" }),
+  ).toBeVisible();
+  expect(
+    within(summary).queryByRole("img", { name: "Turn completed" }),
+  ).not.toBeInTheDocument();
+});
+
+it("shows a failure on the requirement ahead of an unseen completion", () => {
+  group(requirement(), {
+    tasks: [
+      task({ id: 23, title: "Failed task", dshSessionId: "dsh-fail" }),
+      task({ id: 24, title: "Done task", dshSessionId: "dsh-done" }),
+    ],
+    agentStatuses: {
+      "dsh-fail": status("dsh-fail", { error: true }),
+      "dsh-done": status("dsh-done", { completed: true }),
+    },
+  });
+  const summary = summaryOf("Account flow requirement");
+  expect(
+    within(summary).getByRole("img", { name: "Turn failed" }),
+  ).toBeVisible();
+  expect(
+    within(summary).queryByRole("img", { name: "Turn completed" }),
   ).not.toBeInTheDocument();
 });

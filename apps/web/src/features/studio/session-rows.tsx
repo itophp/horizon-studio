@@ -153,6 +153,22 @@ export function SessionRows({
   );
 }
 
+// A requirement mirrors its sessions. Running wins over a failure reminder,
+// and a failure wins over an unseen completion; nothing is shown when every
+// session is idle.
+function aggregateStatus(
+  statuses: readonly (AgentSessionStatus | undefined)[],
+): AgentSessionStatus | undefined {
+  const present = statuses.filter(
+    (status): status is AgentSessionStatus => status !== undefined,
+  );
+  return (
+    present.find((status) => status.running) ??
+    present.find((status) => status.error) ??
+    present.find((status) => status.completed)
+  );
+}
+
 // The requirement row owns the things a session row no longer shows: the
 // requirement status directly after its name and the hover-only create entry.
 export function RequirementGroup({
@@ -175,6 +191,13 @@ export function RequirementGroup({
   onCreate: (requirementId: number) => void;
 } & SessionActions) {
   const { t } = useTranslation("studio");
+  // Loading has priority: a running child keeps the requirement in progress
+  // even while another session carries an unseen completion or failure.
+  const aggregate = aggregateStatus(
+    tasks.map((task) =>
+      task.dshSessionId ? agentStatuses[task.dshSessionId] : undefined,
+    ),
+  );
   return (
     <details
       open={open || undefined}
@@ -218,6 +241,7 @@ export function RequirementGroup({
             <Plus />
           </Button>
         )}
+        <SessionIndicator status={aggregate} />
       </summary>
       <div className="pb-1 pl-4">
         <SessionRows
